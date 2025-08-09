@@ -1,6 +1,6 @@
 # Development Rules & Standards
 
-This document provides comprehensive development standards for {{PROJECT_NAME}}, including code structure, testing, documentation, and integration guidelines.
+This document provides comprehensive development standards for **Shared Context Server**, including code structure, testing, documentation, and integration guidelines.
 
 ## Code Structure & Modularity
 

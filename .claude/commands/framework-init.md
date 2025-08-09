@@ -2,12 +2,13 @@
 
 ## Description
 
-Initiates a collaborative, multi-phase process to initialize the Claude multi-agent framework for a new project. This command installs and customizes the framework from the `.claude-generic/` template into the target project's `.claude/` directory through conversation, automated research, and intelligent adaptation.
+Initiates a collaborative, multi-phase process to initialize the Claude multi-agent framework for a new project. This command installs and customizes the framework from the `~/.claude/claude-framework/` template into the target project's `.claude/` directory through conversation, automated research, and intelligent adaptation.
 
 **What This Command Does:**
-1. **Installs Framework**: Copies `.claude-generic/` template to target project's `.claude/` directory
+1. **Installs Framework**: Copies `~/.claude/claude-framework/` template to target project's `.claude/` directory
 2. **Adapts Content**: Replaces `[ADAPT: ...]` markers with project-specific content based on research
 3. **Customizes for Stack**: Configures agents and guides for detected technology stack and architecture
+4. **Moves CLAUDE.md**: Moves main configuration to project root and cleans up template files
 
 **Initialization Types Supported:**
 - **Fresh Repository**: Empty or minimal repository - installs complete framework
@@ -21,16 +22,16 @@ Initiates a collaborative, multi-phase process to initialize the Claude multi-ag
 
 **Goal**: To understand the target project's current state, technology stack, and development patterns before engaging the user.
 
-**IMPORTANT**: This analysis focuses on the TARGET PROJECT where the framework will be installed, NOT the `.claude-generic/` template directory.
+**IMPORTANT**: This analysis focuses on the TARGET PROJECT where the framework will be installed, NOT the `claude-framework/` template directory.
 
 **Prerequisites Check**: Verify MCP tools are available for research:
 - Test if sequential-thinking, octocode, crawl4ai, and brave-search are accessible
 - If missing, guide user to:
-  1. Copy `.claude-generic/settings.local.template.json` to target project's `.claude/settings.local.json`
-  2. Or reference `MCP_SETUP.md` for manual configuration
+  1. Copy `~/.claude/claude-framework/settings.local.template.json` to target project's `.claude/settings.local.json`
+  2. Or reference `~/.claude/claude-framework/MCP_SETUP.md` for manual configuration
 - Framework can work without MCP tools but with reduced research capabilities
 
-1. **Target Repository Analysis**: Examine the target project (completely ignore `.claude-generic/` template directory)
+1. **Target Repository Analysis**: Examine the target project (completely ignore `claude-framework/` template directory)
    - **Framework Status**: Check if target already has `.claude/` directory installed (not the template)
    - **Project Assessment**: Analyze actual project files, requirements documents, and code structure  
    - **Dependency Analysis**: Parse package files (`package.json`, `requirements.txt`, `Cargo.toml`, etc.) for technology stack
@@ -366,27 +367,28 @@ Research Integration:
    • Any additional agent specializations needed?
    ```
 
-3. **Framework Installation**: Copy and adapt framework from `.claude-generic/` template
+3. **Framework Installation**: Copy and adapt framework from `~/.claude/claude-framework/` template
    
    **CRITICAL: Correct Copy Command Syntax**
    ```bash
-   # CORRECT - Copy contents of .claude-generic/ into .claude/
-   cp -r .claude-generic/* .claude/
+   # CORRECT - Copy contents of ~/.claude/claude-framework/ into .claude/
+   cp -r ~/.claude/claude-framework/* .claude/
    
    # OR if .claude/ doesn't exist yet:
-   cp -r .claude-generic .claude
-   mv .claude/.claude-generic/* .claude/
-   rmdir .claude/.claude-generic
+   cp -r ~/.claude/claude-framework .claude
+   mv .claude/claude-framework/* .claude/
+   rmdir .claude/claude-framework
    
-   # WRONG - Creates nested structure (.claude/.claude-generic/):
-   cp -r .claude-generic .claude/  # DON'T DO THIS!
+   # WRONG - Creates nested structure (.claude/claude-framework/):
+   cp -r ~/.claude/claude-framework .claude/  # DON'T DO THIS!
    ```
    
    **Installation Process:**
-   - **Step 1**: Ensure clean copy - `.claude-generic/` contents go INTO `.claude/`, not nested under it
-   - **Step 2**: Verify structure - `.claude/agents/`, `.claude/commands/`, etc. (NOT `.claude/.claude-generic/`)
+   - **Step 1**: Ensure clean copy - `~/.claude/claude-framework/` contents go INTO `.claude/`, not nested under it
+   - **Step 2**: Verify structure - `.claude/agents/`, `.claude/commands/`, etc. (NOT `.claude/claude-framework/`)
    - **Step 3**: Process all `[ADAPT: ...]` markers with research-informed, project-specific content
    - **Step 4**: Generate contextually appropriate examples based on detected technology stack
+   - **Step 5**: Move CLAUDE.md to project root and clean up template references
 
    **For Fresh Repositories:**
    - Install complete framework structure in new `.claude/` directory
@@ -399,27 +401,117 @@ Research Integration:
      - **Migration Mode**: Preserve custom elements, upgrade framework components
    - Validate no conflicts with existing project structure
 
-4. **Installation Validation**: Verify correct framework structure
+4. **PRP Directory Structure Creation**: Set up project planning directories
+   
+   **Create PRP Directory Structure:**
+   ```bash
+   # Create standardized PRP (Project Requirements & Planning) directory structure
+   mkdir -p PRPs/1-planning
+   mkdir -p PRPs/2-prps  
+   mkdir -p PRPs/3-completed
+   mkdir -p PRPs/4-archive
+   mkdir -p PRPs/templates
+   
+   # Create initial planning template if it doesn't exist
+   if [ ! -f "PRPs/templates/feature_planning_base.md" ]; then
+     echo "# Feature Planning Template" > PRPs/templates/feature_planning_base.md
+     echo "## Overview" >> PRPs/templates/feature_planning_base.md
+     echo "## Requirements" >> PRPs/templates/feature_planning_base.md
+     echo "## Implementation Plan" >> PRPs/templates/feature_planning_base.md
+   fi
+   ```
+   
+   **Manual File Migration** (if you have existing feature/PRD files):
+   ```bash
+   # If you have existing feature files, requirements docs, or PRDs:
+   # - Move them to appropriate PRP directories:
+   #   • Active planning docs → PRPs/1-planning/
+   #   • Formal requirements → PRPs/2-prps/
+   #   • Completed features → PRPs/3-completed/
+   #   • Legacy docs → PRPs/4-archive/
+   
+   # Example migrations (adjust paths as needed):
+   # mv docs/features/* PRPs/1-planning/
+   # mv requirements/* PRPs/2-prps/
+   # mv completed-features/* PRPs/3-completed/
+   
+   # Review and organize manually based on your existing structure
+   ```
+
+5. **Generate Tech Stack-Specific .gitignore**: Create appropriate .gitignore based on final project analysis
+   
+   **Smart .gitignore Generation:**
+   ```bash
+   # Generate .gitignore based on the FINAL analyzed state of the project
+   # (after all discovery, research, and framework installation is complete)
+   
+   if [ ! -f ".gitignore" ]; then
+     # Start with framework template
+     cp ~/.claude/claude-framework/.gitignore .gitignore
+     
+     # Customize based on detected technology stack and final project state:
+     # - Add specific ignores for detected frameworks, build tools, and dependencies
+     # - Include any project-specific patterns discovered during analysis
+     # - Consider build artifacts from detected CI/CD or deployment setup
+     # - Add ignores for any development tools mentioned in project documentation
+     
+     echo "✅ Created .gitignore customized for your detected technology stack"
+     echo "   Base template: ~/.claude/claude-framework/.gitignore"
+     echo "   Customized for: [list detected technologies here]"
+   else
+     echo "ℹ️  Project already has .gitignore - reviewing for potential additions..."
+     echo "   Framework template available at: ~/.claude/claude-framework/.gitignore"
+     echo "   Consider merging relevant sections based on your final tech stack analysis"
+   fi
+   ```
+   
+   **Important**: This step occurs AFTER all project discovery and research phases are complete, ensuring the .gitignore reflects the true final state of the project including any detected frameworks, build systems, package managers, and development tools.
+
+6. **Framework Cleanup & Finalization**: Complete installation with cleanup
+   
+   **Cleanup Commands:**
+   ```bash
+   # Move CLAUDE.md to project root (where Claude expects it)
+   mv .claude/CLAUDE.md ./CLAUDE.md
+   
+   # Remove template README.md that was copied (keep your project's README if it exists)
+   if [ -f ".claude/README.md" ]; then
+     rm .claude/README.md
+   fi
+   
+   # Clean up any remaining template references (if they exist)
+   # Note: Template directory ~/.claude/claude-framework remains untouched for future use
+   ```
+   
+7. **Installation Validation**: Verify correct framework structure
    ```bash
    # VERIFY: Correct structure should look like this
    ls -la .claude/
-   # Should show: agents/ commands/ tech-guides/ CLAUDE.md development-standards.md
-   # Should NOT show: .claude-generic/ (nested directory)
+   # Should show: agents/ commands/ tech-guides/ development-standards.md
+   # Should NOT show: CLAUDE.md (moved to root) or claude-framework/ (nested directory)
    
-   # If you see .claude/.claude-generic/, you copied incorrectly - fix it:
-   mv .claude/.claude-generic/* .claude/
-   rmdir .claude/.claude-generic
+   ls -la ./CLAUDE.md
+   # Should show: CLAUDE.md in project root
+   
+   # If you see .claude/claude-framework/, you copied incorrectly - fix it:
+   mv .claude/claude-framework/* .claude/
+   rmdir .claude/claude-framework
    ```
    
    **Validation Checklist:**
    - ✅ `.claude/agents/` exists with 5 agent files
    - ✅ `.claude/commands/` exists with 3 command files  
-   - ✅ `.claude/CLAUDE.md` exists in root of `.claude/`
-   - ✅ No nested `.claude/.claude-generic/` directory
+   - ✅ `./CLAUDE.md` exists in project root (not in `.claude/`)
+   - ✅ `PRPs/` directory structure exists (1-planning, 2-prps, 3-completed, 4-archive, templates)
+   - ✅ `.gitignore` exists with tech stack-specific ignores
+   - ✅ No `.claude/README.md` (template README removed)
+   - ✅ No nested `.claude/claude-framework/` directory
+   - ✅ Template directory `~/.claude/claude-framework/` remains intact for future use
    - ✅ All `[ADAPT: ...]` markers processed with project-specific content
    - ✅ Framework files are syntactically correct
+   - ✅ Existing feature/PRD files manually migrated to appropriate PRP directories (if applicable)
 
-5. **Research-Enhanced Next Steps Guidance**: Provide clear direction with research context preservation
+8. **Research-Enhanced Next Steps Guidance**: Provide clear direction with research context preservation
    ```
    ✅ FRAMEWORK INITIALIZATION COMPLETE!
    
@@ -539,14 +631,14 @@ Research Integration:
 
 ## Common Installation Issues & Fixes
 
-### Issue: Nested `.claude/.claude-generic/` Directory
-**Symptom**: Framework files are in `.claude/.claude-generic/` instead of `.claude/`
-**Cause**: Used `cp -r .claude-generic .claude/` instead of `cp -r .claude-generic/* .claude/`
+### Issue: Nested `.claude/claude-framework/` Directory
+**Symptom**: Framework files are in `.claude/claude-framework/` instead of `.claude/`
+**Cause**: Used `cp -r claude-framework .claude/` instead of `cp -r claude-framework/* .claude/`
 **Fix**:
 ```bash
 # Move files to correct location
-mv .claude/.claude-generic/* .claude/
-rmdir .claude/.claude-generic
+mv .claude/claude-framework/* .claude/
+rmdir .claude/claude-framework
 
 # Verify correct structure
 ls .claude/  # Should show: agents/ commands/ tech-guides/ CLAUDE.md
@@ -560,7 +652,7 @@ ls .claude/  # Should show: agents/ commands/ tech-guides/ CLAUDE.md
 ### Issue: Missing MCP Tools
 **Symptom**: Research phases fail or skip
 **Cause**: MCP tools not configured in `.claude/settings.local.json`
-**Fix**: Copy `settings.local.template.json` or follow `MCP_SETUP.md` instructions
+**Fix**: Copy `~/.claude/claude-framework/settings.local.template.json` or follow `~/.claude/claude-framework/MCP_SETUP.md` instructions
 
 ## Completion
 
@@ -568,7 +660,10 @@ The command is complete when:
 1. All project discovery is finished through collaborative conversation
 2. Framework is correctly installed in `.claude/` directory (not nested)
 3. All `[ADAPT: ...]` markers are processed with project-specific content
-4. Framework validation confirms correct structure and functionality
-5. User receives clear guidance for getting started with the framework
+4. PRP directory structure is created and existing files are manually migrated (if applicable)
+5. Tech stack-specific .gitignore is generated based on detected project type
+6. CLAUDE.md is moved to project root and template cleanup is complete (including README.md removal)
+7. Framework validation confirms correct structure and functionality
+8. User receives clear guidance for getting started with the framework
 
 **Next Steps**: User can immediately begin using the framework for feature planning, development coordination, and quality assurance through the intelligent agent system.

@@ -6,26 +6,26 @@ The year is 2025.
 
 ## Repository Overview
 
-This is the **[ADAPT: Project name from repository analysis and conversation]** project - [ADAPT: Project description based on detected purpose and user input]. The system [ADAPT: Project purpose and value proposition from conversation].
+This is the **Shared Context Server** project - a centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to collaborate on complex tasks through shared conversational context. The system implements a RESTful "Context as a Service" pattern following blackboard architecture principles.
 
 ## Current Status & Roadmap
 
-**System Readiness**: [ADAPT: Project completion percentage from user conversation]% complete - [ADAPT: Current status description based on user input].
+**System Readiness**: 5% complete - Fresh repository with comprehensive planning documentation. Ready for MVP implementation phase.
 
-### ✅ [ADAPT: Completed Infrastructure - adapt based on detected architecture and project maturity]
-- **[ADAPT: Main Component Name]**: [ADAPT: Component description based on detected architecture]
-- **[ADAPT: Data Component Name]**: [ADAPT: Data handling description based on detected patterns]  
-- **[ADAPT: Service Component Name]**: [ADAPT: Service layer description based on detected integration]
-- **[ADAPT: Interface Component Name]**: [ADAPT: Interface description based on detected UI/API patterns]
+### ✅ Completed Infrastructure
+- **Planning Documentation**: Comprehensive MVP patterns and advanced research documentation
+- **Claude Framework**: Multi-agent coordination system with research-backed customizations
+- **Architecture Design**: RESTful API design with SQLite persistence and async patterns
+- **Research Foundation**: FastAPI best practices, multi-agent patterns, and blackboard architecture analysis
 
-### 🎯 [ADAPT: Current Milestone based on user conversation about current work and goals]
-- **Phase 1**: [ADAPT: Current phase description from user input]
-- **Phase 2**: [ADAPT: Next phase description from user input]
-- **Phase 3**: [ADAPT: Final phase description from user input]
+### 🎯 Current Milestone: MVP Implementation
+- **Phase 1**: Core API endpoints (POST /sessions, POST /sessions/{id}/messages, GET /sessions/{id})
+- **Phase 2**: SQLite database schema and async operations with FastAPI + Pydantic validation
+- **Phase 3**: Agent integration patterns and basic authentication for multi-agent access
 
-### 📋 [ADAPT: Future Milestones - include if user provides roadmap information]
-- **[ADAPT: Next Milestone]**: [ADAPT: Next milestone description from user planning]
-- **[ADAPT: Future Milestone]**: [ADAPT: Future milestone description from user vision]
+### 📋 Future Milestones
+- **Production Scale**: PostgreSQL/Redis integration, tiered memory architecture, memory distillation
+- **Advanced Features**: Authentication/authorization (OAuth2), agent role-based access, procedural memory (skills library)
 
 ## Context-Enriched Decision Making Protocol
 
@@ -40,59 +40,68 @@ This is the **[ADAPT: Project name from repository analysis and conversation]** 
 ## Environment & Setup
 
 ### Prerequisites & Key Dependencies
-- **[ADAPT: Detected programming language and version]** with **[ADAPT: Detected package manager]** (recommended)
-- **Core Libraries**: [ADAPT: List of main libraries/frameworks detected in project analysis - include name and purpose for each]
+- **Python 3.9+** with **pip** and **requirements.txt** (recommended for dependency management)
+- **Core Libraries**: 
+  - **FastAPI** (high-performance async web framework with automatic validation)
+  - **Pydantic** (data validation and settings management using type hints)
+  - **aiosqlite** (async SQLite operations for non-blocking database access)
+  - **httpx** (async HTTP client for agent integration testing)
 
 ### Environment Variables
 ```bash
-# [ADAPT: Configuration section - include only if environment variables detected]
-# [ADAPT: Environment variables based on detected services and integrations]
-# Examples: DATABASE_URL, API_KEY, LOG_LEVEL, etc.
+# Essential configuration for shared context server
+DATABASE_URL="sqlite:///./chat_history.db"  # SQLite database path
+API_KEY="your-secure-api-key"               # Authentication for agent access
+LOG_LEVEL="INFO"                            # Logging level (DEBUG, INFO, WARNING, ERROR)
+CORS_ORIGINS="*"                            # CORS origins for web clients
 ```
 
 ### Setup & Installation
 ```bash
-# [ADAPT: Installation command based on detected package manager]
-# Examples: "npm install", "pip install -e .", "cargo build"
+# Install dependencies
+pip install "fastapi[standard]" aiosqlite pydantic httpx pytest pytest-asyncio
 
-# [ADAPT: Verification command based on detected CLI structure]
-# Examples: "npm run dev --help", "python main.py --help", "./target/release/app --help"
+# Run development server
+fastapi dev main.py
+
+# Run tests
+pytest tests/ -v
 ```
 
 ### Critical Requirements
-- **UTC Timestamps**: [ADAPT: Include only if time-based functionality detected - system uses UTC throughout for coordination]
-- **File Permissions**: [ADAPT: Write access requirements based on detected data storage patterns]
-- **Storage**: [ADAPT: Default storage locations based on detected data persistence patterns]
-- **Runtime Support**: [ADAPT: Runtime requirements based on detected dependencies and environment needs]
+- **UTC Timestamps**: System uses UTC throughout for message timestamps and session coordination
+- **File Permissions**: Write access to current directory for SQLite database file creation
+- **Storage**: SQLite database stored in project root (`./chat_history.db`) with automatic schema initialization
+- **Runtime Support**: Python 3.9+ with async/await support for FastAPI and aiosqlite operations
 
 ## Core Architecture
 
 ### Data Organization
-- **Self-Contained Structure**: Complete directory structure per {{ DATA.ENTITY_TYPE }} with `{{ DATA.CONFIG_FILE }}` eliminating global registry complexity
-- **Legacy Support**: Flexible file discovery for both standard (`{{ DATA.STANDARD_PATH }}/`) and legacy (`{{ DATA.LEGACY_PATH }}/`) locations
-- **Interactive Selection**: Smart {{ DATA.ENTITY_TYPE }} selection with auto-detection
+- **Session-Based Structure**: Complete session isolation with unique session IDs eliminating cross-session interference
+- **Database Schema**: Single `chat_history` table with session_id, sender, content, timestamp fields for efficient querying
+- **Agent Integration**: Smart agent identification and message routing with automatic session management
 
 ### Component & Service Systems
-- **{{ ARCHITECTURE.MAIN_MANAGER }}**: Full state persistence, auto-save, recovery with {{ ARCHITECTURE.COORDINATOR }} for multi-component coordination
-- **Smart Coordination**: {{ ARCHITECTURE.COORDINATION_TIMEOUT }} timeouts with graceful cleanup, performance thresholds ({{ ARCHITECTURE.PERFORMANCE_THRESHOLD_1 }} ≤{{ ARCHITECTURE.THRESHOLD_1 }}, {{ ARCHITECTURE.PERFORMANCE_THRESHOLD_2 }} >{{ ARCHITECTURE.THRESHOLD_2 }})
-- **{{ ARCHITECTURE.SERVICE_INTEGRATION }}**: Production services with {{ ARCHITECTURE.SERVICE_PATTERN }}, provider fallback chain ({{ ARCHITECTURE.PRIMARY_PROVIDER }} → {{ ARCHITECTURE.SECONDARY_PROVIDER }} → {{ ARCHITECTURE.TERTIARY_PROVIDER }})
-- **{{ ARCHITECTURE.SERVICE_WORKFLOWS }}**: Component-integrated with {{ ARCHITECTURE.PROCESSING_TYPE }} processing, {{ ARCHITECTURE.MANAGEMENT_TYPE }} management, and {{ ARCHITECTURE.COORDINATION_PATTERN }} coordination patterns
+- **Session Manager**: Full session lifecycle management with auto-cleanup and SQLite persistence for message history
+- **Smart Coordination**: HTTP request/response with async patterns, FastAPI automatic validation and error handling
+- **Multi-Agent Integration**: RESTful API endpoints supporting Claude, Gemini, and custom agents with bearer token authentication
+- **Database Operations**: Async SQLite operations with aiosqlite for non-blocking I/O and concurrent agent access
 
 ### Data System & Types
-- **{{ DATA.FORMAT }}**: Entries with `{{ DATA.TYPE_FIELD }}` fields ({{ DATA.TYPE_1 }}, {{ DATA.TYPE_2 }}, {{ DATA.TYPE_3 }}), supports detailed hierarchy or {{ DATA.SIMPLE_TYPE }} data
-- **Flexible Structure**: {{ DATA.REQUIRED_TYPES }} (required), {{ DATA.OPTIONAL_TYPES }} (optional, can use "{{ DATA.DEFAULT_OPTION }}")
-- **{{ DATA.CATEGORY_NAME }}**: {{ DATA.TYPE_1 }} ({{ DATA.TYPE_1_DESC }}), {{ DATA.TYPE_2 }} ({{ DATA.TYPE_2_DESC }}), {{ DATA.TYPE_3 }} ({{ DATA.TYPE_3_DESC }}), {{ DATA.TYPE_4 }} ({{ DATA.TYPE_4_DESC }}), {{ DATA.TYPE_5 }} ({{ DATA.TYPE_5_DESC }})
+- **Message Format**: JSON entries with `sender`, `content`, `timestamp` fields, supports structured agent responses
+- **Flexible Structure**: session_id (required), sender (required), content (required), timestamp (auto-generated)
+- **Message Categories**: human_input (user messages), agent_response (AI responses), system_status (coordination), tool_output (function results)
 
-## Key Data Fields
+## Key API Endpoints
 
-Core data structure for manual and automated enhancement:
-- `{{ FIELDS.KEY_FIELD_1 }}` - {{ FIELDS.FIELD_1_DESC }} (required)
-- `{{ FIELDS.KEY_FIELD_2 }}` - {{ FIELDS.FIELD_2_DESC }} OR "{{ FIELDS.DEFAULT_VALUE_2 }}"
-- `{{ FIELDS.KEY_FIELD_3 }}` - {{ FIELDS.FIELD_3_DESC }} OR "{{ FIELDS.DEFAULT_VALUE_3 }}"
-- `{{ FIELDS.KEY_FIELD_4 }}` - {{ FIELDS.FIELD_4_DESC }} (user editable)
-- `{{ FIELDS.KEY_FIELD_5 }}` - {{ FIELDS.FIELD_5_DESC }} (user editable)
-- `{{ FIELDS.KEY_FIELD_6 }}` - {{ FIELDS.FIELD_6_VALUES }}
-- `{{ FIELDS.KEY_FIELD_7 }}` - {{ FIELDS.FIELD_7_DESC }} (0.0-1.0, when {{ FIELDS.CONDITION_7 }})
+Core RESTful endpoints for agent integration:
+- `POST /sessions` - Creates new session and returns session_id (required for all operations)
+- `POST /sessions/{id}/messages` - Adds message to session with sender and content validation
+- `GET /sessions/{id}` - Retrieves complete message history for session
+- `GET /sessions/{id}/messages?limit=N` - Retrieves recent N messages (pagination support)
+- `DELETE /sessions/{id}` - Cleanup session and associated messages (optional)
+- `GET /health` - Health check endpoint for monitoring
+- `GET /docs` - FastAPI automatic API documentation
 - `{{ FIELDS.KEY_FIELD_8 }}` - {{ FIELDS.FIELD_8_DESC }}
 - `{{ FIELDS.KEY_FIELD_9 }}` - {{ FIELDS.FIELD_9_DESC }}
 
