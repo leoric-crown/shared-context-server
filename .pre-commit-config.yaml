@@ -1,4 +1,4 @@
-# ============================================================================ 
+# ============================================================================
 # PRE-COMMIT HOOKS - FAST & FOCUSED
 # ============================================================================
 # Essential hooks that keep diffs clean during fast iteration.
@@ -12,14 +12,13 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.4
     hooks:
+      - id: ruff-format
+        name: Format (ruff)
+        description: "Python code formatting - keeps diffs clean"
       - id: ruff
         name: Lint (ruff)
         args: [--fix]
         description: "Fast Python linting with automatic fixes"
-        
-      - id: ruff-format
-        name: Format (ruff)
-        description: "Python code formatting - keeps diffs clean"
 
   # Essential file hygiene (fast, prevents diff noise)
   - repo: https://github.com/pre-commit/pre-commit-hooks

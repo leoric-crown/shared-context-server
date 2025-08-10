@@ -1,11 +1,11 @@
 # PRP-002: Phase 1 - Core Infrastructure
 
-**Document Type**: Product Requirement Prompt  
-**Created**: 2025-08-10  
-**Phase**: 1 (Core Infrastructure)  
-**Timeline**: 6 hours  
-**Priority**: Critical Core  
-**Status**: Ready for Execution  
+**Document Type**: Product Requirement Prompt
+**Created**: 2025-08-10
+**Phase**: 1 (Core Infrastructure)
+**Timeline**: 6 hours
+**Priority**: Critical Core
+**Status**: Ready for Execution
 **Prerequisites**: Phase 0 - Project Foundation completed
 
 ---
@@ -13,19 +13,19 @@
 ## Research Context & Architectural Analysis
 
 ### Planning Integration
-**Source**: Final Decomposed Implementation Plan, Framework Integration Guide, Core Architecture Guide  
-**Research Foundation**: FastMCP server implementation patterns, MCP protocol expertise, multi-agent session management architecture  
+**Source**: Final Decomposed Implementation Plan, Framework Integration Guide, Core Architecture Guide
+**Research Foundation**: FastMCP server implementation patterns, MCP protocol expertise, multi-agent session management architecture
 **Strategic Context**: Building the core MCP server infrastructure that enables session-based multi-agent collaboration, establishing the foundation for all subsequent features
 
 ### Architectural Scope
-**MCP Server Core**: FastMCP server with stdio transport, async lifecycle management, structured error handling  
-**Session Management**: UUID-based session creation, isolation boundaries, lifecycle management (create/retrieve/cleanup)  
-**Message Storage**: Async SQLite operations with visibility controls (public/private/agent_only), agent-specific filtering, proper indexing  
+**MCP Server Core**: FastMCP server with stdio transport, async lifecycle management, structured error handling
+**Session Management**: UUID-based session creation, isolation boundaries, lifecycle management (create/retrieve/cleanup)
+**Message Storage**: Async SQLite operations with visibility controls (public/private/agent_only), agent-specific filtering, proper indexing
 **Agent Identity**: MCP context extraction, basic authentication middleware, audit logging foundation, security validation
 
 ### Existing Patterns to Leverage
-**Framework Integration Guide**: Complete FastMCP server setup, session management tools, message visibility patterns  
-**Core Architecture Guide**: Database schema implementation, MCP resource models, audit logging patterns  
+**Framework Integration Guide**: Complete FastMCP server setup, session management tools, message visibility patterns
+**Core Architecture Guide**: Database schema implementation, MCP resource models, audit logging patterns
 **Phase 0 Foundation**: SQLite database with WAL mode, aiosqlite async operations, environment configuration, development tooling
 
 ---
@@ -61,23 +61,23 @@ from .database import get_db_connection  # Phase 0 unified connection management
 @asynccontextmanager
 async def lifespan(app):
     """FastMCP server lifespan management."""
-    
+
     # Startup
     print("Initializing Shared Context MCP Server...")
-    
+
     # Use single shared connection with WAL mode (from Phase 0 fixes)
     # Connection pooling to be evaluated when P95 write latency > 50ms or concurrent writers > 10
     # Alternative: Migrate to Postgres when scaling requirements are met
-    
+
     # Initialize database schema from Phase 0 (using unified connection management)
     async with get_db_connection() as conn:
         await initialize_schema(conn)
         # PRAGMA settings already configured in database.py
-    
+
     print("Server ready!")
-    
+
     yield
-    
+
     # Shutdown
     print("Shutting down...")
     # Connection cleanup handled by get_db_connection context manager
@@ -105,16 +105,16 @@ async def create_session(
 ) -> Dict[str, Any]:
     """
     Create a new shared context session.
-    
+
     Returns session_id for future operations.
     """
-    
+
     # Generate unique session ID
     session_id = f"session_{uuid4().hex[:16]}"
-    
+
     # Get agent identity from context
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with get_db_connection() as conn:
         await conn.execute("""
             INSERT INTO sessions (id, purpose, created_by, metadata)
@@ -126,10 +126,10 @@ async def create_session(
             json.dumps(metadata or {})
         ))
         await conn.commit()
-        
+
         # Audit log
         await audit_log(conn, "session_created", agent_id, session_id)
-    
+
     return {
         "success": True,
         "session_id": session_id,
@@ -147,9 +147,9 @@ async def get_session(
     """
     Retrieve session information and recent messages.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with get_db_connection() as conn:
         # Get session info
         cursor = await conn.execute(
@@ -157,26 +157,26 @@ async def get_session(
             (session_id,)
         )
         session = await cursor.fetchone()
-        
+
         if not session:
             return {
                 "success": False,
                 "error": "Session not found",
                 "code": "SESSION_NOT_FOUND"
             }
-        
+
         # Get accessible messages
         cursor = await conn.execute("""
-            SELECT * FROM messages 
-            WHERE session_id = ? 
-            AND (visibility = 'public' OR 
+            SELECT * FROM messages
+            WHERE session_id = ?
+            AND (visibility = 'public' OR
                  (visibility = 'private' AND sender = ?))
             ORDER BY timestamp DESC
             LIMIT 50
         """, (session_id, agent_id))
-        
+
         messages = await cursor.fetchall()
-        
+
         return {
             "success": True,
             "session": dict(session),
@@ -208,20 +208,20 @@ async def add_message(
 ) -> Dict[str, Any]:
     """
     Add a message to the shared context session.
-    
+
     Visibility controls:
     - public: Visible to all agents in session
     - private: Visible only to sender
     - agent_only: Visible only to agents of same type
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     # Input sanitization
     content = sanitize_text(content)
     if metadata:
         metadata = sanitize_json(metadata)
-    
+
     async with get_db_connection() as conn:
         # Verify session exists
         cursor = await conn.execute(
@@ -234,10 +234,10 @@ async def add_message(
                 "error": "Session not found",
                 "code": "SESSION_NOT_FOUND"
             }
-        
+
         # Insert message
         cursor = await conn.execute("""
-            INSERT INTO messages 
+            INSERT INTO messages
             (session_id, sender, content, visibility, metadata, parent_message_id)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
@@ -248,16 +248,16 @@ async def add_message(
             json.dumps(metadata or {}),
             parent_message_id
         ))
-        
+
         message_id = cursor.lastrowid
         await conn.commit()
-        
+
         # Audit log
         await audit_log(conn, "message_added", agent_id, session_id, {
             "message_id": message_id,
             "visibility": visibility
         })
-    
+
     return {
         "success": True,
         "message_id": message_id,
@@ -280,38 +280,38 @@ async def get_messages(
     """
     Retrieve messages from session with agent-specific filtering.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with get_db_connection() as conn:
         # Build query with visibility controls
         where_conditions = ["session_id = ?"]
         params = [session_id]
-        
+
         # Agent-specific visibility filtering
         visibility_conditions = [
             "visibility = 'public'",
             "(visibility = 'private' AND sender = ?)"
         ]
         params.append(agent_id)
-        
+
         if visibility_filter:
             visibility_conditions.append("visibility = ?")
             params.append(visibility_filter)
-        
+
         where_conditions.append(f"({' OR '.join(visibility_conditions)})")
-        
+
         query = f"""
-            SELECT * FROM messages 
+            SELECT * FROM messages
             WHERE {' AND '.join(where_conditions)}
             ORDER BY timestamp ASC
             LIMIT ? OFFSET ?
         """
         params.extend([limit, offset])
-        
+
         cursor = await conn.execute(query, params)
         messages = await cursor.fetchall()
-        
+
         return {
             "success": True,
             "messages": [dict(msg) for msg in messages],
@@ -326,18 +326,18 @@ async def get_messages(
 def extract_agent_context(request_context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract agent identity and authentication from MCP context.
-    
+
     Returns agent_id, permissions, and authentication status.
     """
-    
+
     # Extract from MCP context (implementation depends on MCP client)
     agent_id = request_context.get("agent_id", "unknown")
     agent_type = request_context.get("agent_type", "generic")
-    
+
     # Basic authentication (enhanced in Phase 3)
     api_key = request_context.get("authorization", "").replace("Bearer ", "")
     authenticated = api_key == os.getenv("API_KEY", "")
-    
+
     return {
         "agent_id": agent_id,
         "agent_type": agent_type,
@@ -350,15 +350,15 @@ async def authentication_middleware(request, call_next):
     """
     Basic authentication middleware for agent requests.
     """
-    
+
     # Extract and validate agent context
     context = extract_agent_context(request.context)
-    
+
     # Set context for tools to access
     mcp.context["agent_id"] = context["agent_id"]
     mcp.context["agent_type"] = context["agent_type"]
     mcp.context["authenticated"] = context["authenticated"]
-    
+
     response = await call_next(request)
     return response
 ```
@@ -375,9 +375,9 @@ async def audit_log(
     """
     Log security and operational events for debugging and monitoring.
     """
-    
+
     await conn.execute("""
-        INSERT INTO audit_log 
+        INSERT INTO audit_log
         (event_type, agent_id, session_id, metadata, timestamp)
         VALUES (?, ?, ?, ?, ?)
     """, (
@@ -394,7 +394,7 @@ async def audit_log(
 #### 1. Database Layer Integration
 - **Connection Strategy**: Single shared connection with WAL mode (Phase 0 unified management)
 - **Pooling Decision**: Evaluate aiosqlitepool when P95 write latency > 50ms or concurrent writers > 10
-- **Schema Validation**: Verify Phase 0 database schema is properly initialized  
+- **Schema Validation**: Verify Phase 0 database schema is properly initialized
 - **Performance Configuration**: Leverage optimized PRAGMA settings from database.py
 - **Index Creation**: Add `idx_messages_session_time` and `idx_audit_log_time` for Phase 3 protection
 - **Error Handling**: Proper SQLite error handling with unified error envelope
@@ -431,7 +431,7 @@ async def audit_log(
 // Error responses
 {
   "success": false,
-  "error": "Human-readable error message", 
+  "error": "Human-readable error message",
   "code": "ERROR_CODE",
   "timestamp": "2025-01-15T10:30:00Z"
 }
@@ -448,7 +448,7 @@ async def audit_log(
 ## Quality Requirements
 
 ### Testing Strategy
-**Framework**: FastMCP TestClient for in-memory testing  
+**Framework**: FastMCP TestClient for in-memory testing
 **Test Categories**:
 - **Unit Tests**: Individual tool functionality, database operations, context extraction
 - **Integration Tests**: Multi-tool workflows, session lifecycle, message visibility
@@ -459,9 +459,9 @@ async def audit_log(
 @pytest.mark.asyncio
 async def test_session_workflow(client):
     """Test complete session workflow."""
-    
+
     client.set_context({"agent_id": "test_agent"})
-    
+
     # Create session
     result = await client.call_tool(
         "create_session",
@@ -469,7 +469,7 @@ async def test_session_workflow(client):
     )
     assert result["success"] is True
     session_id = result["session_id"]
-    
+
     # Add message
     result = await client.call_tool(
         "add_message",
@@ -480,7 +480,7 @@ async def test_session_workflow(client):
         }
     )
     assert result["success"] is True
-    
+
     # Retrieve session
     result = await client.call_tool("get_session", {"session_id": session_id})
     assert result["success"] is True
@@ -489,30 +489,30 @@ async def test_session_workflow(client):
 @pytest.mark.asyncio
 async def test_visibility_controls(client):
     """Test message visibility controls."""
-    
+
     # Test with different agents
     agent1_context = {"agent_id": "agent1"}
     agent2_context = {"agent_id": "agent2"}
-    
+
     client.set_context(agent1_context)
-    
+
     # Create session and add private message
     session_result = await client.call_tool(
-        "create_session", 
+        "create_session",
         {"purpose": "visibility test"}
     )
     session_id = session_result["session_id"]
-    
+
     await client.call_tool("add_message", {
         "session_id": session_id,
         "content": "Private message",
         "visibility": "private"
     })
-    
+
     # Switch to agent2, should not see private message
     client.set_context(agent2_context)
     result = await client.call_tool("get_messages", {"session_id": session_id})
-    
+
     assert result["success"] is True
     assert len(result["messages"]) == 0  # Should not see agent1's private message
 ```
@@ -542,12 +542,12 @@ async def test_visibility_controls(client):
 ## Coordination Strategy
 
 ### Recommended Approach: Direct Agent Assignment
-**Complexity Assessment**: Core infrastructure with moderate complexity  
-**File Count**: 6-8 files (server.py, database.py, tools.py, models.py, middleware.py, tests/)  
-**Integration Risk**: Medium (building on Phase 0 foundation, establishing core patterns)  
+**Complexity Assessment**: Core infrastructure with moderate complexity
+**File Count**: 6-8 files (server.py, database.py, tools.py, models.py, middleware.py, tests/)
+**Integration Risk**: Medium (building on Phase 0 foundation, establishing core patterns)
 **Time Estimation**: 6 hours with incremental validation
 
-**Agent Assignment**: **Developer Agent** for complete Phase 1 execution  
+**Agent Assignment**: **Developer Agent** for complete Phase 1 execution
 **Rationale**: Core infrastructure requires deep FastMCP expertise, database architecture, and MCP protocol implementation - all developer agent specialties
 
 ### Implementation Phases
@@ -563,7 +563,7 @@ async def test_visibility_controls(client):
 # Server startup validation
 async with TestClient(mcp_server) as client:
     assert client.server_name == "shared-context-server"
-    
+
 # Error handling validation
 result = await client.call_tool("nonexistent_tool", {})
 assert result["success"] is False
@@ -583,11 +583,11 @@ session = await client.call_tool("create_session", {"purpose": "test"})
 assert session["success"] is True
 assert session["session_id"].startswith("session_")
 
-# Session isolation validation  
+# Session isolation validation
 # (Test that different sessions are properly isolated)
 ```
 
-#### Phase 1.3: Message Storage & Visibility (1.5 hours)  
+#### Phase 1.3: Message Storage & Visibility (1.5 hours)
 **Implementation Steps**:
 1. **Add Message Tool** (45 minutes): Content storage, visibility controls, metadata
 2. **Message Retrieval** (45 minutes): Filtering, pagination, agent-specific access
@@ -629,21 +629,21 @@ result = await client.call_tool("create_session", {"purpose": "auth test"})
 ### Risk Mitigation
 
 #### Technical Risks
-**MCP Protocol Complexity**: Use FastMCP TestClient for validation, incremental testing  
-**Database Concurrency**: Leverage Phase 0 WAL mode configuration, connection pooling  
-**Context Extraction Issues**: Careful MCP context handling, fallback values  
+**MCP Protocol Complexity**: Use FastMCP TestClient for validation, incremental testing
+**Database Concurrency**: Leverage Phase 0 WAL mode configuration, connection pooling
+**Context Extraction Issues**: Careful MCP context handling, fallback values
 **Performance Bottlenecks**: Monitor database query performance, optimize indexes
 
 #### Integration Risks
-**Phase 0 Dependency Issues**: Verify database schema and tooling before starting  
-**Agent Context Problems**: Test context extraction thoroughly with different scenarios  
-**Visibility Logic Bugs**: Comprehensive testing of all visibility combinations  
+**Phase 0 Dependency Issues**: Verify database schema and tooling before starting
+**Agent Context Problems**: Test context extraction thoroughly with different scenarios
+**Visibility Logic Bugs**: Comprehensive testing of all visibility combinations
 **Audit Logging Gaps**: Ensure all operations are properly logged
 
 ### Dependencies & Prerequisites
-**Phase 0 Completion**: Modern tooling, database schema, development environment  
-**Database Readiness**: SQLite with WAL mode, schema initialization, connection pooling  
-**FastMCP Knowledge**: Server setup, tool registration, context handling patterns  
+**Phase 0 Completion**: Modern tooling, database schema, development environment
+**Database Readiness**: SQLite with WAL mode, schema initialization, connection pooling
+**FastMCP Knowledge**: Server setup, tool registration, context handling patterns
 **Async/Await Patterns**: aiosqlite operations, connection management, error handling
 
 ---
@@ -653,7 +653,7 @@ result = await client.call_tool("create_session", {"purpose": "auth test"})
 ### Functional Success
 **FastMCP Server**:
 - ✅ Server initialization and configuration working
-- ✅ stdio transport for MCP client communication functional  
+- ✅ stdio transport for MCP client communication functional
 - ✅ Proper lifecycle management (startup/shutdown) with database connections
 - ✅ Structured error handling with helpful error messages
 
@@ -671,28 +671,28 @@ result = await client.call_tool("create_session", {"purpose": "auth test"})
 
 **Agent Identity & Authentication**:
 - ✅ Agent identity extraction from MCP context
-- ✅ Basic authentication middleware operational  
+- ✅ Basic authentication middleware operational
 - ✅ Audit logging for all operations
 - ✅ Security validation and input sanitization
 
 ### Integration Success
-**MCP Protocol Integration**: All tools properly registered and responding to MCP clients  
-**Database Integration**: Efficient async operations with proper error handling  
-**Security Integration**: Agent authentication and audit logging working  
+**MCP Protocol Integration**: All tools properly registered and responding to MCP clients
+**Database Integration**: Efficient async operations with proper error handling
+**Security Integration**: Agent authentication and audit logging working
 **Performance Integration**: Connection pooling and query optimization operational
 
 ### Quality Gates
 **Core Infrastructure Testing**:
 ```bash
 uv run test tests/unit/test_session_management.py    # Session tool tests pass
-uv run test tests/unit/test_message_storage.py       # Message tool tests pass  
+uv run test tests/unit/test_message_storage.py       # Message tool tests pass
 uv run test tests/integration/test_agent_workflow.py # Multi-tool workflows pass
 uv run test tests/behavioral/test_visibility.py     # Visibility controls pass
 ```
 
 **Performance Benchmarks**:
 - Session creation: < 10ms
-- Message insertion: < 20ms  
+- Message insertion: < 20ms
 - Message retrieval: < 30ms for 50 messages
 - Agent context extraction: < 5ms
 
@@ -717,7 +717,7 @@ coverage report         # >80% test coverage for core infrastructure
 - [ ] Session isolation boundaries properly enforced
 - [ ] Session validation and error handling
 
-#### ✅ Message Storage with Visibility  
+#### ✅ Message Storage with Visibility
 - [ ] add_message tool with visibility controls
 - [ ] get_messages tool with agent-specific filtering
 - [ ] Visibility logic (public/private/agent_only) working
@@ -735,7 +735,7 @@ coverage report         # >80% test coverage for core infrastructure
 
 ### Critical Success Factors
 1. **MCP Protocol Compliance**: Proper tool registration and response formatting
-2. **Database Performance**: Efficient async operations with connection pooling  
+2. **Database Performance**: Efficient async operations with connection pooling
 3. **Security Foundation**: Agent identity and authentication working correctly
 4. **Testing Rigor**: Comprehensive validation of all tools and workflows
 5. **Error Handling**: Structured error responses with helpful diagnostic information
@@ -743,7 +743,7 @@ coverage report         # >80% test coverage for core infrastructure
 ### Common Pitfalls to Avoid
 1. **❌ MCP Context Issues**: Careful handling of agent identity extraction and fallbacks
 2. **❌ Database Concurrency Problems**: Proper use of connection pooling and WAL mode
-3. **❌ Visibility Logic Bugs**: Thorough testing of all visibility control combinations  
+3. **❌ Visibility Logic Bugs**: Thorough testing of all visibility control combinations
 4. **❌ Performance Bottlenecks**: Monitor and optimize database queries and indexes
 5. **❌ Authentication Gaps**: Ensure all tools properly validate agent identity
 
@@ -786,7 +786,7 @@ Upon completion of Phase 1, update README.md to reflect:
 
 🎯 **Phase 1 Complete**: Core Infrastructure ready
 - ✅ FastMCP server with 4 core tools operational
-- ✅ Session management with UUID generation 
+- ✅ Session management with UUID generation
 - ✅ Message storage with visibility controls
 - ✅ Agent identity and authentication middleware
 - ✅ Audit logging and security validation
@@ -799,12 +799,12 @@ Upon completion of Phase 1, update README.md to reflect:
 - `create_session` - Create isolated collaboration sessions
 - `get_session` - Retrieve session info and message history
 
-### Message System  
+### Message System
 - `add_message` - Add messages with visibility controls
 - `get_messages` - Retrieve messages with agent-specific filtering
 
-**Authentication**: Basic API key authentication  
-**Database**: SQLite with WAL mode, concurrent agent support  
+**Authentication**: Basic API key authentication
+**Database**: SQLite with WAL mode, concurrent agent support
 **Performance**: < 30ms response times for core operations
 ```
 
@@ -822,6 +822,6 @@ Upon completion of Phase 1, update README.md to reflect:
 
 ---
 
-**Ready for Execution**: Phase 1 core infrastructure implementation  
-**Next Phase**: Phase 2 - Essential Features (search, agent memory, MCP resources)  
+**Ready for Execution**: Phase 1 core infrastructure implementation
+**Next Phase**: Phase 2 - Essential Features (search, agent memory, MCP resources)
 **Coordination**: Direct developer agent assignment for complete Phase 1 execution

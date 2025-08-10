@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal
 
 import dotenv
 from pydantic import Field, field_validator
@@ -34,19 +34,33 @@ class DatabaseConfig(BaseSettings):
     """Database configuration settings."""
 
     # Database connection
-    database_path: str = Field(default="./chat_history.db", env="DATABASE_PATH")
-    database_url: Optional[str] = Field(default=None, env="DATABASE_URL")
-    database_timeout: int = Field(default=30, env="DATABASE_TIMEOUT")
-    database_busy_timeout: int = Field(default=5, env="DATABASE_BUSY_TIMEOUT")
+    database_path: str = Field(
+        default="./chat_history.db", json_schema_extra={"env": "DATABASE_PATH"}
+    )
+    database_url: str | None = Field(
+        default=None, json_schema_extra={"env": "DATABASE_URL"}
+    )
+    database_timeout: int = Field(
+        default=30, json_schema_extra={"env": "DATABASE_TIMEOUT"}
+    )
+    database_busy_timeout: int = Field(
+        default=5, json_schema_extra={"env": "DATABASE_BUSY_TIMEOUT"}
+    )
 
     # Connection pooling
-    database_max_connections: int = Field(default=20, env="DATABASE_MAX_CONNECTIONS")
-    database_min_connections: int = Field(default=2, env="DATABASE_MIN_CONNECTIONS")
+    database_max_connections: int = Field(
+        default=20, json_schema_extra={"env": "DATABASE_MAX_CONNECTIONS"}
+    )
+    database_min_connections: int = Field(
+        default=2, json_schema_extra={"env": "DATABASE_MIN_CONNECTIONS"}
+    )
 
     # Retention policies
-    audit_log_retention_days: int = Field(default=30, env="AUDIT_LOG_RETENTION_DAYS")
+    audit_log_retention_days: int = Field(
+        default=30, json_schema_extra={"env": "AUDIT_LOG_RETENTION_DAYS"}
+    )
     inactive_session_retention_days: int = Field(
-        default=7, env="INACTIVE_SESSION_RETENTION_DAYS"
+        default=7, json_schema_extra={"env": "INACTIVE_SESSION_RETENTION_DAYS"}
     )
 
     @field_validator("database_path")
@@ -78,15 +92,19 @@ class MCPServerConfig(BaseSettings):
     """MCP server configuration settings."""
 
     # Server identification
-    mcp_server_name: str = Field(default="shared-context-server", env="MCP_SERVER_NAME")
-    mcp_server_version: str = Field(default="1.0.0", env="MCP_SERVER_VERSION")
+    mcp_server_name: str = Field(
+        default="shared-context-server", json_schema_extra={"env": "MCP_SERVER_NAME"}
+    )
+    mcp_server_version: str = Field(
+        default="1.0.0", json_schema_extra={"env": "MCP_SERVER_VERSION"}
+    )
 
     # Transport configuration
     mcp_transport: Literal["stdio", "http"] = Field(
-        default="stdio", env="MCP_TRANSPORT"
+        default="stdio", json_schema_extra={"env": "MCP_TRANSPORT"}
     )
-    http_host: str = Field(default="localhost", env="HTTP_HOST")
-    http_port: int = Field(default=8000, env="HTTP_PORT")
+    http_host: str = Field(default="localhost", json_schema_extra={"env": "HTTP_HOST"})
+    http_port: int = Field(default=8000, json_schema_extra={"env": "HTTP_PORT"})
 
     @field_validator("http_port")
     @classmethod
@@ -101,24 +119,40 @@ class SecurityConfig(BaseSettings):
     """Security and authentication configuration."""
 
     # API authentication
-    api_key: str = Field(env="API_KEY")
-    jwt_secret_key: Optional[str] = Field(default=None, env="JWT_SECRET_KEY")
-    jwt_expiration_time: int = Field(default=86400, env="JWT_EXPIRATION_TIME")
+    api_key: str = Field(json_schema_extra={"env": "API_KEY"})
+    jwt_secret_key: str | None = Field(
+        default=None, json_schema_extra={"env": "JWT_SECRET_KEY"}
+    )
+    jwt_expiration_time: int = Field(
+        default=86400, json_schema_extra={"env": "JWT_EXPIRATION_TIME"}
+    )
 
     # Session security
-    session_timeout: int = Field(default=3600, env="SESSION_TIMEOUT")
-    max_sessions_per_agent: int = Field(default=50, env="MAX_SESSIONS_PER_AGENT")
+    session_timeout: int = Field(
+        default=3600, json_schema_extra={"env": "SESSION_TIMEOUT"}
+    )
+    max_sessions_per_agent: int = Field(
+        default=50, json_schema_extra={"env": "MAX_SESSIONS_PER_AGENT"}
+    )
 
     # CORS settings
-    cors_origins: str = Field(default="*", env="CORS_ORIGINS")
-    allowed_hosts: str = Field(default="localhost,127.0.0.1", env="ALLOWED_HOSTS")
+    cors_origins: str = Field(default="*", json_schema_extra={"env": "CORS_ORIGINS"})
+    allowed_hosts: str = Field(
+        default="localhost,127.0.0.1", json_schema_extra={"env": "ALLOWED_HOSTS"}
+    )
 
     @field_validator("api_key")
     @classmethod
     def validate_api_key(cls, v: str) -> str:
-        """Ensure API key is secure."""
+        """Ensure API key is secure with helpful error messages."""
         if not v:
-            raise ValueError("API_KEY environment variable is required")
+            raise ValueError(
+                "❌ API_KEY environment variable is required!\n\n"
+                "Quick fix:\n"
+                "  1. Generate a secure key: openssl rand -base64 32\n"
+                "  2. Add to .env: API_KEY=your-generated-key-here\n"
+                "  3. Restart the server\n"
+            )
 
         # Allow insecure key only in development
         if v == "your-secure-api-key-replace-this-in-production":
@@ -126,11 +160,23 @@ class SecurityConfig(BaseSettings):
 
             env_mode = os.getenv("ENVIRONMENT", "development")
             if env_mode == "production":
-                raise ValueError("API_KEY must be set to a secure value in production")
+                raise ValueError(
+                    "❌ Default API_KEY detected in production!\n\n"
+                    "Security risk: Using the default API_KEY in production.\n"
+                    "Quick fix:\n"
+                    "  1. Generate secure key: openssl rand -base64 32\n"
+                    "  2. Update .env: API_KEY=your-new-secure-key\n"
+                    "  3. Restart the server\n"
+                )
             logger.warning("Using default API_KEY - only suitable for development")
 
-        if len(v) < 32 and v != "your-secure-api-key-replace-this-in-production":
-            logger.warning("API_KEY should be at least 32 characters for security")
+        if len(v) < 32 and v not in [
+            "your-secure-api-key-replace-this-in-production",
+            "test-api-key-for-ci-only",
+        ]:
+            logger.warning(
+                "⚠️ API_KEY should be at least 32 characters for security. Generate with: openssl rand -base64 32"
+            )
         return v
 
     @field_validator("cors_origins")
@@ -145,33 +191,48 @@ class OperationalConfig(BaseSettings):
 
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
-        default="INFO", env="LOG_LEVEL"
+        default="INFO", json_schema_extra={"env": "LOG_LEVEL"}
     )
     log_format: str = Field(
-        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", env="LOG_FORMAT"
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        json_schema_extra={"env": "LOG_FORMAT"},
     )
     database_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
-        default="INFO", env="DATABASE_LOG_LEVEL"
+        default="INFO", json_schema_extra={"env": "DATABASE_LOG_LEVEL"}
     )
 
     # Performance monitoring
     enable_performance_monitoring: bool = Field(
-        default=True, env="ENABLE_PERFORMANCE_MONITORING"
+        default=True, json_schema_extra={"env": "ENABLE_PERFORMANCE_MONITORING"}
     )
-    performance_log_interval: int = Field(default=300, env="PERFORMANCE_LOG_INTERVAL")
+    performance_log_interval: int = Field(
+        default=300, json_schema_extra={"env": "PERFORMANCE_LOG_INTERVAL"}
+    )
 
     # Resource limits
     max_memory_entries_per_agent: int = Field(
-        default=1000, env="MAX_MEMORY_ENTRIES_PER_AGENT"
+        default=1000, json_schema_extra={"env": "MAX_MEMORY_ENTRIES_PER_AGENT"}
     )
-    max_memory_size_mb: int = Field(default=100, env="MAX_MEMORY_SIZE_MB")
-    max_message_length: int = Field(default=100000, env="MAX_MESSAGE_LENGTH")
-    max_messages_per_session: int = Field(default=10000, env="MAX_MESSAGES_PER_SESSION")
-    max_metadata_size_kb: int = Field(default=10, env="MAX_METADATA_SIZE_KB")
+    max_memory_size_mb: int = Field(
+        default=100, json_schema_extra={"env": "MAX_MEMORY_SIZE_MB"}
+    )
+    max_message_length: int = Field(
+        default=100000, json_schema_extra={"env": "MAX_MESSAGE_LENGTH"}
+    )
+    max_messages_per_session: int = Field(
+        default=10000, json_schema_extra={"env": "MAX_MESSAGES_PER_SESSION"}
+    )
+    max_metadata_size_kb: int = Field(
+        default=10, json_schema_extra={"env": "MAX_METADATA_SIZE_KB"}
+    )
 
     # Cleanup settings
-    enable_automatic_cleanup: bool = Field(default=True, env="ENABLE_AUTOMATIC_CLEANUP")
-    cleanup_interval: int = Field(default=3600, env="CLEANUP_INTERVAL")
+    enable_automatic_cleanup: bool = Field(
+        default=True, json_schema_extra={"env": "ENABLE_AUTOMATIC_CLEANUP"}
+    )
+    cleanup_interval: int = Field(
+        default=3600, json_schema_extra={"env": "CLEANUP_INTERVAL"}
+    )
 
 
 class DevelopmentConfig(BaseSettings):
@@ -179,18 +240,23 @@ class DevelopmentConfig(BaseSettings):
 
     # Environment mode
     environment: Literal["development", "testing", "production"] = Field(
-        default="development", env="ENVIRONMENT"
+        default="development", json_schema_extra={"env": "ENVIRONMENT"}
     )
-    debug: bool = Field(default=False, env="DEBUG")
-    enable_debug_tools: bool = Field(default=False, env="ENABLE_DEBUG_TOOLS")
+    debug: bool = Field(default=False, json_schema_extra={"env": "DEBUG"})
+    enable_debug_tools: bool = Field(
+        default=False, json_schema_extra={"env": "ENABLE_DEBUG_TOOLS"}
+    )
 
     # Development database
     dev_reset_database_on_start: bool = Field(
-        default=False, env="DEV_RESET_DATABASE_ON_START"
+        default=False, json_schema_extra={"env": "DEV_RESET_DATABASE_ON_START"}
     )
-    dev_seed_test_data: bool = Field(default=False, env="DEV_SEED_TEST_DATA")
+    dev_seed_test_data: bool = Field(
+        default=False, json_schema_extra={"env": "DEV_SEED_TEST_DATA"}
+    )
     test_database_path: str = Field(
-        default="./test_chat_history.db", env="TEST_DATABASE_PATH"
+        default="./test_chat_history.db",
+        json_schema_extra={"env": "TEST_DATABASE_PATH"},
     )
 
 
@@ -211,7 +277,7 @@ class SharedContextServerConfig(BaseSettings):
         extra="ignore",
     )
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize configuration with proper section instantiation."""
         # Initialize sub-configurations
         if "database" not in kwargs:
@@ -219,7 +285,9 @@ class SharedContextServerConfig(BaseSettings):
         if "mcp_server" not in kwargs:
             kwargs["mcp_server"] = MCPServerConfig()
         if "security" not in kwargs:
-            kwargs["security"] = SecurityConfig()
+            kwargs["security"] = SecurityConfig(
+                api_key=os.getenv("API_KEY", "default-dev-key")
+            )
         if "operational" not in kwargs:
             kwargs["operational"] = OperationalConfig()
         if "development" not in kwargs:
@@ -282,7 +350,12 @@ class SharedContextServerConfig(BaseSettings):
 
 
 # Global configuration instance
-_config: Optional[SharedContextServerConfig] = None
+_config: SharedContextServerConfig | None = None
+
+
+def _raise_production_config_error(issues: list[str]) -> None:
+    """Raise a production configuration error."""
+    raise ValueError(f"Production configuration issues: {', '.join(issues)}")
 
 
 def get_config() -> SharedContextServerConfig:
@@ -300,7 +373,7 @@ def get_config() -> SharedContextServerConfig:
     return _config
 
 
-def load_config(env_file: Optional[str] = None) -> SharedContextServerConfig:
+def load_config(env_file: str | None = None) -> SharedContextServerConfig:
     """
     Load configuration from environment and .env file.
 
@@ -328,18 +401,17 @@ def load_config(env_file: Optional[str] = None) -> SharedContextServerConfig:
         if config.is_production():
             issues = config.validate_production_settings()
             if issues:
-                raise ValueError(
-                    f"Production configuration issues: {', '.join(issues)}"
-                )
+                _raise_production_config_error(issues)
 
         logger.info(
             f"Configuration loaded successfully for {config.development.environment} environment"
         )
-        return config
 
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
-        raise ValueError(f"Configuration loading failed: {e}")
+        logger.exception("Failed to load configuration")
+        raise ValueError(f"Configuration loading failed: {e}") from e
+    else:
+        return config
 
 
 def reload_config() -> SharedContextServerConfig:
@@ -386,19 +458,32 @@ def validate_required_env_vars() -> None:
     Validate that all required environment variables are set.
 
     Raises:
-        ValueError: If required variables are missing
+        ValueError: If required variables are missing with helpful setup instructions
     """
-    required_vars = ["API_KEY"]
+    required_vars = {
+        "API_KEY": "Secure API key for agent authentication (generate with: openssl rand -base64 32)"
+    }
 
     missing_vars = []
-    for var in required_vars:
+    for var, description in required_vars.items():
         if not os.getenv(var):
-            missing_vars.append(var)
+            missing_vars.append(f"  • {var}: {description}")
 
     if missing_vars:
-        raise ValueError(
-            f"Required environment variables not set: {', '.join(missing_vars)}"
+        error_msg = (
+            "❌ Required environment variables are missing!\n\n"
+            + "Missing variables:\n"
+            + "\n".join(missing_vars)
+            + "\n\nQuick fix:\n"
+            + "  1. Copy .env.example to .env\n"
+            + "  2. Set the required variables in .env\n"
+            + "  3. For API_KEY, run: openssl rand -base64 32\n\n"
+            + "Example .env content:\n"
+            + "  API_KEY=your-secure-random-key-here\n"
+            + "  DATABASE_PATH=./chat_history.db\n"
+            + "  ENVIRONMENT=development\n"
         )
+        raise ValueError(error_msg)
 
 
 def get_database_url() -> str:

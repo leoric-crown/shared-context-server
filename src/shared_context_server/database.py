@@ -14,13 +14,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,31 @@ class DatabaseSchemaError(DatabaseError):
     """Exception raised when database schema is invalid."""
 
     pass
+
+
+def _raise_wal_mode_error(journal_mode: str) -> None:
+    """Raise a WAL mode configuration error."""
+    raise DatabaseConnectionError(f"Failed to enable WAL mode, got: {journal_mode}")
+
+
+def _raise_journal_mode_check_error() -> None:
+    """Raise a journal mode check error."""
+    raise DatabaseConnectionError("Failed to check journal mode")
+
+
+def _raise_table_not_found_error(table: str) -> None:
+    """Raise a table not found error."""
+    raise DatabaseSchemaError(f"Required table '{table}' not found")
+
+
+def _raise_no_schema_version_error() -> None:
+    """Raise a no schema version error."""
+    raise DatabaseSchemaError("No schema version found")
+
+
+def _raise_basic_query_error() -> None:
+    """Raise a basic query error."""
+    raise DatabaseError("Basic query failed")
 
 
 class DatabaseManager:
@@ -99,7 +126,7 @@ class DatabaseManager:
             logger.info(f"Database initialized successfully: {self.database_path}")
 
         except Exception as e:
-            raise DatabaseConnectionError(f"Failed to initialize database: {e}")
+            raise DatabaseConnectionError(f"Failed to initialize database: {e}") from e
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
@@ -127,11 +154,13 @@ class DatabaseManager:
 
             # Explicit WAL mode assertion to fail fast
             cursor = await conn.execute("PRAGMA journal_mode;")
-            journal_mode = (await cursor.fetchone())[0].lower()
+            row = await cursor.fetchone()
+            if row is None:
+                _raise_journal_mode_check_error()
+            assert row is not None
+            journal_mode = row[0].lower()
             if journal_mode != "wal":
-                raise DatabaseConnectionError(
-                    f"Failed to enable WAL mode, got: {journal_mode}"
-                )
+                _raise_wal_mode_error(journal_mode)
 
             # Track connection count for monitoring
             self._connection_count += 1
@@ -139,8 +168,8 @@ class DatabaseManager:
             yield conn
 
         except Exception as e:
-            logger.error(f"Database connection failed: {e}")
-            raise DatabaseConnectionError(f"Connection failed: {e}")
+            logger.exception("Database connection failed")
+            raise DatabaseConnectionError(f"Connection failed: {e}") from e
 
         finally:
             if conn:
@@ -160,15 +189,21 @@ class DatabaseManager:
 
             # Explicit WAL mode assertion to fail fast
             cursor = await conn.execute("PRAGMA journal_mode;")
-            journal_mode = (await cursor.fetchone())[0].lower()
+            row = await cursor.fetchone()
+            if row is None:
+                _raise_journal_mode_check_error()
+            assert row is not None
+            journal_mode = row[0].lower()
             if journal_mode != "wal":
-                raise DatabaseConnectionError(
-                    f"Failed to enable WAL mode, got: {journal_mode}"
-                )
+                _raise_wal_mode_error(journal_mode)
 
         except Exception as e:
-            logger.error(f"Failed to apply PRAGMA settings: {e}")
-            raise DatabaseConnectionError(f"PRAGMA application failed: {e}")
+            logger.exception("Failed to apply PRAGMA settings")
+            raise DatabaseConnectionError(f"PRAGMA application failed: {e}") from e
+
+    def _raise_schema_not_found_error(self, schema_path: Path) -> None:
+        """Raise a schema not found error."""
+        raise DatabaseSchemaError(f"Schema file not found: {schema_path}")
 
     async def _ensure_schema_applied(self, conn: aiosqlite.Connection) -> None:
         """
@@ -201,11 +236,11 @@ class DatabaseManager:
                     await conn.executescript(schema_sql)
                     logger.info("Database schema applied successfully")
                 else:
-                    raise DatabaseSchemaError(f"Schema file not found: {schema_path}")
+                    self._raise_schema_not_found_error(schema_path)
 
         except Exception as e:
-            logger.error(f"Schema application failed: {e}")
-            raise DatabaseSchemaError(f"Failed to apply schema: {e}")
+            logger.exception("Schema application failed")
+            raise DatabaseSchemaError(f"Failed to apply schema: {e}") from e
 
     async def _validate_schema(self, conn: aiosqlite.Connection) -> None:
         """
@@ -237,14 +272,18 @@ class DatabaseManager:
                 )
 
                 if not await cursor.fetchone():
-                    raise DatabaseSchemaError(f"Required table '{table}' not found")
+                    _raise_table_not_found_error(table)
 
             # Validate PRAGMA settings applied correctly
             await self._validate_pragmas(conn)
 
             # Check schema version
             cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
-            version = (await cursor.fetchone())[0]
+            row = await cursor.fetchone()
+            if row is None:
+                _raise_no_schema_version_error()
+            assert row is not None
+            version = row[0]
 
             if version != 1:
                 logger.warning(f"Unexpected schema version: {version}, expected: 1")
@@ -252,8 +291,8 @@ class DatabaseManager:
             logger.info("Database schema validation successful")
 
         except Exception as e:
-            logger.error(f"Schema validation failed: {e}")
-            raise DatabaseSchemaError(f"Schema validation failed: {e}")
+            logger.exception("Schema validation failed")
+            raise DatabaseSchemaError(f"Schema validation failed: {e}") from e
 
     async def _validate_pragmas(self, conn: aiosqlite.Connection) -> None:
         """
@@ -297,7 +336,7 @@ class DatabaseManager:
 
 
 # Global database manager instance
-_db_manager: Optional[DatabaseManager] = None
+_db_manager: DatabaseManager | None = None
 
 
 def get_database_manager() -> DatabaseManager:
@@ -356,7 +395,9 @@ async def get_db_connection() -> AsyncGenerator[aiosqlite.Connection, None]:
 
 
 # Utility functions for common operations
-async def execute_query(query: str, params: tuple = ()) -> list:
+async def execute_query(
+    query: str, params: tuple[Any, ...] = ()
+) -> list[dict[str, Any]]:
     """
     Execute SELECT query and return results.
 
@@ -374,7 +415,7 @@ async def execute_query(query: str, params: tuple = ()) -> list:
         return [dict(row) for row in rows]
 
 
-async def execute_update(query: str, params: tuple = ()) -> int:
+async def execute_update(query: str, params: tuple[Any, ...] = ()) -> int:
     """
     Execute UPDATE/INSERT/DELETE query.
 
@@ -391,7 +432,7 @@ async def execute_update(query: str, params: tuple = ()) -> int:
         return cursor.rowcount
 
 
-async def execute_insert(query: str, params: tuple = ()) -> int:
+async def execute_insert(query: str, params: tuple[Any, ...] = ()) -> int:
     """
     Execute INSERT query and return last row ID.
 
@@ -405,7 +446,7 @@ async def execute_insert(query: str, params: tuple = ()) -> int:
     async with get_db_connection() as conn:
         cursor = await conn.execute(query, params)
         await conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
 
 # UTC timestamp utilities
@@ -445,10 +486,12 @@ def parse_utc_timestamp(timestamp_str: str) -> datetime:
         else:
             dt = dt.astimezone(timezone.utc)
 
-        return dt
-
     except ValueError as e:
-        raise ValueError(f"Invalid timestamp format: {timestamp_str}, error: {e}")
+        raise ValueError(
+            f"Invalid timestamp format: {timestamp_str}, error: {e}"
+        ) from e
+    else:
+        return dt
 
 
 # Validation utilities
@@ -482,9 +525,10 @@ def validate_json_string(json_str: str) -> bool:
 
     try:
         json.loads(json_str)
-        return True
     except (json.JSONDecodeError, TypeError):
         return False
+    else:
+        return True
 
 
 # Health check utilities
@@ -506,8 +550,8 @@ async def health_check() -> dict[str, Any]:
             cursor = await conn.execute("SELECT 1")
             result = await cursor.fetchone()
 
-            if result[0] != 1:
-                raise DatabaseError("Basic query failed")
+            if result is None or result[0] != 1:
+                _raise_basic_query_error()
 
         # Get statistics
         stats = db_manager.get_stats()
@@ -522,7 +566,7 @@ async def health_check() -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Database health check failed: {e}")
+        logger.exception("Database health check failed")
         return {"status": "unhealthy", "error": str(e), "timestamp": utc_timestamp()}
 
 
@@ -586,7 +630,7 @@ async def cleanup_expired_data() -> dict[str, int]:
 
         logger.info(f"Database cleanup completed: {stats}")
 
-    except Exception as e:
-        logger.error(f"Database cleanup failed: {e}")
+    except Exception:
+        logger.exception("Database cleanup failed")
 
     return stats

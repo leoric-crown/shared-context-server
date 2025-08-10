@@ -40,11 +40,12 @@ This is the **Shared Context Server** project - a centralized memory store enabl
 ## Environment & Setup
 
 ### Prerequisites & Key Dependencies
-- **Python 3.9+** with **pip** and **requirements.txt** (recommended for dependency management)
-- **Core Libraries**: 
-  - **FastAPI** (high-performance async web framework with automatic validation)
-  - **Pydantic** (data validation and settings management using type hints)
+- **Python 3.10+** with **uv** (ultra-fast Python package manager) for dependency management
+- **Core Libraries**:
+  - **FastMCP** (MCP server framework for tool definitions and async handlers)
   - **aiosqlite** (async SQLite operations for non-blocking database access)
+  - **RapidFuzz** (high-performance fuzzy string matching for search)
+  - **Pydantic** (data validation and settings management using type hints)
   - **httpx** (async HTTP client for agent integration testing)
 
 ### Environment Variables
@@ -58,21 +59,29 @@ CORS_ORIGINS="*"                            # CORS origins for web clients
 
 ### Setup & Installation
 ```bash
-# Install dependencies
-pip install "fastapi[standard]" aiosqlite pydantic httpx pytest pytest-asyncio
+# Install uv (ultra-fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install all dependencies including development tools
+uv sync --all-extras
 
 # Run development server
-fastapi dev main.py
+uv run python -m shared_context_server.scripts.dev
 
 # Run tests
-pytest tests/ -v
+uv run pytest tests/ -v
+
+# Run quality checks
+uv run ruff check
+uv run mypy src/
+uv run pre-commit run --all-files
 ```
 
 ### Critical Requirements
 - **UTC Timestamps**: System uses UTC throughout for message timestamps and session coordination
 - **File Permissions**: Write access to current directory for SQLite database file creation
 - **Storage**: SQLite database stored in project root (`./chat_history.db`) with automatic schema initialization
-- **Runtime Support**: Python 3.9+ with async/await support for FastAPI and aiosqlite operations
+- **Runtime Support**: Python 3.10+ with async/await support for FastMCP and aiosqlite operations
 
 ## Core Architecture
 
@@ -102,65 +111,79 @@ Core RESTful endpoints for agent integration:
 - `DELETE /sessions/{id}` - Cleanup session and associated messages (optional)
 - `GET /health` - Health check endpoint for monitoring
 - `GET /docs` - FastAPI automatic API documentation
-- `{{ FIELDS.KEY_FIELD_8 }}` - {{ FIELDS.FIELD_8_DESC }}
-- `{{ FIELDS.KEY_FIELD_9 }}` - {{ FIELDS.FIELD_9_DESC }}
 
 ## Development Standards & Guidelines
 
-### Core Principles  
+### Core Principles
 - **Component-Centric Design**: All functionality built around unified interactive components with persistent state
 - **Manual-First + Enhancement**: Core workflows work manually; automated assistance is optional and additive
-- **Data Preservation**: Zero-loss data using {{ ARCHITECTURE.DATA_PRESERVATION_SYSTEM }} architecture
+- **Data Preservation**: Zero-loss data using SQLite persistence with async operations
 - **Progressive Enhancement**: Build core functionality first, add advanced features incrementally
 - **Context-Enriched Executive Authority**: Main Claude maintains decision-making authority using comprehensive context across agent tasks and research findings to make intelligent coordination decisions
 
 ### Quality Standards
 - **File Size Limit**: Maximum 500 lines per code file, 1000 lines per test file
 - **UTC Timestamps**: Always use `datetime.now(timezone.utc)` for system operations
-- **Testing**: {{ TESTING.FRAMEWORK }} unit tests required for all new code, visual validation for UI changes
+- **Testing**: pytest unit tests required for all new code, behavioral tests for integration
 - **📸 Screenshot Requirements**: Screenshot capture recommended for UI changes with before/after visual validation
-- **Code Quality**: `{{ QUALITY.LINT_COMMAND }}` and `{{ QUALITY.TYPE_CHECK_COMMAND }}` must pass before commits
-- **Component Integration**: Always integrate with {{ ARCHITECTURE.MAIN_MANAGER }} for state persistence
-- **Service Infrastructure**: Use existing {{ ARCHITECTURE.SERVICE_TYPE }} and component integration patterns
+- **Code Quality**: `ruff check` and `mypy` must pass before commits
+- **Component Integration**: Always integrate with Session Manager for state persistence
+- **Service Infrastructure**: Use existing FastMCP server and FastAPI patterns
 
 ### Implementation Standards
-- **Follow PRP specifications exactly** - match detailed specifications in `{{ WORKFLOW.PRP_DIRECTORY }}/` directory
-- **Leverage existing infrastructure** - {{ ARCHITECTURE.MAIN_MANAGER }}, {{ ARCHITECTURE.COORDINATOR }}, {{ ARCHITECTURE.DATA_SYSTEM }}
+- **Follow PRP specifications exactly** - match detailed specifications in `PRPs/` directory
+- **Leverage existing infrastructure** - Session Manager, FastMCP Server, SQLite Database
 - **Agent Coordination**: Use intelligent coordination based on detected scope and complexity, with structured status reporting and escalation triggers for architecture issues, test failures, security concerns, file size violations, dependency conflicts, integration failures
 
-**Comprehensive Standards**: `.claude/development-standards.md`, `.claude/workflows/{{ WORKFLOW.VISUAL_WORKFLOW_NAME }}.md`
+**Comprehensive Standards**: `.claude/development-standards.md`, comprehensive test coverage with pytest
 
-## {{ VISUAL.VALIDATION_SECTION_TITLE }}
+## Testing & Quality Assurance
 
-📸 **Recommended**: Screenshot capture for UI changes during agent development for visual validation.
+📋 **Comprehensive Testing**: Multi-layered testing approach with unit, integration, behavioral, and performance tests.
 
-### Agent Requirements
-- **developer**: Screenshot capture recommended for UI implementations and modifications
-- **tester**: Visual regression testing and validation when appropriate
-- **refactor**: Screenshots when refactoring affects UI components  
-- **docs**: Visual validation when documenting UI features
+### Testing Requirements
+- **Unit Tests**: Individual component testing with pytest
+- **Integration Tests**: Multi-component workflow testing
+- **Behavioral Tests**: End-to-end agent interaction testing
+- **Performance Tests**: RapidFuzz search and database performance
 
-### Key Commands
-- `{{ VISUAL.COMMAND_1 }}` - Most useful for detecting UI changes
-- Screenshots recommended for: UI layout changes, component state changes, user interaction flows, modal changes, interface modifications
+### Testing Commands
+- `pytest` - Run all tests with default parallel execution (auto-configured)
+- `pytest tests/unit/` - Run only unit tests
+- `pytest tests/integration/` - Run only integration tests
+- `pytest tests/behavioral/` - Run only behavioral/end-to-end tests
+- `pytest -m "not slow"` - Skip slow tests
+- `pytest -n 4` - Run with specific number of parallel workers
+- `pytest --cov=src` - Run with coverage reporting
+- `pytest -k "test_name"` - Run specific test by name pattern
+- `pytest -x` - Stop on first failure
+- `pytest --lf` - Run only last failed tests
 
-**Complete Documentation**: `.claude/workflows/{{ WORKFLOW.VISUAL_WORKFLOW_NAME }}.md`
+### Quality Commands
+- `ruff check` - Code linting and style checks
+- `mypy src/` - Type checking
+- `pre-commit run --all-files` - Run all quality checks
 
 ## CLI Commands Available
 
-### Core Commands
-- **{{ CLI.COMMAND_1.NAME }}**: `{{ PROJECT.NAME }} {{ CLI.COMMAND_1.SYNTAX }}` - {{ CLI.COMMAND_1.DESC }}
-- **{{ CLI.COMMAND_2.NAME }}**: `{{ PROJECT.NAME }} {{ CLI.COMMAND_2.SYNTAX }}` - {{ CLI.COMMAND_2.DESC }}
-- **{{ CLI.COMMAND_3.NAME }}**: `{{ PROJECT.NAME }} {{ CLI.COMMAND_3.SYNTAX }}` - {{ CLI.COMMAND_3.DESC }}
-- **{{ CLI.COMMAND_4.NAME }}**: `{{ PROJECT.NAME }} {{ CLI.COMMAND_4.SYNTAX }}` - {{ CLI.COMMAND_4.DESC }}
-- **{{ CLI.COMMAND_5.NAME }}**: `{{ PROJECT.NAME }} {{ CLI.COMMAND_5.SYNTAX }}` - {{ CLI.COMMAND_5.DESC }}
+### Development Commands
+- **Run Development Server**: `uv run python -m shared_context_server.scripts.dev` - Start the MCP development server with hot reload
+- **Validate Environment**: `uv run python -m shared_context_server.scripts.dev --validate` - Check development environment setup
+- **Server Info**: `uv run python -m shared_context_server.scripts.dev --info` - Display server configuration and status
+- **Install Dependencies**: `uv sync --all-extras` - Install all project dependencies including dev tools
+- **Run Tests**: `uv run pytest` - Execute full test suite with parallel execution (auto-configured)
 
-### Planned Interface Commands (Not Implemented)
-Unified interface slash commands: `/{{ CLI.SLASH_1 }}`, `/{{ CLI.SLASH_2 }}`, `/{{ CLI.SLASH_3 }}`, `/{{ CLI.SLASH_4 }}`, `/{{ CLI.SLASH_5 }}`, `/{{ CLI.SLASH_6 }}`, `/{{ CLI.SLASH_7 }}`, `/{{ CLI.SLASH_8 }}`
+### Quality Assurance Commands
+- **Lint Code**: `uv run ruff check` - Run linting checks on codebase
+- **Format Code**: `uv run ruff format` - Auto-format code to standards
+- **Type Check**: `uv run mypy src/` - Run type checking on source code
+- **Pre-commit Hooks**: `uv run pre-commit run --all-files` - Run all quality checks
+- **Test Coverage**: `uv run pytest tests/ --cov=src --cov-report=html` - Generate test coverage report
 
-### Automation Tools
-- `{{ CLI.AUTOMATION_TOOL_1 }}` - {{ CLI.AUTOMATION_DESC_1 }}
-- Use `{{ PROJECT.NAME }} --help` or `{{ PROJECT.NAME }} <command> --help` for detailed command information
+### Development Tools
+- **Database Reset**: Environment variable `DEV_RESET_DATABASE_ON_START=true` - Reset database on server start
+- **Debug Mode**: Environment variable `DEBUG=true` - Enable detailed logging
+- Use `uv run python -m shared_context_server.scripts.dev --help` for detailed command information
 
 ---
 
@@ -168,7 +191,7 @@ Unified interface slash commands: `/{{ CLI.SLASH_1 }}`, `/{{ CLI.SLASH_2 }}`, `/
 
 ### Agent System
 - `.claude/agents/developer.md` - Research-first implementation (MCP tools)
-- `.claude/agents/tester.md` - Modern testing (behavioral, {{ TESTING.FRAMEWORK_NAME }})
+- `.claude/agents/tester.md` - Modern testing (behavioral, pytest)
 - `.claude/agents/refactor.md` - Safety-first refactoring specialist
 - `.claude/agents/docs.md` - User-focused documentation
 - `.claude/agents/task-coordinator.md` - Multi-phase orchestration
@@ -184,11 +207,11 @@ Unified interface slash commands: `/{{ CLI.SLASH_1 }}`, `/{{ CLI.SLASH_2 }}`, `/
 
 ### Standards
 - `.claude/development-standards.md` - Code quality, testing, file limits
-- `.claude/workflows/{{ WORKFLOW.VISUAL_WORKFLOW_NAME }}.md` - {{ WORKFLOW.WORKFLOW_DESC }}
+- `pyproject.toml` - Complete project configuration with ruff, mypy, and pytest settings
 
 ### Key Architecture Notes
 - **⚠️ UTC Timestamps Critical**: Always use `datetime.now(timezone.utc)` for system coordination
-- **{{ ARCHITECTURE.PATTERN_NAME }}**: {{ ARCHITECTURE.PATTERN_DESC }} integration required
+- **FastMCP Integration**: FastMCP server pattern with tool definitions and async handlers
 - **Progressive Enhancement**: Core functionality first, advanced features incrementally
 
 # important-instruction-reminders

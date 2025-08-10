@@ -16,6 +16,10 @@ import logging
 import signal
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..config import SharedContextServerConfig
 
 # Import uvloop conditionally
 try:
@@ -38,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Import server components conditionally to handle missing dependencies
 try:
-    from ..server import initialize_server, server, shutdown_server
+    from ..server import initialize_server, shutdown_server
 
     SERVER_AVAILABLE = True
 except ImportError as e:
@@ -53,8 +57,8 @@ except ImportError as e:
 class DevelopmentServer:
     """Development server with hot reload and lifecycle management."""
 
-    def __init__(self):
-        self.config = None
+    def __init__(self) -> None:
+        self.config: SharedContextServerConfig | None = None
         self.running = False
         self._shutdown_event = asyncio.Event()
 
@@ -65,6 +69,7 @@ class DevelopmentServer:
         try:
             # Load configuration
             self.config = get_config()
+            assert self.config is not None
             logger.info(
                 f"Configuration loaded for {self.config.development.environment} environment"
             )
@@ -82,8 +87,8 @@ class DevelopmentServer:
                     "Server components not available - skipping server initialization"
                 )
 
-        except Exception as e:
-            logger.error(f"Development setup failed: {e}")
+        except Exception:
+            logger.exception("Development setup failed")
             raise
 
     async def run(self) -> None:
@@ -92,6 +97,7 @@ class DevelopmentServer:
 
         try:
             await self.setup()
+            assert self.config is not None
             self.running = True
 
             # Set up signal handlers for graceful shutdown
@@ -113,15 +119,15 @@ class DevelopmentServer:
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal...")
-        except Exception as e:
-            logger.error(f"Development server error: {e}")
+        except Exception:
+            logger.exception("Development server error")
         finally:
             await self.shutdown()
 
     def _setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown."""
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, _frame: Any) -> None:
             logger.info(f"Received signal {signum}, initiating shutdown...")
             self._shutdown_event.set()
 
@@ -146,8 +152,8 @@ class DevelopmentServer:
                 logger.info("Development server shutdown completed")
             else:
                 logger.info("No server components to shutdown")
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
+        except Exception:
+            logger.exception("Error during shutdown")
 
 
 # ============================================================================
@@ -194,11 +200,12 @@ def validate_environment() -> bool:
             logger.warning("⚠ Database reset on start is enabled")
 
         logger.info("Environment validation completed successfully")
-        return True
 
-    except Exception as e:
-        logger.error(f"✗ Environment validation failed: {e}")
+    except Exception:
+        logger.exception("✗ Environment validation failed")
         return False
+    else:
+        return True
 
 
 def print_server_info() -> None:
@@ -224,8 +231,8 @@ def print_server_info() -> None:
         print(f"Debug Mode: {config.development.debug}")
         print("=" * 60)
 
-    except Exception as e:
-        logger.error(f"Failed to load server info: {e}")
+    except Exception:
+        logger.exception("Failed to load server info")
 
 
 # ============================================================================
@@ -291,8 +298,8 @@ Examples:
     except KeyboardInterrupt:
         logger.info("Development server interrupted by user")
         sys.exit(0)
-    except Exception as e:
-        logger.error(f"Development server failed: {e}")
+    except Exception:
+        logger.exception("Development server failed")
         sys.exit(1)
 
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 # ============================================================================
 # TOOL METADATA
@@ -41,7 +41,7 @@ class ToolMetadata:
     version: str = "1.0.0"
     requires_auth: bool = True
     is_experimental: bool = False
-    tags: Optional[list[str]] = None
+    tags: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert metadata to dictionary for serialization."""
@@ -139,7 +139,7 @@ def get_tools_by_category(category: ToolCategory) -> dict[str, ToolMetadata]:
     }
 
 
-def get_tool_metadata(tool_name: str) -> Optional[ToolMetadata]:
+def get_tool_metadata(tool_name: str) -> ToolMetadata | None:
     """
     Get metadata for a specific tool.
 

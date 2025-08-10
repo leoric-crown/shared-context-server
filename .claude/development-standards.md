@@ -26,7 +26,19 @@ For complex MCP server modules:
 
 ## Testing & Reliability
 
-### Test Coverage Requirements
+### Test Coverage Requirements ⚠️ **PHASE-SPECIFIC COVERAGE TARGETS**
+
+**Coverage Progression Targets**:
+- **Current Baseline**: 54% total coverage (Phase 1/2 complete)
+- **Phase 3 Target**: ≥70% total coverage required before implementation
+- **Phase 4 Target**: ≥85% total coverage required before implementation
+- **Module-Specific Targets**:
+  - `server.py`: 56% → 75%+ (Phase 3), 85%+ (Phase 4)
+  - `models.py`: 59% → 80%+ (Phase 3), 85%+ (Phase 4)
+  - `database.py`: 80% → maintain 85%+ (excellent coverage)
+  - New modules: Must achieve 85%+ coverage in development phase
+
+**Testing Requirements**:
 - **Always create behavioral tests for new MCP tools and resources** using FastMCP TestClient
 - **After updating any logic**, check whether existing tests need to be updated
 - **Tests should live in a `/tests` folder** with pytest structure:
@@ -35,6 +47,15 @@ For complex MCP server modules:
   - **Behavioral tests**: Multi-agent coordination scenarios
   - Include at least: expected use, edge case, failure case
 
+**Coverage Validation Commands**:
+```bash
+# Phase 3 coverage validation
+uv run pytest tests/ --cov=src --cov-report=html --cov-fail-under=70
+
+# Phase 4 coverage validation
+uv run pytest tests/ --cov=src --cov-report=html --cov-fail-under=85
+```
+
 ### Multi-Agent Testing Integration
 - **MCP server tests should include multi-agent coordination scenarios** for behavior validation
 - **Use FastMCP TestClient** for in-memory testing (100x faster than subprocess testing)
@@ -42,12 +63,30 @@ For complex MCP server modules:
 - **UTC Timestamp Testing**: Verify consistent timestamp behavior across agents
 - **Database Concurrency**: Test aiosqlite connection pooling under concurrent access
 
-### Code Quality Enforcement
+### Code Quality Enforcement ⚠️ **MANDATORY QUALITY GATES**
+
+**Phase-Based Quality Requirements**:
+- **Phase 3 (Multi-Agent)**: Must achieve ≥70% test coverage before implementation
+- **Phase 4 (Production)**: Must achieve ≥85% test coverage before implementation
+- **All Phases**: Zero linting errors and zero type checking errors required
+
+**Mandatory Quality Commands** ⚠️ **MUST PASS BEFORE ANY PHASE**:
+```bash
+uv run ruff check .     # MANDATORY: Zero linting errors required
+uv run mypy .           # MANDATORY: Zero type checking errors required
+coverage report         # MANDATORY: Must achieve phase-specific coverage targets
+```
+
+**Quality Gate Enforcement**:
 - **Run lint checks** with `ruff check --fix` and fix all blocking errors
 - **Complexity warnings are non-blocking**: Note complexity issues but don't treat as blockers. **FIX ALL OTHER ERRORS**.
 - **Consider refactoring**: Use complexity warnings as design feedback for potential improvements
 - **Run type checks** with `mypy` and resolve all type annotations and errors
 - **MANDATORY**: All agents that write code MUST validate lint and type compliance before checkpoints
+- ❌ **Implementation MUST NOT proceed** if ruff check fails
+- ❌ **Implementation MUST NOT proceed** if mypy type checking fails
+- ❌ **Implementation MUST NOT proceed** if coverage is below phase targets
+- ❌ **Phase completion MUST NOT be marked** until all quality gates pass
 
 ## Agent Transparency & Escalation Standards
 
@@ -158,11 +197,13 @@ For complex MCP server modules:
 
 ## Success Criteria
 
-### Code Quality Success
-- All lint and type checks pass without warnings
-- File size limits are respected
-- Tests have appropriate coverage for functionality
-- Code follows established patterns and conventions
+### Code Quality Success ⚠️ **PHASE-SPECIFIC QUALITY STANDARDS**
+- **All lint and type checks pass without warnings** (mandatory for all phases)
+- **File size limits are respected** (500 lines code, 1000 lines tests)
+- **Tests achieve phase-specific coverage targets**: 70% (Phase 3), 85% (Phase 4)
+- **Code follows established patterns and conventions**
+- **Performance benchmarks met** (Phase 4: <100ms API, 20+ agents, >70% cache hit)
+- **Quality gates enforced before phase progression**
 
 ### Integration Success
 - Features work seamlessly with existing MCP tools and resources
