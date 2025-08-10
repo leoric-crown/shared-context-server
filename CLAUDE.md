@@ -174,12 +174,13 @@ Unified interface slash commands: `/{{ CLI.SLASH_1 }}`, `/{{ CLI.SLASH_2 }}`, `/
 - `.claude/agents/task-coordinator.md` - Multi-phase orchestration
 
 ### Tech Guides
-- `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_1 }}.md` - {{ GUIDES.GUIDE_1_DESC }}
-- `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_2 }}.md` - {{ GUIDES.GUIDE_2_DESC }}
-- `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_3 }}.md` - {{ GUIDES.GUIDE_3_DESC }}
-- `.claude/tech-guides/testing-patterns.md` - {{ GUIDES.TESTING_DESC }}
-- `.claude/tech-guides/framework-integration.md` - {{ GUIDES.INTEGRATION_DESC }}
-- `.claude/tech-guides/data-architecture.md` - {{ GUIDES.DATA_DESC }}
+- `.claude/tech-guides/core-architecture.md` - Foundational system design, database schema, and MCP resource models
+- `.claude/tech-guides/framework-integration.md` - FastMCP server implementation patterns and tool definitions
+- `.claude/tech-guides/testing.md` - Comprehensive testing patterns: behavioral, unit, integration, and multi-agent
+- `.claude/tech-guides/security-authentication.md` - JWT authentication, RBAC, input sanitization, and audit logging
+- `.claude/tech-guides/performance-optimization.md` - RapidFuzz search, connection pooling, caching, and monitoring
+- `.claude/tech-guides/data-validation.md` - Pydantic models, validation rules, and type safety
+- `.claude/tech-guides/error-handling.md` - Error hierarchy, circuit breakers, recovery patterns, and logging
 
 ### Standards
 - `.claude/development-standards.md` - Code quality, testing, file limits
