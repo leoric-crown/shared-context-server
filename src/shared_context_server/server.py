@@ -569,6 +569,17 @@ async def search_context(
             # Set row factory for dict-like access
             conn.row_factory = aiosqlite.Row
 
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return create_error_response(
+                    error="Session not found",
+                    code="SESSION_NOT_FOUND",
+                    metadata={"session_id": session_id},
+                )
+
             # Pre-filter optimization: Apply time window and row limits first
             max_rows_scanned = 1000  # Maximum rows to scan for large datasets
             recent_hours = 168  # 7 days default window
@@ -846,6 +857,25 @@ async def set_memory(
     """
 
     try:
+        # Validate and sanitize the key
+        key = key.strip()
+        if not key:
+            return create_error_response(
+                error="Memory key cannot be empty after trimming whitespace",
+                code="INVALID_KEY",
+            )
+
+        if len(key) > 255:
+            return create_error_response(
+                error="Memory key too long (max 255 characters)", code="INVALID_KEY"
+            )
+
+        if "\n" in key or "\t" in key or " " in key:
+            return create_error_response(
+                error="Memory key cannot contain spaces, newlines, or tabs",
+                code="INVALID_KEY",
+            )
+
         # Use actual agent_id from context if available, otherwise derive from session
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 

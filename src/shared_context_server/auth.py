@@ -264,10 +264,11 @@ def require_permission(permission: str) -> Callable[[Callable], Callable]:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # Extract context - assume first argument is Context
+            # Extract context - look for any object with auth info
             ctx = None
             for arg in args:
-                if isinstance(arg, Context):
+                # Check if this argument has auth info (either FastMCP Context or MockContext)
+                if hasattr(arg, "_auth_info") or isinstance(arg, Context):
                     ctx = arg
                     break
 
@@ -398,54 +399,78 @@ async def enhance_context_with_auth(
         authorization_header: Authorization header value
     """
     try:
+        jwt_attempted = False
+        jwt_validation_result = None
+
         if authorization_header and authorization_header.startswith("Bearer "):
-            # JWT authentication
+            # Try JWT authentication first
             token = authorization_header[7:]  # Remove "Bearer " prefix
+            jwt_attempted = True
 
-            validation_result = auth_manager.validate_token(token)
+            try:
+                jwt_validation_result = auth_manager.validate_token(token)
 
-            if validation_result["valid"]:
-                # Create JWT authentication context
-                auth_info = AuthInfo(
-                    jwt_validated=True,
-                    agent_id=validation_result["agent_id"],
-                    agent_type=validation_result["agent_type"],
-                    permissions=validation_result["permissions"],
-                    authenticated=True,
-                    auth_method="jwt",
-                    token_id=validation_result.get("token_id"),
-                )
-                set_auth_info(ctx, auth_info)
+                if jwt_validation_result["valid"]:
+                    # Create JWT authentication context
+                    auth_info = AuthInfo(
+                        jwt_validated=True,
+                        agent_id=jwt_validation_result["agent_id"],
+                        agent_type=jwt_validation_result["agent_type"],
+                        permissions=jwt_validation_result["permissions"],
+                        authenticated=True,
+                        auth_method="jwt",
+                        token_id=jwt_validation_result.get("token_id"),
+                    )
+                    set_auth_info(ctx, auth_info)
 
-                # Log successful authentication
-                await audit_log_auth_event(
-                    "jwt_authentication_success",
-                    auth_info.agent_id,
-                    None,
-                    {
-                        "agent_type": auth_info.agent_type,
-                        "permissions": auth_info.permissions,
-                        "token_id": auth_info.token_id,
-                    },
-                )
-            else:
-                # Failed JWT authentication
-                auth_info = AuthInfo(
-                    jwt_validated=False,
-                    authenticated=False,
-                    auth_error=validation_result["error"],
-                )
-                set_auth_info(ctx, auth_info)
+                    # Log successful authentication
+                    await audit_log_auth_event(
+                        "jwt_authentication_success",
+                        auth_info.agent_id,
+                        None,
+                        {
+                            "agent_type": auth_info.agent_type,
+                            "permissions": auth_info.permissions,
+                            "token_id": auth_info.token_id,
+                        },
+                    )
+                    return  # Success, exit early
+                # Failed JWT authentication - check if it's a real JWT failure or API key
+                if token.count(".") >= 2:
+                    # Real JWT token that failed validation - don't fall back to API key
+                    auth_info = AuthInfo(
+                        jwt_validated=False,
+                        authenticated=False,
+                        auth_error=jwt_validation_result["error"],
+                    )
+                    set_auth_info(ctx, auth_info)
 
-                # Log authentication failure
-                await audit_log_auth_event(
-                    "jwt_authentication_failed",
-                    "unknown",
-                    None,
-                    {"error": validation_result["error"]},
-                )
-        else:
-            # Fallback to basic API key authentication
+                    # Log authentication failure
+                    await audit_log_auth_event(
+                        "jwt_authentication_failed",
+                        "unknown",
+                        None,
+                        {"error": jwt_validation_result["error"]},
+                    )
+                    return  # Exit early, don't try API key
+                    # else: looks like API key, fall through to API key authentication
+
+            except Exception:
+                # JWT validation threw exception - if it looks like a JWT, don't fall back
+                if token.count(".") >= 2:
+                    # This looks like a real JWT that failed, bubble up the error
+                    raise
+
+        # API key authentication (either no Bearer header, or JWT validation failed/skipped)
+        should_try_api_key = True
+        if (
+            jwt_attempted
+            and jwt_validation_result
+            and jwt_validation_result.get("valid", False)
+        ):
+            should_try_api_key = False
+
+        if should_try_api_key:
             api_key = (
                 authorization_header.replace("Bearer ", "")
                 if authorization_header

@@ -209,7 +209,6 @@ addopts = [
     "--durations-min=1.0",        # Only show tests taking >1 second
     "--tb=short",                 # Shorter traceback format
     "-v",                         # Verbose output
-    "--maxfail=3",                # Stop after 3 failures
     "--disable-warnings",         # Clean output (can override with -W)
     "--color=yes",                # Force color output
     "--show-capture=no",          # Don't show captured stdout/stderr by default
