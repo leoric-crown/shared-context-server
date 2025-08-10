@@ -18,7 +18,7 @@ import subprocess  # noqa: TC003
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..config import SharedContextServerConfig
@@ -41,8 +41,22 @@ log_file = Path("logs/dev-server.log")
 log_file.parent.mkdir(exist_ok=True)
 
 # Configure logging with both console and rotating file handlers
+# Get log level from environment or use INFO as default
+log_level = logging.INFO
+try:
+    from ..config import get_config
+
+    config = get_config()
+    log_level = getattr(logging, config.operational.log_level.upper(), logging.INFO)
+except Exception:
+    # Fallback to environment variable if config loading fails
+    import os
+
+    env_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, env_log_level, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format=log_format,
     handlers=[
         logging.StreamHandler(sys.stdout),
@@ -152,7 +166,7 @@ class DevelopmentServer:
     def _setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown."""
 
-        def signal_handler(signum: int, _frame: Any) -> None:
+        def signal_handler(signum: int, _frame: object) -> None:
             logger.info(f"Received signal {signum}, initiating shutdown...")
             self._shutdown_event.set()
 
@@ -186,9 +200,9 @@ class DevelopmentServer:
             logger.info(f"📁 Watching directory: {src_dir}")
 
             # Track server process
-            server_process: subprocess.Popen[bytes] | None = None
+            server_process: subprocess.Popen[str] | None = None
 
-            async def start_server() -> subprocess.Popen[bytes]:
+            async def start_server() -> subprocess.Popen[str]:
                 """Start the server process"""
                 nonlocal server_process
                 if server_process is not None:
@@ -209,6 +223,7 @@ class DevelopmentServer:
                     "MCP_TRANSPORT": "http",
                     "HTTP_PORT": str(self.config.mcp_server.http_port),
                     "HTTP_HOST": self.config.mcp_server.http_host,
+                    "LOG_LEVEL": self.config.operational.log_level,
                 }
 
                 server_process = subprocess.Popen(
@@ -220,9 +235,41 @@ class DevelopmentServer:
                         "http",
                     ],
                     env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    bufsize=1,
                 )
 
                 logger.info(f"🚀 Server started with PID {server_process.pid}")
+
+                # Start background task to capture subprocess output
+                async def log_subprocess_output() -> None:
+                    if server_process and server_process.stdout:
+                        try:
+                            while True:
+                                line = await asyncio.to_thread(
+                                    server_process.stdout.readline
+                                )
+                                if not line:
+                                    break
+                                line = line.strip()
+                                if line:
+                                    if (
+                                        "ERROR" in line
+                                        or "CRITICAL" in line
+                                        or "Exception" in line
+                                        or "Traceback" in line
+                                    ):
+                                        logger.error(f"📤 Server: {line}")
+                                    elif "WARNING" in line:
+                                        logger.warning(f"📤 Server: {line}")
+                                    else:
+                                        logger.debug(f"📤 Server: {line}")
+                        except Exception:
+                            logger.debug("Subprocess output capture ended")
+
+                asyncio.create_task(log_subprocess_output())
                 return server_process
 
             class ReloadHandler(FileSystemEventHandler):
@@ -233,7 +280,7 @@ class DevelopmentServer:
                     self.debounce_time: float = 1.0  # 1 second debounce
                     self.loop = loop
 
-                def on_modified(self, event: Any) -> None:
+                def on_modified(self, event: object) -> None:
                     if event.is_directory:
                         return
 

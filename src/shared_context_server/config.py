@@ -310,11 +310,8 @@ class SharedContextServerConfig(BaseSettings):
 
     def configure_logging(self) -> None:
         """Configure logging based on settings."""
-        # Set up root logger
-        logging.basicConfig(
-            level=getattr(logging, self.operational.log_level),
-            format=self.operational.log_format,
-        )
+        # Note: BasicConfig is handled by individual scripts to avoid conflicts
+        # This method only configures library-specific loggers
 
         # Set database-specific logging level
         db_logger = logging.getLogger("src.shared_context_server.database")

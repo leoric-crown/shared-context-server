@@ -21,11 +21,15 @@ try:
 except ImportError:
     UVLOOP_AVAILABLE = False
 
+# Configure logging - use environment LOG_LEVEL if available
+import os
+
 from ..config import get_config, load_config
 
-# Configure logging
+log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stderr)
