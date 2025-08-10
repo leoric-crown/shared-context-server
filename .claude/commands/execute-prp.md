@@ -2,7 +2,7 @@
 
 Implement features using intelligent coordination that respects project architecture and provides consistent, high-quality outcomes.
 
-## PRP File: $ARGUMENTS (from {{ WORKFLOW.ACTIVE_DIR }}/)
+## PRP File: $ARGUMENTS (from PRPs/2-prps/)
 
 ## 🎯 Intelligent Coordination Approach
 
@@ -20,34 +20,34 @@ The framework intelligently analyzes your PRP content and context to provide app
 ### Architecture-Centric Integration by Default
 
 All work assumes and preserves the project's foundational architecture:
-- **UTC Timestamps**: Consistent time coordination across all operations
-- **Component Integration**: Multi-component coordination and state preservation
-- **Data Preservation**: Established data handling patterns with change tracking
-- **Service Context Sharing**: Context preservation and coordination patterns
-- **State Management**: Interface and component consistency
+- **UTC Timestamps**: Consistent time coordination across all MCP operations
+- **FastMCP Integration**: MCP tool and resource coordination with async patterns
+- **Multi-Agent Coordination**: Shared context sessions and agent memory isolation
+- **Database Operations**: aiosqlite with connection pooling for concurrent agent access
+- **Memory Architecture**: Three-tier memory system (public context, private notes, agent memory)
 
 ## 🤖 Intelligent Agent Coordination
 
 Based on content analysis and architectural requirements, agents are automatically selected:
 
 ### Core Coordination Team
-- **developer**: Research-first implementation with architectural awareness
-- **tester**: Behavioral testing with integration validation
+- **developer**: Research-first FastMCP implementation with async/await patterns
+- **tester**: Behavioral testing with FastMCP TestClient and multi-agent scenarios
 - **refactor**: Safety-first improvements when file size or complexity triggers
-- **docs**: User-focused documentation when new features or APIs created
-- **task-coordinator**: Multi-phase orchestration for complex architectural changes
+- **docs**: User-focused MCP server documentation and API examples
+- **task-coordinator**: Multi-phase orchestration for complex MCP server features
 
 ### Smart Agent Selection Logic
 ```
 Content Analysis Results → Agent Selection:
 
-• Code implementation needed → developer (always)
-• UI changes detected → tester (behavioral + visual regression)
+• FastMCP implementation needed → developer (always)
+• MCP tool/resource changes → tester (behavioral + multi-agent testing)
 • Files >500 lines → refactor (automatic safety trigger)
-• New user-facing features → docs (consideration prompt)
-• Architecture changes → task-coordinator (multi-phase orchestration)
-• Service integration work → specialized integration validation
-• Component coordination → enhanced coordination checks
+• New MCP server features → docs (API documentation + examples)
+• Database schema changes → task-coordinator (multi-phase orchestration)
+• Multi-agent coordination → specialized testing and validation
+• External service integration → enhanced fallback and error handling
 ```
 
 ## 📋 Standard Execution Workflow
@@ -84,33 +84,33 @@ Content Analysis Results → Agent Selection:
 - **Service Dependencies**: Handle external service coordination and fallback scenarios
 
 ### Quality Integration
-- **Behavioral Testing Focus**: Test what the software does, not how it's implemented
-- **Integration Testing**: Verify components work together correctly
-- **Visual Validation**: Screenshot capture for UI changes (when tooling is available)
-- **Documentation Generation**: User-focused documentation for public features
+- **Behavioral Testing Focus**: Test MCP tools and resources behavior, not implementation
+- **Multi-Agent Testing**: Verify concurrent agent access and session isolation
+- **FastMCP TestClient**: In-memory testing patterns for rapid feedback
+- **API Documentation**: User-focused MCP server documentation and examples
 
 ## 🚀 Advanced Coordination Scenarios
 
-### Complex Feature Implementation
-For multi-component features affecting 4+ files or requiring >8 hours of work:
-1. **task-coordinator** orchestrates multi-phase implementation
-2. **Phased approach**: Plan → Implement → Integrate → Validate
+### Complex MCP Server Features
+For multi-agent coordination features affecting 4+ files or requiring >8 hours of work:
+1. **task-coordinator** orchestrates multi-phase MCP implementation
+2. **Phased approach**: Plan → Implement → Test Multi-Agent → Validate
 3. **Quality gates**: Checkpoints at each phase with user approval
-4. **Context preservation**: Maintain architectural context across phases
+4. **Context preservation**: Maintain MCP server architecture and agent coordination patterns
 
-### Architectural Modifications
-For changes affecting core architecture or integration patterns:
-1. **Architecture-first analysis**: Understand impact before implementation
-2. **Incremental approach**: Small, safe changes with validation at each step
-3. **Integration testing**: Comprehensive testing of integration points
-4. **Rollback planning**: Clear rollback strategy if integration issues arise
+### Database Schema Modifications
+For changes affecting core MCP server architecture or multi-agent patterns:
+1. **Architecture-first analysis**: Understand impact on multi-agent coordination
+2. **Incremental approach**: Small, safe database migrations with validation
+3. **Multi-agent testing**: Comprehensive testing of concurrent access patterns
+4. **Rollback planning**: Clear rollback strategy for database schema changes
 
-### Service Integration Work
-For external service integration or provider coordination:
-1. **Provider pattern analysis**: Use established service integration patterns
-2. **Fallback strategy**: Implement provider fallback and error handling
-3. **Context sharing**: Ensure service context is preserved appropriately
-4. **Integration testing**: Mock-based testing for external service behavior
+### Agent Memory Integration Work
+For agent memory systems or external service coordination:
+1. **Memory pattern analysis**: Use established three-tier memory architecture
+2. **Fallback strategy**: Implement memory fallback and TTL expiration handling
+3. **Context isolation**: Ensure proper agent memory isolation and sharing
+4. **Behavioral testing**: FastMCP TestClient testing for memory operations
 
 ## 📊 Success Criteria
 
@@ -140,5 +140,6 @@ Implementation is complete when:
 3. Quality gates pass (tests, linting, documentation)
 4. User acceptance criteria from PRP are met
 5. No regressions in existing functionality
+6. **Move completed PRP to PRPs/3-completed/** for archival
 
 **Implementation Philosophy**: Leverage intelligent coordination to deliver high-quality features that integrate seamlessly with existing architecture while maintaining project standards and patterns.

@@ -1,6 +1,6 @@
 # Development Rules & Standards
 
-This document provides comprehensive development standards for **Shared Context Server**, including code structure, testing, documentation, and integration guidelines.
+This document provides comprehensive development standards for **Shared Context MCP Server**, including code structure, testing, documentation, and integration guidelines.
 
 ## Code Structure & Modularity
 
@@ -11,12 +11,13 @@ This document provides comprehensive development standards for **Shared Context 
   - Extract utilities, helpers, and constants
   - Create sub-packages for complex components
 
-### Component Organization
-For complex components this looks like:
-- `component.py` - Main component definition and coordination logic (max 200 lines)
-- `handlers.py` - Event handlers and processing functions (max 300 lines)
-- `utils.py` - Helper functions and utilities (max 200 lines)
-- `models.py` - Data models and validation (max 200 lines)
+### MCP Server Organization
+For complex MCP server modules:
+- `mcp_server.py` - FastMCP server setup and coordination logic (max 200 lines)
+- `tools.py` - MCP tool definitions and handlers (max 300 lines)
+- `resources.py` - MCP resource providers (max 200 lines)
+- `database.py` - aiosqlite operations and schema (max 200 lines)
+- `models.py` - Pydantic data models and validation (max 200 lines)
 
 ### Module Organization
 - **Organize code into clearly separated modules**, grouped by feature or responsibility
@@ -26,26 +27,26 @@ For complex components this looks like:
 ## Testing & Reliability
 
 ### Test Coverage Requirements
-- **Always create unit tests for new features** (functions, classes, components, etc)
-- **After updating any logic**, check whether existing unit tests need to be updated. If so, do it
-- **Tests should live in a `/tests` folder** mirroring the main app structure
-  - Include at least:
-    - 1 test for expected use
-    - 1 edge case
-    - 1 failure case
+- **Always create behavioral tests for new MCP tools and resources** using FastMCP TestClient
+- **After updating any logic**, check whether existing tests need to be updated
+- **Tests should live in a `/tests` folder** with pytest structure:
+  - **Unit tests**: Fast, isolated tests for pure functions
+  - **Integration tests**: FastMCP tool and resource testing
+  - **Behavioral tests**: Multi-agent coordination scenarios
+  - Include at least: expected use, edge case, failure case
 
-### Visual Validation Integration (When Available)
-- **UI tests should include visual validation** for regression detection
-- **Use appropriate testing frameworks** for your UI technology
-- **Screenshot Test Organization**: Use appropriate test markers for tests that capture visual state
-- **Tiered Test Strategy**: Follow test importance levels (Critical → Development → Optional)
-- **Resource Optimization**: Use smart caching and deduplication to optimize performance
+### Multi-Agent Testing Integration
+- **MCP server tests should include multi-agent coordination scenarios** for behavior validation
+- **Use FastMCP TestClient** for in-memory testing (100x faster than subprocess testing)
+- **Session Isolation Testing**: Test concurrent agent access and proper isolation
+- **UTC Timestamp Testing**: Verify consistent timestamp behavior across agents
+- **Database Concurrency**: Test aiosqlite connection pooling under concurrent access
 
 ### Code Quality Enforcement
-- **Run lint checks** with appropriate tools and fix all blocking errors
+- **Run lint checks** with `ruff check --fix` and fix all blocking errors
 - **Complexity warnings are non-blocking**: Note complexity issues but don't treat as blockers. **FIX ALL OTHER ERRORS**.
 - **Consider refactoring**: Use complexity warnings as design feedback for potential improvements
-- **Run type checks** (if applicable) and resolve all type annotations and errors
+- **Run type checks** with `mypy` and resolve all type annotations and errors
 - **MANDATORY**: All agents that write code MUST validate lint and type compliance before checkpoints
 
 ## Agent Transparency & Escalation Standards
@@ -90,30 +91,30 @@ For complex components this looks like:
 ### Agent Coordination Patterns
 
 #### Single Agent Tasks (Direct Execution)
-- **Simple features** affecting 1-3 files
+- **Simple MCP features** affecting 1-3 files
 - **Bug fixes** with clear scope
-- **Documentation updates**
-- **Refactoring** within single components
+- **API documentation updates**
+- **Refactoring** within single MCP tools or resources
 
 #### Multi-Agent Coordination (task-coordinator)
-- **Complex features** affecting 4+ files
-- **Cross-component integration**
-- **Architecture modifications**
-- **Features requiring multiple specializations (dev + test + docs)**
+- **Complex MCP features** affecting 4+ files
+- **Multi-agent coordination features**
+- **Database schema modifications**
+- **Features requiring multiple specializations (dev + test + docs)
 
 ## Integration & Architecture Standards
 
-### Component Integration Requirements
-- All features must integrate with existing architecture patterns
-- Maintain consistency with established data handling approaches
-- Support multi-component coordination when applicable
-- Use UTC timestamps for all time-based functionality
+### MCP Server Integration Requirements
+- All features must integrate with FastMCP server architecture patterns
+- Maintain consistency with established aiosqlite and async/await approaches
+- Support multi-agent coordination through shared sessions and proper isolation
+- Use UTC timestamps for all time-based functionality (multi-agent coordination critical)
 
-### Service Integration Pattern
-- Use established service integration patterns
-- Implement provider fallback and error handling
-- Ensure service context is preserved appropriately
-- Include comprehensive integration testing
+### Agent Memory Integration Pattern
+- Use established three-tier memory architecture (public context, private notes, agent memory)
+- Implement TTL expiration and memory fallback handling
+- Ensure agent memory isolation and proper context sharing
+- Include comprehensive multi-agent coordination testing
 
 ### Quality Integration Pattern
 - Use existing quality infrastructure
@@ -137,23 +138,23 @@ For complex components this looks like:
 
 ## Technology Stack Guidelines
 
-### Framework Patterns
-- Follow established patterns for your primary framework
-- Use framework-specific best practices for component organization
-- Leverage framework testing and validation tools
-- Maintain consistency with framework conventions
+### FastMCP Framework Patterns
+- Follow established patterns for FastMCP server development (see `.claude/tech-guides/framework-integration.md`)
+- Use FastMCP-specific best practices for tool and resource organization
+- Leverage FastMCP TestClient for testing and validation
+- Maintain consistency with async/await and Pydantic validation conventions
 
 ### External Service Integration
-- Use consistent patterns for external service communication
-- Implement proper error handling and fallback strategies
-- Include appropriate timeout and retry logic
-- Mock external services in testing
+- Use consistent patterns for external service communication (refer to `.claude/tech-guides/error-handling.md`)
+- Implement proper error handling and circuit breaker patterns
+- Include appropriate timeout and retry logic for multi-agent scenarios
+- Use httpx-based mocking for external service testing
 
 ### Performance Standards
-- File operations should be efficient and well-cached
-- UI updates should be responsive and not block user interaction
-- Background processing should not interfere with user workflows
-- Memory usage should be reasonable for typical workloads
+- Database operations should use connection pooling (aiosqlite with WAL mode)
+- Multi-agent coordination should not block individual agent operations
+- Background processing should not interfere with agent workflows
+- Memory usage should be reasonable for concurrent agent access patterns
 
 ## Success Criteria
 
@@ -164,15 +165,15 @@ For complex components this looks like:
 - Code follows established patterns and conventions
 
 ### Integration Success
-- Features work seamlessly with existing components
+- Features work seamlessly with existing MCP tools and resources
 - No regressions in existing functionality
-- External service integration is robust and well-tested
-- UI changes maintain consistency with existing interface
+- External service integration is robust and well-tested with circuit breakers
+- Multi-agent coordination maintains proper session isolation and data consistency
 
 ### Documentation Success
-- New features have user-facing documentation
-- API changes are documented with examples
-- Integration patterns are clearly explained
-- Setup and development docs remain current
+- New MCP tools and resources have user-facing documentation with working examples
+- API changes are documented with FastMCP TestClient examples
+- Multi-agent coordination patterns are clearly explained
+- Setup and development docs remain current with dependency updates
 
 Remember: **Quality over speed, simplicity over complexity, working solutions over elegant plans**. When in doubt, escalate for user guidance rather than making assumptions about requirements or architecture.

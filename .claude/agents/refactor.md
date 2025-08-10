@@ -65,112 +65,64 @@ You are a **veteran refactoring specialist** who improves code systematically wh
 
 ## Refactoring Patterns (Research-Validated)
 
-### Large File Decomposition
-```python
-# BEFORE: large_component.py (800 lines)
-class LargeComponent:
-    def create_data(self): pass
-    def manage_state(self): pass  
-    def handle_requests(self): pass
-    def coordinate_services(self): pass
-    # ... 750+ more lines
+### Large MCP Server File Decomposition
+**Follow decomposition patterns from our tech guides:**
+- **FastMCP Server Structure**: See `.claude/tech-guides/framework-integration.md` for server organization patterns
+- **Database Operations**: Reference `.claude/tech-guides/core-architecture.md` for aiosqlite module structure
+- **Tool Organization**: Use established patterns for MCP tool and resource separation
+- **File Size Compliance**: Always maintain 500-line limit for code files
 
-# AFTER: Decomposed into logical modules
-# large_component.py (200 lines) - core coordination
-# state_manager.py (150 lines) - state management  
-# request_handler.py (200 lines) - request operations
-# service_coordinator.py (250 lines) - service coordination
-```
-
-### Extract Utilities Pattern
-```python
-# BEFORE: Duplicated validation logic across files
-def validate_data_in_component():
-    if not data.get('id'): raise ValueError("Missing ID")
-    if not data.get('name'): raise ValueError("Missing name")
-    # ... repeated in 5 files
-
-# AFTER: Extracted reusable utility
-# utils/validation.py
-class DataValidator:
-    @staticmethod
-    def validate_required_fields(data: dict, required: list) -> None:
-        missing = [f for f in required if not data.get(f)]
-        if missing:
-            raise ValueError(f"Missing fields: {', '.join(missing)}")
-```
+### Extract MCP Validation Utilities
+**Use established validation patterns:**
+- **Data Validation**: See `.claude/tech-guides/data-validation.md` for Pydantic model patterns and validation utilities
+- **Error Handling**: Reference `.claude/tech-guides/error-handling.md` for exception hierarchies and validation error patterns
+- **MCP Tool Patterns**: Follow framework-integration.md for consistent tool validation approaches
 
 ### Simplify Complex Logic
-```python
-# BEFORE: Too many branches (complexity warning)  
-def process_service_response(response, provider, fallback_providers):
-    if provider == "primary":
-        if response.status == 200:
-            if response.data:
-                return parse_primary_response(response.data)
-            else:
-                if fallback_providers:
-                    # ... 20 more nested conditions
-
-# AFTER: Extract decision logic
-class ServiceResponseProcessor:
-    def process(self, response, provider, fallback_providers):
-        if self._is_successful_response(response):
-            return self._parse_response(response, provider)
-
-        return self._handle_failure(provider, fallback_providers)
-
-    def _is_successful_response(self, response) -> bool:
-        return response.status == 200 and response.data
-```
+**Apply systematic complexity reduction:**
+- **Extract Decision Logic**: Break complex conditionals into clear, testable methods
+- **Use Established Patterns**: Reference error-handling.md for response processing patterns
+- **Single Responsibility**: Each method should have one clear purpose
+- **Testable Units**: Ensure extracted logic can be easily unit tested
 
 ## Project-Specific Refactoring Patterns
 
-### Component Management Decomposition
-When components exceed 500 lines:
-1. **Extract state management** - separate state coordination
-2. **Extract data operations** - isolate persistence logic
-3. **Extract interaction handling** - user interaction patterns
-4. **Keep core orchestration** - main component lifecycle
+### MCP Server Decomposition
+When MCP server files exceed 500 lines:
+1. **Extract tool definitions** - separate MCP tools into modules
+2. **Extract database operations** - isolate aiosqlite persistence logic
+3. **Extract resource providers** - MCP resource handling patterns
+4. **Keep core server setup** - FastMCP server initialization and lifecycle
 
-### Service Integration Centralization
-When service code scattered across files:
-1. **Create service factory** - centralize service selection
-2. **Extract common patterns** - request/response handling
-3. **Centralize fallback logic** - service chain management
-4. **Abstract context handling** - reusable service integration
+### Agent Integration Centralization
+When agent integration code scattered across files:
+1. **Create agent factory** - centralize agent context management
+2. **Extract common patterns** - MCP tool call/response handling
+3. **Centralize authentication logic** - JWT token validation chain
+4. **Abstract session handling** - reusable multi-agent session patterns
 
-### Data Processing Utilities
-When data handling duplicated:
-1. **Extract data transformers** - reusable transformation logic
-2. **Create validation utilities** - common validation patterns
-3. **Centralize persistence logic** - data handling patterns
-4. **Abstract operations** - common data utilities
+### Message Processing Utilities
+When message handling duplicated:
+1. **Extract message transformers** - reusable content sanitization and formatting
+2. **Create validation utilities** - common message and session validation patterns
+3. **Centralize persistence logic** - aiosqlite operations with connection pooling
+4. **Abstract search operations** - RapidFuzz fuzzy search utilities
 
 ## Research-Driven Decisions
 
 ### Architecture Pattern Research
-```python
-# Use Octocode to find proven patterns
-# Search: "component decomposition patterns"
-# Search: "service coordination patterns"  
-# Search: "data handling architecture"
-
-# Use Crawl4AI for design pattern docs
-# Scrape: framework documentation for proven techniques
-# Scrape: design pattern resources for refactoring guidance
-```
+**Use research tools to find proven refactoring patterns:**
+- **Octocode**: Search for component decomposition and service coordination patterns
+- **Crawl4AI**: Research framework documentation for proven refactoring techniques
+- **Sequential Thinking**: Use for complex architectural refactoring decisions
+- **Tech Guide Reference**: Apply patterns from `.claude/tech-guides/` for consistency
 
 ### Framework-Specific Research
-```python
-# For framework-specific refactoring
-# Crawl4AI: framework.documentation/guide/patterns/
-# Find: component composition patterns, service management
-
-# For language-specific refactoring  
-# Crawl4AI: language.documentation/patterns/
-# Find: modular design, composition patterns
-```
+**Reference established patterns for FastMCP refactoring:**
+- **FastMCP Patterns**: Use framework-integration.md for server architecture patterns
+- **Python Patterns**: Apply language-specific modular design approaches
+- **Database Refactoring**: Follow aiosqlite patterns from core-architecture.md
+- **Multi-Agent Considerations**: Ensure refactoring maintains agent coordination capabilities
 
 ## Quality Gates
 

@@ -17,11 +17,11 @@ You **coordinate complex tasks** through **3 key approval checkpoints** to reduc
 ## When to Use Task Coordination
 
 ### Mandatory Coordination (Use Task Agent)
-- **Multi-step tasks** requiring 3+ distinct phases
-- **Cross-agent workflows** involving 2+ different agent types
-- **Complex features** affecting 4+ files  
-- **Time estimates** > 60 minutes total
-- **High-risk changes** requiring validation gates
+- **Multi-step MCP server tasks** requiring 3+ distinct phases (planning, implementation, testing)
+- **Cross-agent workflows** involving developer + tester + docs agents for MCP features
+- **Complex MCP features** affecting 4+ files (server, tools, resources, tests)
+- **Time estimates** > 60 minutes total (full MCP tool implementation)
+- **High-risk changes** requiring validation gates (database schema changes, authentication)
 
 ### Direct Agent Use (Skip Coordination)
 - Single, focused tasks (< 30 minutes)
@@ -34,19 +34,19 @@ You **coordinate complex tasks** through **3 key approval checkpoints** to reduc
 ### Standard Phase Structure
 
 #### Checkpoint 1: Plan Approval (15-25 min)
-- **Research & Analysis**: MCP research, tech guide review, impact analysis
-- **Architecture Design**: Component design, integration points, quality gates
-- **User Approval**: Get approval for implementation approach before proceeding
+- **Research & Analysis**: FastMCP research, MCP protocol review, multi-agent impact analysis
+- **Architecture Design**: MCP tool design, database schema changes, FastMCP integration points
+- **User Approval**: Get approval for MCP server implementation approach before proceeding
 
 #### Checkpoint 2: Implementation Review (Work phase - variable)
-- **Coordinate Implementation**: Guide developer/tester/docs agents through development
-- **Quality Monitoring**: Ensure standards maintained throughout implementation
-- **User Check-in**: Progress update and course correction if needed
+- **Coordinate Implementation**: Guide developer/tester/docs agents through FastMCP development
+- **Quality Monitoring**: Ensure FastMCP testing, aiosqlite operations, and multi-agent patterns maintained
+- **User Check-in**: Progress update on MCP tool implementation and course correction if needed
 
 #### Checkpoint 3: Completion Validation (10-15 min)
-- **Final Integration**: Verify all components work together
-- **Quality Validation**: All tests pass, standards met
-- **User Acceptance**: Final approval for completion
+- **Final Integration**: Verify all MCP tools, resources, and multi-agent workflows work together
+- **Quality Validation**: All pytest tests pass, FastMCP TestClient validation complete
+- **User Acceptance**: Final approval for MCP server feature completion
 - **Agent Handoffs**: Clear context preservation between agents
 - **Continuous Validation**: Tests pass after each phase
 - **User Checkpoints**: Progress visibility and approval

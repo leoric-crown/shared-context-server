@@ -4,8 +4,8 @@ Transform planning output into comprehensive, implementation-ready PRPs that pre
 
 ## Planning File: $ARGUMENTS
 
-Input: Planning documents from `{{ WORKFLOW.PLANNING_DIR }}/`  
-Output: Implementation-ready PRPs in `{{ WORKFLOW.ACTIVE_DIR }}/{{ PRP.NUMBER }}_feature-name.md`
+Input: Planning documents from `PRPs/1-planning/`  
+Output: Implementation-ready PRPs in `PRPs/2-prps/[NUMBER]_feature-name.md`
 
 ## 🎯 Comprehensive PRP Generation Philosophy
 
@@ -23,11 +23,11 @@ All PRPs are generated with comprehensive research and context analysis:
 
 ### Architecture-Aware Integration
 
-All PRPs are generated with the project's foundational architecture in mind:
-- **Component Coordination**: Multi-component awareness and integration requirements
-- **Data Preservation**: Established data handling patterns and consistency guarantees
-- **Service Integration**: External service coordination and provider management
-- **Interface State Management**: User interface consistency and coordination patterns
+All PRPs are generated with the Shared Context MCP Server's foundational architecture in mind:
+- **Multi-Agent Coordination**: Multi-agent awareness and session isolation requirements
+- **Data Persistence**: aiosqlite patterns with connection pooling and UTC timestamps
+- **Memory Architecture**: Three-tier memory system (public context, private notes, agent memory)
+- **FastMCP Integration**: MCP tool and resource patterns with async/await operations
 
 ## 📋 PRP Generation Process
 
@@ -52,10 +52,10 @@ All PRPs are generated with the project's foundational architecture in mind:
 
 #### 3. Architectural Dependency Analysis
 ```markdown
-- **Component Integration**: Identify required integration points
-- **Data Flow**: Understand data transformation and persistence requirements
-- **Service Dependencies**: External service coordination needs
-- **Interface Requirements**: User interface and interaction patterns
+- **MCP Tool Integration**: Identify required FastMCP tool and resource patterns
+- **Data Flow**: Understand aiosqlite operations and multi-agent data access
+- **Memory Dependencies**: Agent memory isolation and session sharing needs
+- **API Requirements**: MCP server endpoints and multi-agent coordination patterns
 ```
 
 ### Phase 2: Complexity Assessment & Agent Coordination Strategy (5-10 min)
@@ -83,34 +83,34 @@ All PRPs are generated with the project's foundational architecture in mind:
 Use template structure adapted for project context:
 
 ```markdown
-# PRP: {{FEATURE_NAME}}
+# PRP: [FEATURE_NAME]
 
 ## Research Context & Architectural Analysis
 **Research Integration**: [Findings from planning and MCP research]
-**Architectural Scope**: [Component integration requirements]
-**Existing Patterns**: [Relevant established patterns to leverage]
+**Architectural Scope**: [MCP server integration and multi-agent coordination requirements]
+**Existing Patterns**: [Relevant FastMCP patterns and database schemas to leverage]
 
 ## Implementation Specification
-**Core Requirements**: [What must be built]
-**Integration Points**: [How this connects with existing architecture]  
-**Data Model Changes**: [Any data structure modifications needed]
-**Interface Requirements**: [User interaction patterns]
+**Core Requirements**: [What MCP tools/resources must be built]
+**Integration Points**: [How this connects with existing MCP server architecture]  
+**Database Changes**: [Any schema modifications or aiosqlite operations needed]
+**API Requirements**: [MCP server endpoints and agent coordination patterns]
 
 ## Quality Requirements
-**Testing Strategy**: [Behavioral testing approach and coverage]
-**Documentation Needs**: [User-facing docs and API documentation]
-**Performance Considerations**: [Any performance or scalability requirements]
+**Testing Strategy**: [FastMCP TestClient behavioral testing approach and multi-agent coverage]
+**Documentation Needs**: [MCP server API docs and agent integration examples]
+**Performance Considerations**: [Concurrent agent access and database connection pooling]
 
 ## Coordination Strategy
 **Recommended Approach**: [Direct agent vs task-coordinator coordination]
-**Implementation Phases**: [Logical breakdown for complex features]
-**Risk Mitigation**: [Strategies for managing identified risks]
-**Dependencies**: [Prerequisites and integration requirements]
+**Implementation Phases**: [Logical breakdown for complex MCP features]
+**Risk Mitigation**: [Strategies for managing multi-agent coordination risks]
+**Dependencies**: [Prerequisites and MCP server integration requirements]
 
 ## Success Criteria
-**Functional Success**: [What behaviors must work correctly]
-**Integration Success**: [How we verify proper system integration]
-**Quality Gates**: [Testing, documentation, and validation requirements]
+**Functional Success**: [What MCP operations must work correctly]
+**Integration Success**: [How we verify proper multi-agent coordination]
+**Quality Gates**: [FastMCP testing, documentation, and validation requirements]
 ```
 
 #### Context Preservation
@@ -130,8 +130,8 @@ Use template structure adapted for project context:
 ```
 
 #### File Generation
-- **Naming Convention**: `{{NUMBER}}_feature-name.md` (increment from existing PRPs)
-- **Location**: Save to `{{PROJECT_ACTIVE_DIR}}/`
+- **Naming Convention**: `[NUMBER]_feature-name.md` (increment from existing PRPs)
+- **Location**: Save to `PRPs/2-prps/`
 - **Metadata**: Include creation date, planning source, and research context
 
 ## 🔧 Advanced PRP Features
@@ -173,6 +173,6 @@ A PRP is complete when:
 3. Architectural integration requirements are clearly specified  
 4. Agent coordination strategy is recommended based on complexity analysis
 5. Success criteria are measurable and validation approaches are defined
-6. The PRP is saved to `{{PROJECT_ACTIVE_DIR}}/` with proper naming and metadata
+6. The PRP is saved to `PRPs/2-prps/` with proper naming and metadata
 
 **Next Step**: Use `execute-prp` command to implement the generated PRP with intelligent coordination.

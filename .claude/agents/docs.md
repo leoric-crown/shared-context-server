@@ -31,255 +31,95 @@ You create **user-focused documentation** that helps people accomplish their goa
 
 ### 1. User-Facing Documentation (Priority)
 **API Documentation**: How to use the system
-```markdown
-# Service API
 
-## Quick Start
-```python
-# [ADAPT: Import statement using main system component based on detected architecture]
-from main_system.core import MainManager
-
-# [ADAPT: Create main system instance using detected architecture patterns]
-manager = MainManager()
-result = await manager.process_data("example-id")
-
-# Access results
-data = result.get_processed_data()
-```
-
-## Methods
-### `process_data(data_id: str) -> ProcessResult`
-Processes data for the specified identifier.
-
-**Parameters:**
-- `data_id`: Unique identifier for the data
-
-**Returns:** ProcessResult containing processed information
-
-**Example:**
-```python
-result = await service_manager.process_data("example-123")
-```
-```
+**Reference our established patterns:**
+- **MCP Server Examples**: See `.claude/tech-guides/framework-integration.md` for FastMCP server setup and tool usage
+- **API Patterns**: See `.claude/tech-guides/core-architecture.md` for MCP resource models and endpoints
+- **Multi-Agent Examples**: Use testing.md patterns for multi-agent coordination examples
 
 **User Guides**: Step-by-step workflows
-```markdown
-# Getting Started with [ADAPT: Project name from conversation and repository analysis]
 
-## Overview
-[ADAPT: Brief description of what this system does based on project purpose discovered in conversation]
-
-## Step 1: Setup
-```bash
-# [ADAPT: Installation command based on detected package manager]
-# Examples: "npm install", "pip install -e .", "cargo install"
-```
-
-## Step 2: Configure
-[ADAPT: Configuration steps based on detected project requirements]:
-- ✅ [ADAPT: Common use case based on detected domain]
-- ✏️ [ADAPT: Advanced scenarios based on project complexity]  
-- ❌ [ADAPT: What to avoid based on project constraints]
-
-## Step 3: Execute
-```bash
-# [ADAPT: Main execution command based on detected CLI patterns]
-# Examples: "npm run dev", "python main.py", "./target/release/app"
-```
-
-[ADAPT: Data preservation message if applicable to detected project type]
-```
+**Use established documentation patterns:**
+- **Getting Started Guide**: Create setup guides using patterns from `.claude/tech-guides/framework-integration.md`
+- **Configuration Examples**: Reference `.claude/tech-guides/core-architecture.md` for database and server setup
+- **Multi-Agent Workflows**: Use examples from `.claude/tech-guides/testing.md` for coordination patterns
+- **Installation Instructions**: Follow dependency patterns from framework-integration.md
 
 ### 2. Technical Documentation (As Needed)
 **Architecture Decision Records (ADRs)**: Why decisions were made
-```markdown
-# ADR-XXX: UTC Timestamps for System Coordination
 
-## Status
-Accepted
-
-## Context
-Multi-component coordination requires consistent timestamp handling.
-
-## Decision
-Use UTC timestamps exclusively for all system operations.
-
-## Consequences
-- Positive: Consistent behavior across environments
-- Positive: Eliminates coordination conflicts
-- Negative: Requires developer discipline to always use UTC
-```
+**Follow established documentation patterns:**
+- **Decision Documentation**: Use ADR format for significant architectural choices
+- **Reference Tech Guides**: Link to relevant sections in `.claude/tech-guides/` for implementation details
+- **Context Preservation**: Document reasoning behind multi-agent coordination patterns
 
 **Development Guides**: How to contribute
-```markdown
-# Contributing to [ADAPT: Project name from conversation]
 
-## Development Setup
-1. Clone the repository
-2. [ADAPT: Install dependencies using detected package manager command]
-3. [ADAPT: Run tests using detected testing framework command]
-
-## Code Standards
-- File size limit: 500 lines for code, 1000 for tests
-- UTC timestamps: Always use `datetime.now(timezone.utc)` [ADAPT: Include only if time-based functionality detected]
-- [ADAPT: Integration requirements based on detected architecture pattern]
-
-## Tech Guides
-Reference `.claude/tech-guides/` for established patterns:
-- Framework-specific development patterns
-- Testing approaches
-- Integration guidelines
-```
+**Reference our comprehensive tech guides:**
+- **Development Setup**: Use setup instructions from `.claude/tech-guides/framework-integration.md`
+- **Code Standards**: Follow patterns in `.claude/development-standards.md`
+- **Testing Approaches**: See `.claude/tech-guides/testing.md` for testing patterns
+- **Architecture Patterns**: Reference all guides in `.claude/tech-guides/` for established patterns
 
 ## Documentation Standards
 
 ### Writing Guidelines
 
 #### Be Concise and Clear
-```markdown
-# ❌ Verbose, unclear
-The [ADAPT: Main system component name] class provides functionality for the creation, management,
-and coordination of operations across multiple components while
-maintaining data consistency and preventing conflicts through the implementation
-of a coordination mechanism.
-
-# ✅ Clear, actionable  
-## [ADAPT: Main System Component Name]
-[ADAPT: Brief description of main component's role based on detected architecture]
-
-```python
-# [ADAPT: Use main system component name from detected architecture]
-main_manager = MainManager()
-result = await main_manager.process("example-123")
-```
-```
+**Follow clear documentation patterns:**
+- **Avoid Verbose Descriptions**: Write concise, actionable descriptions
+- **Use Active Voice**: Focus on what users can accomplish
+- **Include Working Examples**: Reference patterns from `.claude/tech-guides/framework-integration.md`
+- **Clear Structure**: Organize content with consistent headings and formatting
 
 #### Start with Examples
-```markdown
-# ✅ Example-first approach
-# Quick Start Guide
-
-```python
-# [ADAPT: Process data using main system component from detected architecture]
-service = MainService()  # [ADAPT: Use detected service naming pattern]
-result = await service.process(input_data)
-
-# Access results
-# [ADAPT: Result handling based on detected data patterns]
-for item in result.processed_items:
-    print(f"Processed: {item.name}")
-```
-
-## How it works
-The service analyzes your data and applies processing rules...
-```
+**Use example-first documentation approach:**
+- **Working Code First**: Start documentation with functional examples
+- **Reference Tech Guides**: Use example patterns from `.claude/tech-guides/framework-integration.md` and `.claude/tech-guides/testing.md`
+- **Real-World Scenarios**: Focus on practical use cases that users will actually encounter
+- **Progressive Detail**: Start simple, add complexity gradually
 
 #### Include Error Scenarios
-```markdown
-# Common Issues
-
-## Resource Already Exists
-```python
-try:
-    result = await service.create_resource("existing-id")
-except ResourceExistsError:
-    # Use existing resource instead
-    result = await service.get_existing_resource("existing-id")
-```
-
-## Timeout Issues
-If operations timeout:
-```python
-try:
-    await service.process_with_timeout(data, timeout=30)
-except TimeoutError as e:
-    print(f"Operation timed out: {e}")
-    # Use alternative approach
-```
-```
+**Document common error scenarios:**
+- **Error Handling Patterns**: Reference `.claude/tech-guides/error-handling.md` for exception handling examples
+- **Common Issues**: Document frequent problems and their solutions
+- **Recovery Strategies**: Show users how to handle failures gracefully
+- **Troubleshooting Guides**: Create step-by-step problem resolution guides
 
 ### Code Examples Quality
 
 #### Realistic Examples
-```python
-# ✅ Real-world scenario
-# Process customer data with validation
-async def process_customer_data():
-    service_manager = ServiceManager()
-    processor = service_manager.create_processor("customer-data")
-
-    # Load existing data
-    raw_data = await service_manager.load_data("customer-123")
-
-    # Process with validation
-    result = await processor.process_with_validation(raw_data)
-
-    # Save results
-    await service_manager.save_result(result)
-
-    return result.summary
-```
+**Create practical, testable examples:**
+- **Real-World Scenarios**: Use examples that match actual user needs
+- **Working Code**: Ensure all examples are functional and tested
+- **Tech Guide Reference**: Base examples on patterns from `.claude/tech-guides/framework-integration.md`
 
 #### Testable Examples
-All code examples should actually work:
-```python
-# This example is tested in docs/test_examples.py
-from {{PROJECT_NAME}}.core.service import ServiceManager
-
-async def example_service_usage():
-    service_manager = ServiceManager()
-    result = await service_manager.process("test-data")
-    assert result.status == "success"
-    return result
-```
+**Ensure all examples are verified and functional:**
+- **Test Documentation Examples**: All code examples should be tested in the test suite
+- **Reference Architecture**: Use examples that align with `.claude/tech-guides/core-architecture.md` patterns
+- **FastMCP Patterns**: Examples should use established FastMCP TestClient patterns from testing.md
 
 ## Project-Specific Documentation Patterns
 
-### Component Integration Features
+### MCP Server Integration Features
 Always document integration patterns:
-```markdown
-## Component Integration
-All operations are integrated with the system architecture:
+- **Multi-Agent Coordination**: Reference `.claude/tech-guides/core-architecture.md` for session sharing patterns
+- **Database Operations**: Use aiosqlite patterns from core-architecture.md
+- **API Integration**: Document MCP tool and resource usage patterns
 
-```python
-# Operations automatically coordinate with other components
-context = get_current_context()  
-data = context.get_data()
-```
-
-**Multi-component Safety**: Operations include automatic coordination to prevent conflicts.
-```
-
-### Processing Features  
+### MCP Server Features  
 Explain system behavior clearly:
-```markdown
-## Processing Results
-System operations include result metadata:
-
-- **Status indicators**: Success, warning, error states
-- **Confidence metrics**: Quality indicators when applicable  
-- **Validation results**: Data quality assessments
-
-```python
-for result in processed_data:
-    if result.status == "success":
-        handle_successful_result(result)
-    else:
-        handle_error_case(result)
-```
-```
+- **Operation Results**: Document MCP tool response patterns and status indicators
+- **Error States**: Reference `.claude/tech-guides/error-handling.md` for error response patterns
+- **Multi-Agent Behavior**: Document session isolation and coordination patterns
 
 ### Data Safety
 Emphasize data preservation:
-```markdown
-## Data Safety Guarantee
-{{PROJECT_NAME}} preserves your original data:
-
-- **Original data preserved**: Never modified in place
-- **Processing is additive**: Results are additions, not replacements
-- **Full operation history**: Track all changes with timestamps
-- **Easy rollback**: Restore previous states anytime
-```
+- **Data Preservation**: Reference patterns from `.claude/tech-guides/core-architecture.md`
+- **Audit Trails**: Document UTC timestamp usage and data tracking
+- **Agent Isolation**: Explain how agent memory isolation protects data integrity
+- **Recovery Patterns**: Reference error-handling.md for data recovery approaches
 
 ## Documentation Workflow
 

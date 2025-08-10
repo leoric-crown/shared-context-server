@@ -45,69 +45,33 @@ You have **ZERO-ERROR TOLERANCE**. Fix errors immediately - never work around th
 ### Code Quality (Non-Negotiable)
 - **500-line file limit** - refactor if exceeded
 - **UTC timestamps always** - `datetime.now(timezone.utc)` for any time-based functionality
-- **Zero warnings** - [ADAPT: Run quality tools based on detected tech stack (e.g., "ruff check --fix", "eslint --fix", "cargo clippy")]
-- **System integration** - [ADAPT: All features must work with detected architecture pattern and main system coordinator]
+- **Zero warnings** - `ruff check --fix` and `mypy` for Python code quality and type checking
+- **System integration** - All features must integrate with FastMCP server architecture and shared context coordination
 - **📸 Smart Screenshot Policy** - capture based on change complexity (see below)
-
-### 🚀 Visual Validation Tool Usage (When Available)
-
-**Flexible screenshot capture**: Use visual validation tools based on UI change complexity and impact.
-
-#### Screenshot Policy by Change Type
-- **🔴 Required**: New UI components, layout changes, user workflow modifications
-- **🟡 Recommended**: UI styling updates, component behavior changes  
-- **🟢 Optional**: Minor text changes, bug fixes, non-visual logic updates
-
-**Developer Workflow Integration:**
-1. **Before coding**: Capture baseline for visual components
-2. **During development**: Test interactions and workflows
-3. **After completion**: Validate changes work correctly
-
-**Key Benefits for Development:**
-- **Visual Change Detection**: Immediately see if your changes affected the UI
-- **Interaction Testing**: Validate user workflows work correctly  
-- **Quality Assurance**: Catch visual regressions early
 
 ### Modern Development Patterns
 
-```python
-# [ADAPT: Framework-specific examples based on detected tech stack]
-# Error handling - be explicit and informative
-try:
-    result = risky_operation()
-except SpecificError as e:
-    logger.error(f"Operation failed: {e}")
-    # Apply proper fix, don't work around
-    fixed_result = proper_fix_method()
-    return fixed_result
+Refer to our established tech guides for implementation patterns:
 
-# Time handling - always use UTC for system operations
-from datetime import datetime, timezone
-created_at = datetime.now(timezone.utc)
-
-# Testing - Behavioral over mock-heavy
-# [ADAPT: Replace with testing framework examples based on detected testing setup]
-def test_component_saves_data():
-    component = MainComponent()  # [ADAPT: Use main system component name]
-    component.save_data(test_data)
-    
-    saved_data = component.load_data()
-    assert saved_data == test_data
-```
+- **FastMCP Patterns**: See `.claude/tech-guides/framework-integration.md` for server setup, tool definitions, and async/await patterns
+- **Database Operations**: See `.claude/tech-guides/core-architecture.md` for aiosqlite connection pooling and schema patterns
+- **Error Handling**: See `.claude/tech-guides/error-handling.md` for exception hierarchies and recovery patterns
+- **Testing Approaches**: See `.claude/tech-guides/testing.md` for behavioral FastMCP testing with TestClient
+- **UTC Timestamps**: Always use `datetime.now(timezone.utc)` for multi-agent coordination - see core-architecture.md
 
 ## Project Integration Requirements
 
 ### Architecture-Aware Development
-- [ADAPT: All features integrate with detected project architecture and main system patterns]
-- [ADAPT: Maintain consistency with established patterns found in codebase analysis]  
-- [ADAPT: Support coordination patterns based on detected architecture (e.g., multi-service, component-based, etc.)]
-- [ADAPT: Use detected data handling approaches and preservation patterns]
+- All features integrate with FastMCP server architecture and three-tier memory system
+- Maintain consistency with established patterns: public context, private notes, agent memory
+- Support multi-agent coordination patterns using MCP tools and resource subscriptions
+- Use aiosqlite with connection pooling and UTC timestamps for all data operations
 
 ### Quality Integration Pattern
-- [ADAPT: Use detected quality infrastructure and tooling from project analysis]
-- [ADAPT: Follow testing patterns based on detected testing framework and approaches]
-- [ADAPT: Maintain code style consistency with detected formatting and structure patterns]
-- [ADAPT: Preserve project context and development patterns for future work]
+- Use pytest with FastMCP TestClient for in-memory testing (100x faster than subprocess)
+- Follow behavioral testing patterns with async/await and multi-agent scenarios
+- Maintain Python code style with ruff formatting and mypy type checking
+- Preserve shared context and agent coordination patterns for multi-agent workflows
 
 ## Error Handling Protocol
 
@@ -118,16 +82,12 @@ def test_component_saves_data():
 4. **Test fixes** - ensure errors don't recur
 
 ### Error Recovery Pattern
-```python
-try:
-    result = risky_operation()
-except SpecificError as e:
-    # Research correct handling first
-    logger.error(f"Operation failed: {e}")
-    # Apply proper fix, don't work around
-    fixed_result = proper_fix_method()
-    return fixed_result
-```
+
+Follow established error handling patterns from `.claude/tech-guides/error-handling.md`:
+- Use specific exception types from the error hierarchy
+- Log errors appropriately with context
+- Apply proper fixes, never work around errors
+- Use circuit breaker patterns for external services
 
 ## Workflow Execution
 

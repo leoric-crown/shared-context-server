@@ -18,19 +18,20 @@ Initiates a collaborative, multi-phase process to define, research, and plan any
 **Goal**: To build a foundational understanding of the project's current state, architecture, and conventions before engaging the user.
 
 1.  **Load Strategic Documents**: Read the content of strategic files to understand the project's high-level goals and history:
-    -   `{{ WORKFLOW.PLANNING_DIR }}/` (recent planning sessions)
-    -   `{{ WORKFLOW.ACTIVE_DIR }}/` (active work for context)
+    -   `PRPs/1-planning/` (recent planning sessions)
+    -   `PRPs/3-completed/` (completed work for context)
     -   `docs/` (all strategic and process guides)
     -   `CLAUDE.md`, `README.md`, `SECURITY.md`
 2.  **Load Technical Standards**: Read the content of all tech guides to understand established patterns and best practices:
-    -   `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_1 }}.md`
-    -   `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_2 }}.md`
-    -   `.claude/tech-guides/{{ GUIDES.TECH_GUIDE_3 }}.md`
-    -   `.claude/tech-guides/testing-patterns.md`
+    -   `.claude/tech-guides/core-architecture.md`
     -   `.claude/tech-guides/framework-integration.md`
-    -   `.claude/tech-guides/data-architecture.md`
-3.  **Analyze Codebase Structure**: Read the output of a tree-like command listing the structure of `{{ PROJECT.SOURCE_DIR }}/` to understand the current architecture.
-4.  **Synthesize Initial Knowledge**: Create an internal summary of the project's purpose, established patterns, and recent development trajectory.
+    -   `.claude/tech-guides/testing.md`
+    -   `.claude/tech-guides/security-authentication.md`
+    -   `.claude/tech-guides/performance-optimization.md`
+    -   `.claude/tech-guides/data-validation.md`
+    -   `.claude/tech-guides/error-handling.md`
+3.  **Analyze Codebase Structure**: Read the output of a tree-like command listing the structure of `src/` to understand the current FastMCP server architecture.
+4.  **Synthesize Initial Knowledge**: Create an internal summary of the Shared Context MCP Server's purpose, multi-agent coordination patterns, and recent development trajectory.
 
 ### Phase 2: Interactive Planning & Refinement (User-Facing)
 
@@ -113,7 +114,7 @@ Initiates a collaborative, multi-phase process to define, research, and plan any
 
 1.  **Present the Planning Document**: Show the complete, structured planning document to the user.
 2.  **Request Feedback**: *"Here is the standardized planning document based on our conversation. Does this accurately capture the scope and next steps?"*
-3.  **Incorporate Revisions** and **Save the Final Document** to `{{PROJECT_PLANNING_DIR}}/`.
+3.  **Incorporate Revisions** and **Save the Final Document** to `PRPs/1-planning/`.
 4.  **Implementation Guidance**: Provide clear next steps for implementation.
 
 ## Completion

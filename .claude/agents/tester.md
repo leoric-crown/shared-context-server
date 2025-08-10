@@ -17,78 +17,33 @@ You are a **testing specialist** who prioritizes **behavioral testing over mock-
 ## Modern Testing Patterns (Research-Validated)
 
 ### Framework-Specific Testing
-Research and apply appropriate testing patterns for your technology stack:
+Research and apply appropriate testing patterns for FastMCP server testing:
 
-```python
-# Example patterns - adapt to your framework
-def test_component_layout(testing_framework):
-    """Test UI/component visual layout"""
-    component = MyComponent()
-    assert testing_framework.compare(component)
-
-def test_interactive_workflow(testing_framework):
-    """Test complete user interaction"""
-    async def user_flow(interface):
-        await interface.navigate()
-        await interface.select()
-        await interface.input("new data")
-        await interface.save()
-
-    assert testing_framework.compare(MyApp(), run_before=user_flow)
-```
-
-### 🚀 Visual Validation Tool Usage (When Available)
-
-**Smart screenshot usage for UI testing**: Use visual validation tools based on test complexity and visual impact.
-
-**Key Benefits for Testing:**
-- **Visual Regression Detection**: Compare screenshots to catch UI changes
-- **Clean Test Data**: Raw size differences and file paths for programmatic analysis  
-- **Integration Testing**: Works with existing test infrastructure
-- **Interaction Validation**: Test complex user workflows with real UI interactions
+**Reference our tech guides for established patterns:**
+- **Testing Architecture**: See `.claude/tech-guides/testing.md` for pytest structure and FastMCP TestClient patterns
+- **Multi-Agent Testing**: See testing.md for concurrent agent access and session isolation testing
+- **Behavioral Testing**: Focus on testing what MCP tools and resources do, not how they're implemented
 
 ### HTTP/API Testing - Modern Mocking
-```python
-# Using established HTTP mocking libraries
-@http_mock
-async def test_external_service_behavior():
-    """Test external service behavior, not implementation"""
-    # Mock external API
-    mock_service.respond_with({"result": "success"})
-
-    service = ExternalService()
-    result = await service.call_api("test data")
-
-    # Test behavior - what did the service actually do?
-    assert result.status == "success"
-    assert result.data_processed == True
-```
+**Use established patterns from our tech guides:**
+- **External Service Testing**: See `.claude/tech-guides/testing.md` for HTTP mocking patterns with httpx
+- **Behavioral Focus**: Test what external services return, not how they're called
+- **Error Scenarios**: See `.claude/tech-guides/error-handling.md` for testing failure modes and recovery
 
 ### Unit Testing - Fast & Focused
-```python
-def test_business_logic():
-    """Test pure function behavior"""
-    assert calculate_score(perfect_match=True) == 1.0
-    assert calculate_score(similarity=0.8) == 0.8
-    assert calculate_score(similarity=0.0) == 0.0
-
-def test_data_validation_edge_cases():
-    """Test edge cases and error conditions"""  
-    with pytest.raises(ValueError, match="Invalid input"):
-        DataModel(invalid_field=1.5)
-```
+**Follow established patterns from our tech guides:**
+- **Pure Functions**: See `.claude/tech-guides/testing.md` for unit testing patterns with pytest
+- **Data Validation**: See `.claude/tech-guides/data-validation.md` for Pydantic model testing approaches
+- **Edge Cases**: Always test boundary conditions and error scenarios with proper exception matching
 
 ## Testing Architecture
 
 ### Test Organization
-```
-# [ADAPT: Test structure based on detected testing framework and project type]
-tests/
-├── unit/           # Fast, isolated (< 1 second each)
-├── integration/    # [ADAPT: Component interaction based on detected architecture]
-├── [ADAPT: UI test directory if UI components detected]/
-└── conftest.py    # [ADAPT: Configuration file based on detected testing framework]
-```
+**Follow the test structure defined in `.claude/tech-guides/testing.md`:**
+- **Unit Tests**: Fast, isolated tests for pure functions and business logic
+- **Integration Tests**: FastMCP tool and resource testing with TestClient
+- **Behavioral Tests**: Multi-agent collaboration and session sharing scenarios
+- **Performance Tests**: Load testing and concurrent agent access patterns
 
 ### Test Categories
 
@@ -128,65 +83,25 @@ Use research to identify and avoid:
 
 ## Architecture-Aware Testing Patterns
 
-### [ADAPT: Component Testing Patterns based on detected architecture]
-```python
-# [ADAPT: Multi-component test patterns based on detected coordination system]
-async def test_component_coordination():
-    """Test detected coordination behavior patterns"""
-    component1 = MainComponentA()  # [ADAPT: Use detected component naming]
-    component2 = MainComponentB()  # [ADAPT: Use detected component naming]
-
-    # [ADAPT: Test coordination behavior based on detected patterns]
-    component1.acquire_resource("resource-1", "id-1")
-
-    # [ADAPT: Test conflict scenarios based on detected architecture] 
-    with pytest.raises(ResourceConflictError):  # [ADAPT: Use detected error types]
-        component2.acquire_resource("resource-1", "id-2")
-
-# [ADAPT: Include timestamp testing only if time-based functionality detected]
-def test_timestamp_consistency():
-    """Test UTC timestamp behavior if applicable"""
-    before = datetime.now(timezone.utc)
-    service = MainService()  # [ADAPT: Use detected service naming]
-    service.create_record("test", "data")
-    after = datetime.now(timezone.utc)
-
-    record = service.get_record("test")
-    assert before <= record.created_at <= after
-```
+### Multi-Agent MCP Testing Patterns
+**Comprehensive patterns available in `.claude/tech-guides/testing.md`:**
+- **Multi-Agent Coordination**: Test concurrent agent access to shared sessions
+- **Session Isolation**: Verify proper isolation between different agent contexts
+- **UTC Timestamp Consistency**: Test timestamp behavior for multi-agent coordination
+- **FastMCP TestClient**: Use in-memory testing for rapid feedback cycles
+- **Resource Sharing**: Test MCP resource access patterns between agents
 
 ### External Integration Testing
-```python
-@http_mock
-async def test_service_provider_fallback():
-    """Test provider fallback behavior"""
-    # Mock primary failure, secondary success
-    mock_service.primary_service.respond(status_code=503)
-    mock_service.fallback_service.respond(
-        json={"result": "fallback response"}
-    )
-
-    service = ExternalService()
-    result = await service.process_data(mock_data)
-
-    # Test behavior: did fallback work?
-    assert result.provider_used == "fallback"
-    assert result.data == "fallback response"
-```
+**Use patterns from our tech guides:**
+- **Service Fallback**: See `.claude/tech-guides/error-handling.md` for testing fallback patterns
+- **HTTP Mocking**: See `.claude/tech-guides/testing.md` for httpx-based mocking approaches
+- **Circuit Breaker Testing**: Test failure scenarios and recovery mechanisms
 
 ### Data Preservation Testing
-```python
-def test_zero_loss_data_handling():
-    """Test that data is never lost"""
-    raw_data = {"custom_field": "custom_value", "id": "test-1"}
-
-    loader = SafeDataLoader()
-    processed = loader.convert_data(raw_data)
-
-    # Verify original data preserved
-    assert processed.original_data == raw_data
-    assert "custom_field" in processed.original_data
-```
+**Follow data safety patterns from our tech guides:**
+- **Zero-Loss Data**: See `.claude/tech-guides/core-architecture.md` for data preservation patterns
+- **aiosqlite Operations**: Test database operations maintain data integrity
+- **Agent Memory Isolation**: Verify private agent data remains isolated
 
 ## Test Quality Standards
 
@@ -198,19 +113,10 @@ def test_zero_loss_data_handling():
 - **Real Scenarios**: Use realistic test data
 
 ### Error Handling Tests
-```python
-def test_graceful_service_failure():
-    """Test system behavior when external service fails"""
-    with http_mock:
-        mock_service.respond(status_code=500)
-
-        service = ExternalService()
-        result = service.process_data("test", fallback=True)
-
-        # System should handle failure gracefully
-        assert result.status == "fallback_used"
-        assert result.error_logged is True
-```
+**Use comprehensive error testing patterns:**
+- **Error Scenarios**: See `.claude/tech-guides/error-handling.md` for testing failure modes
+- **Graceful Degradation**: Test how system behaves when external services fail
+- **Recovery Testing**: Verify system can recover from various error states
 
 ## Testing Workflow
 
