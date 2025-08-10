@@ -1,0 +1,135 @@
+# Pre-commit hooks for Shared Context MCP Server
+# Ensures code quality and prevents database regressions before commits
+#
+# Installation:
+# pip install pre-commit
+# pre-commit install
+#
+# Usage:
+# pre-commit run --all-files  # Run all hooks on all files
+# pre-commit run <hook-id>    # Run specific hook
+
+repos:
+  # Database integrity and schema validation
+  - repo: local
+    hooks:
+      - id: database-tests
+        name: Database Schema & Validation Tests
+        entry: pytest tests/test_database.py -v
+        language: system
+        types: [python]
+        files: ^(src/shared_context_server/(database|models|config)\.py|database\.sql|tests/test_database\.py)$
+        pass_filenames: false
+        description: "Run database tests to prevent schema regressions"
+
+      - id: database-smoke-tests
+        name: Database Smoke Tests (Fast)
+        entry: pytest tests/test_database.py::TestDatabaseSchemaSmoke -v
+        language: system
+        types: [python]
+        files: ^(src/shared_context_server/(database|models)\.py|database\.sql)$
+        pass_filenames: false
+        description: "Run fast database smoke tests for critical database changes"
+
+  # Python code quality with ruff (replaces black, isort, flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        name: Code Linting & Fixing (Ruff)
+        args: [--fix]
+        types: [python]
+      - id: ruff-format
+        name: Code Formatting (Ruff)
+        types: [python]
+
+  # MyPy type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        name: Type Checking (MyPy)
+        additional_dependencies:
+          - pydantic>=2.0.0
+          - pydantic-settings>=2.0.0
+          - types-python-dateutil
+        args: [--ignore-missing-imports]
+        types: [python]
+
+  # Security and vulnerabilities
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        name: Security Linting (Bandit)
+        args: [-r, src/, -f, json]
+        exclude: tests/
+
+  # Configuration validation
+  - repo: local
+    hooks:
+      - id: config-validation
+        name: Configuration Validation
+        entry: python -c "import sys; sys.path.insert(0, 'src'); from shared_context_server.config import validate_required_env_vars, load_config; validate_required_env_vars(); load_config('.env.example'); print('✅ Configuration validation passed')"
+        language: system
+        files: ^(\.env\.example|src/shared_context_server/config\.py)$
+        pass_filenames: false
+        description: "Validate configuration files and environment variables"
+
+  # File structure and naming conventions
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-yaml
+        name: YAML Validation
+        description: "Validate YAML files"
+
+      - id: check-json
+        name: JSON Validation
+        description: "Validate JSON files"
+
+      - id: check-toml
+        name: TOML Validation
+        description: "Validate TOML files"
+
+      - id: end-of-file-fixer
+        name: End of File Fixer
+        description: "Ensure files end with newline"
+
+      - id: trailing-whitespace
+        name: Trailing Whitespace Remover
+        description: "Remove trailing whitespace"
+
+      - id: check-merge-conflict
+        name: Merge Conflict Checker
+        description: "Check for merge conflict markers"
+
+      - id: check-case-conflict
+        name: Case Conflict Checker
+        description: "Check for case conflicts in filenames"
+
+  # SQL and database file validation
+  - repo: local
+    hooks:
+      - id: sql-syntax-check
+        name: SQL Syntax Validation
+        entry: python -c "import sqlite3; import sys; f = open('database.sql', 'r'); sql_content = f.read(); f.close(); conn = sqlite3.connect(':memory:'); conn.executescript(sql_content); conn.close(); print('✅ SQL syntax validation passed')"
+        language: system
+        files: ^database\.sql$
+        pass_filenames: false
+        description: "Validate SQL syntax in database.sql"
+
+# Pre-commit configuration
+default_stages: [pre-commit]
+fail_fast: false
+minimum_pre_commit_version: 3.0.0
+
+# Configuration for specific environments
+ci:
+  autofix_commit_msg: "🤖 [pre-commit.ci] auto fixes from pre-commit hooks"
+  autofix_prs: true
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "🤖 [pre-commit.ci] pre-commit autoupdate"
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

@@ -21,15 +21,25 @@ wheels/
 *.egg
 MANIFEST
 
+# Database files (keep schema file)
+# database.sql - keep this for reference
+*.backup
+*.bak
+
 # FastAPI & Pydantic
 .env
-.env.*
 
 # SQLite databases
 *.db
 *.sqlite
 *.sqlite3
-chat_history.db
+chat_history.db*
+test_chat_history.db*
+dev_*.db
+test_*.db
+# Keep database.sql in repo, ignore other SQL files
+generated_*.sql
+temp_*.sql
 
 # Testing
 .pytest_cache/
@@ -64,3 +74,16 @@ ENV/
 
 # MCP server data
 .claude/settings.local.json
+
+# Quality tools
+.ruff_cache/
+.mypy_cache/
+.pre-commit-config.yaml.bak
+
+# Additional development files
+*.tmp
+*.temp
+cache/
+profiling/
+*.prof
+*.profile
