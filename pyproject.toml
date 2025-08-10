@@ -29,6 +29,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.25.0",
     "typing-extensions>=4.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +55,7 @@ docs = [
 ]
 
 [project.scripts]
-shared-context-server = "shared_context_server.scripts.dev:main"
+shared-context-server = "shared_context_server.scripts.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/shared-context-server/shared-context-server"
