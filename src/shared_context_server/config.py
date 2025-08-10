@@ -96,7 +96,8 @@ class MCPServerConfig(BaseSettings):
         default="shared-context-server", json_schema_extra={"env": "MCP_SERVER_NAME"}
     )
     mcp_server_version: str = Field(
-        default="1.0.0", json_schema_extra={"env": "MCP_SERVER_VERSION"}
+        default="1.0.2-hot-reload-working",
+        json_schema_extra={"env": "MCP_SERVER_VERSION"},
     )
 
     # Transport configuration

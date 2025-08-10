@@ -8,6 +8,16 @@
 **Status**: Ready for Execution
 **Prerequisites**: Phase 2 - Essential Features completed
 
+🔌 **MCP FOUNDATION READY**: All agents connected via shared-context-server MCP integration
+⚡ **Live Agent Access**: Claude, task-coordinator, developer, tester, docs agents all connected
+📡 **Transport**: STDIO via `claude mcp add shared-context-server shared-context-server`
+🎯 **Multi-Agent Context**: Session-based isolation with real-time coordination capabilities
+
+🚨 **CRITICAL BUG FIXES REQUIRED FIRST**:
+- ❌ **Memory System**: `get_memory`/`set_memory` SQL query errors blocking agent memory
+- ❌ **Resource Access**: `session://` resource templates failing with same SQL issue
+- 🔧 **Must Fix Before New Features**: Address database query construction bugs
+
 ---
 
 ## Research Context & Architectural Analysis
@@ -34,10 +44,38 @@
 
 ### Core Requirements
 
-**CRITICAL Database Schema Update Required:**
-- **Messages Table**: Add `sender_type` column to store agent type at message creation time
-- **Agent Registry Alternative**: Or create `agents` table with FK to messages for agent type lookup
-- **Rationale**: Eliminates brittle audit log joins for agent type inference (consultant recommendation)
+**CRITICAL Issues to Fix from MCP Testing:**
+
+⚠️ **HIGH PRIORITY BUGS DISCOVERED**:
+1. **Memory System Bug**: `get_memory` and `set_memory` failing with SQL query error
+   - Error: "tuple indices must be integers or slices, not str"
+   - Impact: Agent memory storage/retrieval completely broken
+   - Root Cause: Database query construction issue in memory operations
+
+2. **Session Resource Bug**: `session://` resource templates failing
+   - Error: Same SQL query construction issue as memory system
+   - Impact: MCP resource access not working
+   - Root Cause: Shared database query pattern problem
+
+3. **Database Schema Update Required**:
+   - **Messages Table**: Add `sender_type` column to store agent type at message creation time
+   - **Agent Registry Alternative**: Or create `agents` table with FK to messages for agent type lookup
+   - **Rationale**: Eliminates brittle audit log joins for agent type inference (consultant recommendation)
+
+🔧 **PHASE 3 MUST FIX**: Address these critical bugs before implementing new features
+
+**Debug Context for Investigation**:
+- **Error Pattern**: "tuple indices must be integers or slices, not str"
+- **Likely Location**: Database query construction in memory/resource handlers
+- **Test Reproduction**:
+  ```python
+  # Failing operations:
+  mcp__shared-context-server__set_memory(key="test", value="test", session_id="session_123")
+  mcp__shared-context-server__get_memory(key="test", session_id="session_123")
+  ReadMcpResourceTool(server="shared-context-server", uri="session://session_123")
+  ```
+- **Working Operations**: create_session, add_message, get_messages, search_context (RapidFuzz)
+- **Investigation Needed**: Check SQL query parameter binding in memory and resource code paths
 
 #### 1. Advanced Authentication System
 **JWT Token Authentication**:

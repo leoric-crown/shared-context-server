@@ -1831,6 +1831,7 @@ dependencies = [
     { name = "rapidfuzz" },
     { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "watchdog" },
 ]
 
 [package.optional-dependencies]
@@ -1898,6 +1899,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.23.0" },
+    { name = "watchdog", specifier = ">=6.0.0" },
 ]
 provides-extras = ["dev", "test", "docs"]
 

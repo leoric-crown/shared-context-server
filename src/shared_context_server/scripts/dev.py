@@ -21,11 +21,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..config import SharedContextServerConfig
 
-# Import uvloop conditionally
+# Check uvloop availability without importing
 try:
-    import uvloop
+    import importlib.util
 
-    UVLOOP_AVAILABLE = True
+    UVLOOP_AVAILABLE = importlib.util.find_spec("uvloop") is not None
 except ImportError:
     UVLOOP_AVAILABLE = False
 
@@ -114,6 +114,12 @@ class DevelopmentServer:
             else:
                 logger.info("MCP server running on stdio transport")
 
+            # Start the actual FastMCP server with hot reload
+            if self.config.mcp_server.mcp_transport == "http":
+                await self._run_http_server_with_reload()
+            else:
+                await self._run_stdio_server()
+
             # Wait for shutdown signal
             await self._shutdown_event.wait()
 
@@ -137,6 +143,150 @@ class DevelopmentServer:
         # Unix-specific signals
         if hasattr(signal, "SIGHUP"):
             signal.signal(signal.SIGHUP, signal_handler)
+
+    async def _run_http_server_with_reload(self) -> None:
+        """Run the FastMCP HTTP server with hot reload using watchdog."""
+        if not SERVER_AVAILABLE:
+            logger.warning("Server components not available - cannot start HTTP server")
+            return
+
+        try:
+            import asyncio
+            import os
+            import subprocess
+            import sys
+
+            from watchdog.events import FileSystemEventHandler
+            from watchdog.observers import Observer
+
+            project_root = Path.cwd()
+            src_dir = project_root / "src" / "shared_context_server"
+
+            logger.info("Starting FastMCP HTTP server with hot reload...")
+            logger.info("🔥 Hot reload enabled - server will restart on file changes")
+            logger.info(f"📁 Watching directory: {src_dir}")
+
+            # Track server process
+            server_process: subprocess.Popen[bytes] | None = None
+
+            async def start_server() -> subprocess.Popen[bytes]:
+                """Start the server process"""
+                nonlocal server_process
+                if server_process is not None:
+                    server_process.terminate()
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(server_process.wait), timeout=5.0
+                        )
+                    except asyncio.TimeoutError:
+                        server_process.kill()
+
+                # Ensure config is available
+                assert self.config is not None, "Configuration not initialized"
+
+                # Start server with environment variables
+                env = {
+                    **dict(os.environ),
+                    "MCP_TRANSPORT": "http",
+                    "HTTP_PORT": str(self.config.mcp_server.http_port),
+                    "HTTP_HOST": self.config.mcp_server.http_host,
+                }
+
+                server_process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "shared_context_server.scripts.cli",
+                        "--transport",
+                        "http",
+                    ],
+                    env=env,
+                )
+
+                logger.info(f"🚀 Server started with PID {server_process.pid}")
+                return server_process
+
+            class ReloadHandler(FileSystemEventHandler):
+                """File system event handler for hot reload"""
+
+                def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+                    self.last_reload: float = 0
+                    self.debounce_time: float = 1.0  # 1 second debounce
+                    self.loop = loop
+
+                def on_modified(self, event: Any) -> None:
+                    if event.is_directory:
+                        return
+
+                    if not event.src_path.endswith(".py"):
+                        return
+
+                    import time
+
+                    current_time = time.time()
+                    if current_time - self.last_reload < self.debounce_time:
+                        return
+
+                    self.last_reload = current_time
+
+                    logger.info(f"🔄 File changed: {event.src_path}")
+                    logger.info("♻️  Restarting server...")
+
+                    # Schedule server restart from thread-safe context
+                    asyncio.run_coroutine_threadsafe(start_server(), self.loop)
+
+            # Set up file watcher
+            loop = asyncio.get_running_loop()
+            event_handler = ReloadHandler(loop)
+            observer = Observer()
+            observer.schedule(event_handler, str(src_dir), recursive=True)
+            observer.start()
+
+            # Start initial server
+            await start_server()
+
+            try:
+                # Keep the watcher running
+                while not self._shutdown_event.is_set():
+                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("🛑 Shutting down hot reload server...")
+            finally:
+                observer.stop()
+                observer.join()
+                if server_process:
+                    server_process.terminate()
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(server_process.wait), timeout=5.0
+                        )
+                    except asyncio.TimeoutError:
+                        server_process.kill()
+
+        except Exception:
+            logger.exception("Failed to start HTTP server with hot reload")
+            raise
+
+    async def _run_stdio_server(self) -> None:
+        """Run the FastMCP stdio server (no hot reload for stdio)."""
+        if not SERVER_AVAILABLE:
+            logger.warning(
+                "Server components not available - cannot start stdio server"
+            )
+            return
+
+        try:
+            from ..server import server
+
+            logger.info("Starting FastMCP stdio server...")
+            logger.warning("📝 Hot reload not available for stdio transport")
+
+            # Start server on stdio
+            await server.run_stdio_async(show_banner=True)
+
+        except Exception:
+            logger.exception("Failed to start stdio server")
+            raise
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the development server."""
@@ -288,8 +438,9 @@ Examples:
     try:
         # Use uvloop for better performance if available
         if UVLOOP_AVAILABLE:
-            uvloop.install()
+            # Modern uvloop approach for Python 3.12+
             logger.info("Using uvloop for enhanced async performance")
+            # uvloop.install() is deprecated - uvloop will be set up by run_http_async
         else:
             logger.info("uvloop not available, using default asyncio")
 

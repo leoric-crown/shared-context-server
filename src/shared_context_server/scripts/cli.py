@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import NoReturn
 
 # Import uvloop conditionally for better performance
 try:
@@ -52,7 +51,7 @@ class ProductionServer:
         self.config = None
         self.server = None
 
-    async def start_stdio_server(self) -> NoReturn:
+    async def start_stdio_server(self) -> None:
         """Start server with STDIO transport."""
         logger.info("Starting Shared Context MCP Server (STDIO)")
 
@@ -70,7 +69,7 @@ class ProductionServer:
             logger.exception("STDIO server failed")
             sys.exit(1)
 
-    async def start_http_server(self, host: str, port: int) -> NoReturn:
+    async def start_http_server(self, host: str, port: int) -> None:
         """Start server with HTTP transport."""
         logger.info(f"Starting Shared Context MCP Server (HTTP) on {host}:{port}")
 
@@ -79,42 +78,12 @@ class ProductionServer:
             sys.exit(1)
 
         try:
-            # Import HTTP server components
-            import uvicorn
-
             # Initialize server components
             await initialize_server()
 
-            # Run with uvicorn using FastMCP's built-in HTTP support
-            try:
-                await server.run_http_async(host=host, port=port)
-            except AttributeError:
-                # Fallback to FastAPI integration if FastMCP doesn't have run_http_async
-                logger.info("Using FastAPI integration for HTTP server")
-
-                from fastapi import FastAPI
-                from fastmcp.server.fastapi import FastMCPServer
-
-                # Create FastAPI app with MCP server
-                app = FastAPI(
-                    title="Shared Context MCP Server",
-                    description="Multi-agent shared context and memory coordination server",
-                    version="1.0.0",
-                )
-
-                # Add MCP server to FastAPI
-                mcp_server = FastMCPServer(server)
-                mcp_server.add_to_app(app)
-
-                # Add health check endpoint
-                @app.get("/health")
-                async def health_check():
-                    return {"status": "healthy", "server": "shared-context-mcp"}
-
-                # Run with uvicorn
-                config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
-                uvicorn_server = uvicorn.Server(config)
-                await uvicorn_server.serve()
+            # Use FastMCP's native Streamable HTTP transport
+            # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
+            await server.run_http_async(host=host, port=port)
 
         except ImportError:
             logger.exception(
@@ -154,11 +123,27 @@ Claude Desktop Integration:
         default="stdio",
         help="Transport protocol (default: stdio)",
     )
+    # Load config to get proper defaults
+
+    try:
+        config = get_config()
+        default_host = config.mcp_server.http_host
+        default_port = config.mcp_server.http_port
+    except Exception:
+        # Fallback to hardcoded defaults if config loading fails
+        default_host = "localhost"
+        default_port = 8000
+
     parser.add_argument(
-        "--host", default="localhost", help="HTTP host address (default: localhost)"
+        "--host",
+        default=default_host,
+        help=f"HTTP host address (default: {default_host})",
     )
     parser.add_argument(
-        "--port", type=int, default=8000, help="HTTP port (default: 8000)"
+        "--port",
+        type=int,
+        default=default_port,
+        help=f"HTTP port (default: {default_port})",
     )
     parser.add_argument(
         "--config", type=str, help="Path to configuration file (.env format)"

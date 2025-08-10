@@ -29,19 +29,40 @@ cp .env.example .env
 
 4. **Run development server**:
 ```bash
-uv run python -m shared_context_server.scripts.dev
+# Start with hot reload
+MCP_TRANSPORT=http HTTP_PORT=8000 uv run python -m shared_context_server.scripts.dev
+```
+
+5. **Connect Claude Code**:
+```bash
+# Install mcp-proxy and configure Claude Code
+uv tool install mcp-proxy
+claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]}'
+claude mcp list  # Verify connection
 ```
 
 ## Development
 
+### Quick Start
+- 🚀 **30-second setup**: See [Development Quick Start](./docs/dev-quick-start.md)
+- 📖 **Full guide**: See [Development Setup](./docs/development-setup.md)
+- 🔥 **Hot Reload**: Automatic server restart on file changes
+- 🔗 **MCP Integration**: Works with Claude Code, VS Code, and other MCP clients
+
 ### Available Commands
 ```bash
-uv run python -m shared_context_server.scripts.dev    # Start development server
-uv run python -m shared_context_server.scripts.dev --validate  # Validate environment
-uv run ruff check .                                   # Lint code
-uv run ruff format .                                  # Format code
-uv run mypy .                                         # Type checking
-uv run pytest                                         # Run tests
+# Development server (with hot reload)
+MCP_TRANSPORT=http uv run python -m shared_context_server.scripts.dev
+
+# Validation and info
+uv run python -m shared_context_server.scripts.dev --validate
+uv run python -m shared_context_server.scripts.dev --info
+
+# Code quality
+uv run ruff check           # Linting
+uv run ruff format          # Formatting
+uv run mypy src/           # Type checking
+uv run pytest tests/      # Run tests
 ```
 
 ### Quality Gates

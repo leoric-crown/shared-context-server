@@ -164,6 +164,34 @@ Core RESTful endpoints for agent integration:
 - `mypy src/` - Type checking
 - `pre-commit run --all-files` - Run all quality checks
 
+## Hot Reload Development Setup
+
+### Quick Start (30 seconds)
+```bash
+# 1. Start hot reload server
+MCP_TRANSPORT=http HTTP_PORT=8000 uv run python -m shared_context_server.scripts.dev
+
+# 2. Configure Claude Code (in another terminal)
+claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]}'
+
+# 3. Verify connection
+claude mcp list  # Should show: ✓ Connected
+
+# 4. Edit any .py file → server restarts automatically
+```
+
+### Development Features
+- **🔥 Hot Reload**: Automatic server restart on file changes (1-2 second restart)
+- **📁 File Watching**: Monitors all Python files in `src/shared_context_server/` recursively
+- **🔗 Connection Stability**: MCP clients maintain connection through server restarts
+- **⚡ Fast Development**: Edit → Save → Test cycle with no manual restart needed
+- **🛡️ Transport Bridge**: `mcp-proxy` bridges HTTP ↔ STDIO for client compatibility
+
+### Documentation
+- **Quick Start**: `docs/dev-quick-start.md` - 30-second setup guide
+- **Full Guide**: `docs/development-setup.md` - Comprehensive development documentation
+- **Troubleshooting**: Common issues and solutions included
+
 ## CLI Commands Available
 
 ### Development Commands
