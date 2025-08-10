@@ -23,6 +23,7 @@ claude mcp list
 - 🔗 **MCP Integration**: Tools available in Claude Code immediately
 - ⚡ **Fast**: 1-2 second restart time
 - 🛡️ **Stable**: Client connection persists through restarts
+- 📝 **Logging**: All activity logged to `logs/dev-server.log` with automatic rotation (10MB max, 5 backups)
 
 ## File Structure
 
@@ -43,6 +44,7 @@ src/shared_context_server/
 | `uv run python -m shared_context_server.scripts.dev` | Start dev server |
 | `claude mcp list` | Check connection status |
 | `claude mcp tools shared-context-server` | List available tools |
+| `tail -f logs/dev-server.log` | Monitor server logs |
 | `uv run ruff check` | Code linting |
 | `uv run mypy src/` | Type checking |
 | `uv run pytest tests/` | Run tests |

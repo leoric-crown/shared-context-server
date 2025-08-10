@@ -14,7 +14,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import subprocess  # noqa: TC003
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,11 +33,26 @@ except ImportError:
 
 from ..config import get_config, load_config
 
-# Configure logging first
+# Configure logging first - both console and file
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_file = Path("logs/dev-server.log")
+
+# Ensure logs directory exists
+log_file.parent.mkdir(exist_ok=True)
+
+# Configure logging with both console and rotating file handlers
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    format=log_format,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        RotatingFileHandler(
+            str(log_file),
+            maxBytes=10 * 1024 * 1024,  # 10MB max size
+            backupCount=5,  # Keep 5 backup files
+            encoding="utf-8",
+        ),
+    ],
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +123,8 @@ class DevelopmentServer:
             logger.info("Development server is running...")
             logger.info(f"Server name: {self.config.mcp_server.mcp_server_name}")
             logger.info(f"Transport: {self.config.mcp_server.mcp_transport}")
+            logger.info(f"📝 Logs: {log_file.resolve()} (tail -f {log_file})")
+            logger.info("🔄 Log rotation: 10MB max size, 5 backup files")
 
             if self.config.mcp_server.mcp_transport == "http":
                 logger.info(

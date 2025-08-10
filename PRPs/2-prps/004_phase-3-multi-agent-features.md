@@ -12,6 +12,9 @@
 ⚡ **Live Agent Access**: Claude, task-coordinator, developer, tester, docs agents all connected
 📡 **Transport**: STDIO via `claude mcp add shared-context-server shared-context-server`
 🎯 **Multi-Agent Context**: Session-based isolation with real-time coordination capabilities
+🔥 **Hot Reload Development**: Agents have access to live development server with automatic restart
+⚡ **Real-Time Development**: Edit Python code → Server restarts in 1-2s → Agents reconnect automatically
+🛠️ **Development Commands**: `MCP_TRANSPORT=http uv run python -m shared_context_server.scripts.dev`
 
 🚨 **CRITICAL BUG FIXES REQUIRED FIRST**:
 - ❌ **Memory System**: `get_memory`/`set_memory` SQL query errors blocking agent memory

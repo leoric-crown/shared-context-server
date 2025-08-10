@@ -10,6 +10,7 @@ The development setup provides:
 - ✅ **Fast Restart**: Typically restarts in 1-2 seconds
 - ✅ **Connection Stability**: MCP clients maintain connection through restarts
 - ✅ **Clean Logging**: Clear indication of file changes and restart status
+- ✅ **Log Rotation**: Automatic 10MB max size with 5 backup files to prevent disk space issues
 
 ## Quick Start
 

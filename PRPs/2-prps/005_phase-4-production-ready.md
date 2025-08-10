@@ -12,6 +12,10 @@
 🌐 **Distribution Ready**: pipx installation (`pipx install .`) and CLI (`shared-context-server`)
 ⚡ **Live Performance**: 2-3ms RapidFuzz search, FastMCP 2.11.2 transport, agent coordination active
 🔧 **Multi-Agent Production**: All Claude Code agents (developer, tester, docs, task-coordinator) connected via MCP
+🔥 **Development Infrastructure**: Hot reload server enables rapid agent-driven development cycles
+⚡ **Agent Development Workflow**: All agents can modify code with immediate hot reload feedback
+🛠️ **Live Development**: `MCP_TRANSPORT=http uv run python -m shared_context_server.scripts.dev` for agent access
+📁 **Real-Time Iteration**: Python code changes → 1-2s restart → Agents reconnect automatically
 
 ---
 

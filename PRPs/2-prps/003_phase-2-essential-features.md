@@ -11,6 +11,9 @@
 ⚡ **LIVE MCP STATUS**: All agents now connected to shared-context-server via MCP transport
 🔌 **Claude Integration**: `claude mcp add shared-context-server shared-context-server`
 📊 **Performance Verified**: RapidFuzz search achieving 2-3ms response times
+🔥 **Hot Reload Development**: Full development server with automatic restart on file changes
+⚡ **30-Second Setup**: `MCP_TRANSPORT=http uv run python -m shared_context_server.scripts.dev` + mcp-proxy bridge
+📁 **File Watching**: Real-time Python code changes with 1-2 second restart performance
 
 ---
 
