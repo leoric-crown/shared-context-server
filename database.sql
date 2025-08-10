@@ -46,6 +46,7 @@ CREATE TABLE messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     sender TEXT NOT NULL,
+    sender_type TEXT DEFAULT 'generic',  -- Phase 3: Agent type denormalized for performance
     content TEXT NOT NULL,
     visibility TEXT DEFAULT 'public' CHECK (visibility IN ('public', 'private', 'agent_only', 'admin_only')),
     message_type TEXT DEFAULT 'agent_response',
@@ -55,6 +56,7 @@ CREATE TABLE messages (
 
     CONSTRAINT messages_session_id_not_empty CHECK (length(trim(session_id)) > 0),
     CONSTRAINT messages_sender_not_empty CHECK (length(trim(sender)) > 0),
+    CONSTRAINT messages_sender_type_not_empty CHECK (length(trim(sender_type)) > 0),
     CONSTRAINT messages_content_not_empty CHECK (length(trim(content)) > 0),
     CONSTRAINT messages_content_length CHECK (length(content) <= 100000),
 
@@ -133,6 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_time ON messages(session_id, tim
 CREATE INDEX IF NOT EXISTS idx_messages_sender_timestamp ON messages(sender, timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_visibility_session ON messages(visibility, session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_message_id) WHERE parent_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON messages(sender_type, timestamp);  -- Phase 3: Agent type filtering
 
 -- Agent memory access patterns
 CREATE INDEX IF NOT EXISTS idx_agent_memory_lookup ON agent_memory(agent_id, session_id, key);
@@ -208,7 +211,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 -- Insert current schema version
 INSERT OR REPLACE INTO schema_version (version, description)
-VALUES (1, 'Initial schema with consultant fixes applied');
+VALUES (2, 'Phase 3: Added sender_type column to messages table for agent type denormalization');
 
 -- ============================================================================
 -- INITIAL DATA VALIDATION

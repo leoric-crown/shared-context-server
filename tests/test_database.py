@@ -107,12 +107,12 @@ class TestDatabaseSchemaSmoke:
 
     @pytest.mark.asyncio
     async def test_schema_version_exists(self, temp_database):
-        """Test that schema version table exists and contains version 1."""
+        """Test that schema version table exists and contains version 2."""
         db_manager = DatabaseManager(temp_database)
         await db_manager.initialize()
 
         version = await get_schema_version()
-        assert version == 1, f"Expected schema version 1, got: {version}"
+        assert version == 2, f"Expected schema version 2, got: {version}"
 
 
 class TestErrorEnvelopeValidation:
@@ -362,7 +362,7 @@ class TestDatabaseSchema:
             cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
             version = (await cursor.fetchone())[0]
 
-        assert version == 1, f"Expected schema version 1, got {version}"
+        assert version == 2, f"Expected schema version 2, got {version}"
 
     @pytest.mark.asyncio
     async def test_views_creation(self, test_db_manager):
@@ -922,7 +922,7 @@ class TestHealthCheck:
 
             version = await get_schema_version()
 
-        assert version == 1
+        assert version == 2
 
 
 class TestCleanupOperations:

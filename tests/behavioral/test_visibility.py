@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic.fields import FieldInfo
 
+from shared_context_server.auth import AuthInfo
 from shared_context_server.server import (
     add_message,
     create_session,
@@ -48,7 +49,29 @@ class MockContext:
 
     def __init__(self, session_id="test_session", agent_id="test_agent"):
         self.session_id = session_id
-        self.agent_id = agent_id
+        # Set up authentication using AuthInfo pattern
+        self._auth_info = AuthInfo(
+            jwt_validated=False,
+            agent_id=agent_id,
+            agent_type="test",
+            permissions=["read", "write"],
+            authenticated=True,
+            auth_method="api_key",
+            token_id=None,
+        )
+
+    # Backward compatibility properties for old attribute access
+    @property
+    def agent_id(self) -> str:
+        return self._auth_info.agent_id
+
+    @agent_id.setter
+    def agent_id(self, value: str) -> None:
+        self._auth_info.agent_id = value
+
+    @property
+    def agent_type(self) -> str:
+        return self._auth_info.agent_type
 
 
 class TestVisibilityControls:
@@ -99,7 +122,15 @@ class TestVisibilityControls:
                 return AsyncMock(fetchone=AsyncMock(return_value=session))
 
             if "INSERT INTO messages" in query:
-                session_id, sender, content, visibility, metadata, parent_id = params
+                (
+                    session_id,
+                    sender,
+                    sender_type,
+                    content,
+                    visibility,
+                    metadata,
+                    parent_id,
+                ) = params
                 message_id = message_id_counter[0]
                 message_id_counter[0] += 1
 
@@ -107,6 +138,7 @@ class TestVisibilityControls:
                     "id": message_id,
                     "session_id": session_id,
                     "sender": sender,
+                    "sender_type": sender_type,
                     "content": content,
                     "visibility": visibility,
                     "metadata": metadata,
@@ -223,6 +255,9 @@ class TestVisibilityControls:
                 visibility="public",
                 metadata={"importance": "high"},
             )
+            # Debug output to understand what's failing
+            if message_result.get("success") is not True:
+                print(f"Message creation failed: {message_result}")
             assert message_result["success"] is True
 
             # Bob should be able to see the public message

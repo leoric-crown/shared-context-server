@@ -19,7 +19,7 @@ import os
 import time
 import traceback
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -29,6 +29,11 @@ from fastmcp.resources import Resource
 from pydantic import AnyUrl, Field
 from rapidfuzz import fuzz, process
 
+from .auth import (
+    audit_log_auth_event,
+    auth_manager,
+    extract_agent_context,
+)
 from .database import get_db_connection, initialize_database
 from .models import (
     create_error_response,
@@ -51,17 +56,28 @@ class ConcreteResource(Resource):
     """Concrete Resource implementation for FastMCP."""
 
     def __init__(
-        self, uri: str, name: str, description: str, mime_type: str, text: str
-    ):
-        self.uri = AnyUrl(uri)
-        self.name = name
-        self.description = description
-        self.mime_type = mime_type
-        self.text = text
+        self,
+        uri: str,
+        name: str,
+        description: str,
+        mime_type: str,
+        text: str,
+        **kwargs: Any,
+    ) -> None:
+        # Initialize parent Resource with standard fields
+        super().__init__(
+            uri=AnyUrl(uri),
+            name=name,
+            description=description,
+            mime_type=mime_type,
+            **kwargs,
+        )
+        # Store text content separately
+        self._text = text
 
     async def read(self) -> str:
         """Return the text content of this resource."""
-        return self.text
+        return self._text
 
 
 # Configure logging
@@ -83,27 +99,7 @@ mcp = FastMCP(
 # ============================================================================
 
 
-def extract_agent_context(request_context: dict[str, Any]) -> dict[str, Any]:
-    """
-    Extract agent identity and authentication from MCP context.
-
-    Returns agent_id, permissions, and authentication status.
-    """
-
-    # Extract from MCP context (implementation depends on MCP client)
-    agent_id = request_context.get("agent_id", "unknown")
-    agent_type = request_context.get("agent_type", "generic")
-
-    # Basic authentication (enhanced in Phase 3)
-    api_key = request_context.get("authorization", "").replace("Bearer ", "")
-    authenticated = api_key == os.getenv("API_KEY", "")
-
-    return {
-        "agent_id": agent_id,
-        "agent_type": agent_type,
-        "authenticated": authenticated,
-        "permissions": ["read", "write"] if authenticated else ["read"],
-    }
+# Legacy extract_agent_context function removed - now imported from auth.py
 
 
 async def audit_log(
@@ -131,6 +127,100 @@ async def audit_log(
             datetime.now(timezone.utc).isoformat(),
         ),
     )
+
+
+# ============================================================================
+# PHASE 3: JWT AUTHENTICATION SYSTEM
+# ============================================================================
+
+
+@mcp.tool()
+async def authenticate_agent(
+    _ctx: Context,
+    agent_id: str = Field(description="Agent identifier", min_length=1, max_length=100),
+    agent_type: str = Field(
+        description="Agent type (claude, gemini, custom)", max_length=50
+    ),
+    api_key: str = Field(description="Agent API key for initial authentication"),
+    requested_permissions: list[str] = Field(
+        default=["read", "write"], description="Requested permissions for the agent"
+    ),
+) -> dict[str, Any]:
+    """
+    Authenticate agent and return JWT token with appropriate permissions.
+
+    This tool exchanges an API key for a JWT token with role-based permissions.
+    The JWT token can then be used for all subsequent authenticated requests.
+    """
+    try:
+        # Validate API key against environment or database
+        valid_api_key = os.getenv("API_KEY", "")
+        if not api_key or api_key != valid_api_key:
+            await audit_log_auth_event(
+                "authentication_failed",
+                agent_id,
+                None,
+                {
+                    "agent_type": agent_type,
+                    "error": "invalid_api_key",
+                    "requested_permissions": requested_permissions,
+                },
+            )
+
+            return create_error_response(
+                error="Invalid API key",
+                code="AUTH_FAILED",
+                metadata={"agent_id": agent_id},
+            )
+
+        # Determine granted permissions based on agent type and request
+        granted_permissions = auth_manager.determine_permissions(
+            agent_type, requested_permissions
+        )
+
+        # Generate JWT token
+        token = auth_manager.generate_token(agent_id, agent_type, granted_permissions)
+
+        # Log successful authentication
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=auth_manager.token_expiry
+        )
+        await audit_log_auth_event(
+            "agent_authenticated",
+            agent_id,
+            None,
+            {
+                "agent_type": agent_type,
+                "permissions_granted": granted_permissions,
+                "permissions_requested": requested_permissions,
+                "token_expires_at": expires_at.isoformat(),
+                "auth_method": "jwt",
+            },
+        )
+
+        return {
+            "success": True,
+            "token": token,
+            "agent_id": agent_id,
+            "agent_type": agent_type,
+            "permissions": granted_permissions,
+            "expires_at": expires_at.isoformat(),
+            "token_type": "Bearer",
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except Exception as e:
+        logger.exception("Agent authentication failed")
+        await audit_log_auth_event(
+            "authentication_error",
+            agent_id,
+            None,
+            {"error": str(e), "agent_type": agent_type},
+        )
+
+        return create_error_response(
+            error=f"Authentication failed: {str(e)}", code="AUTHENTICATION_ERROR"
+        )
 
 
 # ============================================================================
@@ -279,13 +369,26 @@ async def add_message(
     """
 
     try:
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract enhanced agent context (includes JWT authentication if available)
+        agent_context = extract_agent_context(ctx)
+        agent_id = agent_context["agent_id"]
+        agent_type = agent_context["agent_type"]
 
-        # Validate visibility level
-        if visibility not in ["public", "private", "agent_only"]:
+        # Validate visibility level (Phase 3 adds admin_only)
+        if visibility not in ["public", "private", "agent_only", "admin_only"]:
             return create_error_response(
                 error=f"Invalid visibility level: {visibility}",
                 code="INVALID_VISIBILITY",
+            )
+
+        # Check permission for admin_only visibility
+        if visibility == "admin_only" and "admin" not in agent_context.get(
+            "permissions", []
+        ):
+            return create_error_response(
+                error="Admin permission required for admin_only visibility",
+                code="PERMISSION_DENIED",
+                metadata={"required_permission": "admin"},
             )
 
         # Input sanitization
@@ -310,16 +413,17 @@ async def add_message(
                     "code": "SESSION_NOT_FOUND",
                 }
 
-            # Insert message
+            # Insert message with sender_type (Phase 3 enhancement)
             cursor = await conn.execute(
                 """
                 INSERT INTO messages
-                (session_id, sender, content, visibility, metadata, parent_message_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (session_id, sender, sender_type, content, visibility, metadata, parent_message_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     session_id,
                     agent_id,
+                    agent_type,
                     content,
                     visibility,
                     metadata_str,
@@ -745,10 +849,12 @@ async def set_memory(
         # Use actual agent_id from context if available, otherwise derive from session
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
-        # Calculate expiration timestamp
+        # Calculate timestamps
+        now_timestamp = datetime.now(timezone.utc)
+        created_at_timestamp = now_timestamp.timestamp()
         expires_at = None
         if expires_in:
-            expires_at = datetime.now(timezone.utc).timestamp() + expires_in
+            expires_at = created_at_timestamp + expires_in
 
         # Serialize value to JSON with error handling
         try:
@@ -764,6 +870,9 @@ async def set_memory(
             }
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
             # Check if session exists (if session-scoped)
             if session_id:
                 cursor = await conn.execute(
@@ -805,8 +914,8 @@ async def set_memory(
             await conn.execute(
                 """
                 INSERT INTO agent_memory
-                (agent_id, session_id, key, value, metadata, expires_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (agent_id, session_id, key, value, metadata, created_at, expires_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_id, session_id, key)
                 DO UPDATE SET
                     value = excluded.value,
@@ -820,8 +929,9 @@ async def set_memory(
                     key,
                     serialized_value,
                     json.dumps(metadata or {}),
+                    created_at_timestamp,  # Explicit created_at to ensure constraint works
                     expires_at,
-                    datetime.now(timezone.utc).isoformat(),
+                    now_timestamp.isoformat(),
                 ),
             )
             await conn.commit()
@@ -876,6 +986,9 @@ async def get_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
             # Clean expired entries first
             await conn.execute(
                 """
@@ -959,6 +1072,9 @@ async def list_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
             # Clean expired entries
             await conn.execute(
                 """
@@ -1128,6 +1244,9 @@ async def get_session_resource(session_id: str) -> Resource:
         )
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
             # Get session information
             cursor = await conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
@@ -1236,6 +1355,9 @@ async def get_agent_memory_resource(agent_id: str) -> Resource:
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
             # Clean expired memory entries
             await conn.execute(
                 """

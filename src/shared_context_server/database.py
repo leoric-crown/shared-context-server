@@ -285,8 +285,8 @@ class DatabaseManager:
             assert row is not None
             version = row[0]
 
-            if version != 1:
-                logger.warning(f"Unexpected schema version: {version}, expected: 1")
+            if version != 2:
+                logger.warning(f"Unexpected schema version: {version}, expected: 2")
 
             logger.info("Database schema validation successful")
 

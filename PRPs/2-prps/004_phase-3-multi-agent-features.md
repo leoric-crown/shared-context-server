@@ -1525,3 +1525,283 @@ Upon completion of Phase 3, update README.md to reflect:
 **Ready for Execution**: Phase 3 multi-agent features implementation
 **Next Phase**: Phase 4 - Production Ready (performance optimization, comprehensive testing, documentation)
 **Coordination**: Direct developer agent assignment for complete Phase 3 execution
+
+---
+
+## Learnings and Gotchas During Execution
+
+This section captures critical insights, challenges, and solutions discovered during the actual implementation of Phase 3 features. These learnings represent hard-won knowledge that future development teams should leverage.
+
+### 🔧 Critical Bug Fixes and Infrastructure Issues
+
+#### Database Schema Evolution Challenges
+**Issue**: TTL constraint timing violations causing test failures
+- **Root Cause**: Database constraint `agent_memory_expires_at_future CHECK (expires_at IS NULL OR expires_at > created_at)` required consistent timestamp calculation
+- **Problem**: Mixing Python `datetime.now()` with SQLite `CURRENT_TIMESTAMP` caused microsecond timing mismatches
+- **Solution**: Always calculate both `created_at` and `expires_at` in Python using the same base timestamp
+- **Key Learning**: ⚠️ **Never mix timestamp sources in database constraints** - use consistent calculation in application code
+
+```python
+# ❌ WRONG: Mixed timestamp sources cause constraint violations
+created_at_timestamp = time.time()  # Python timestamp
+# Later: SQLite uses CURRENT_TIMESTAMP (different time)
+
+# ✅ CORRECT: Consistent timestamp calculation
+now_timestamp = datetime.now(timezone.utc)
+created_at_timestamp = now_timestamp.timestamp()
+expires_at = created_at_timestamp + expires_in
+```
+
+#### Database Parameter Mismatch Issues
+**Issue**: Integration tests failing with "too many values to unpack (expected 7)"
+- **Root Cause**: Schema evolution added `created_at` column but mock databases weren't updated
+- **Impact**: All memory system tests were failing silently
+- **Solution**: Systematic update of all mock database parameter unpacking to handle 8 parameters
+- **Key Learning**: ⚠️ **Schema changes require coordinated test infrastructure updates** - maintain mock/real database parity
+
+### 🎯 Type Safety Implementation Revelations
+
+#### Dynamic Attribute Assignment Anti-Pattern
+**Challenge**: 37 MyPy type errors from dynamic Context attribute assignment
+- **Anti-Pattern**: `ctx.jwt_validated = True`, `ctx.agent_id = "agent_1"`
+- **Impact**: No IDE support, no type safety, hard to debug
+- **Solution**: `AuthInfo` dataclass with `get_auth_info()`/`set_auth_info()` helpers
+- **Key Learning**: ✅ **Use proper abstractions instead of suppressing type errors** - composition over dynamic attributes
+
+```python
+# ❌ ANTI-PATTERN: Dynamic attribute assignment
+ctx.jwt_validated = True
+ctx.agent_id = "agent_1"
+ctx.permissions = ["read", "write"]
+
+# ✅ CLEAN PATTERN: Typed composition
+@dataclass
+class AuthInfo:
+    jwt_validated: bool = False
+    agent_id: str = "unknown"
+    permissions: list[str] = field(default_factory=lambda: ["read"])
+
+set_auth_info(ctx, AuthInfo(jwt_validated=True, agent_id="agent_1"))
+```
+
+#### Coverage Instrumentation Performance Impact
+**Issue**: Performance tests failing only when run with coverage (`--cov`)
+- **Root Cause**: Coverage instrumentation adds 2-10x timing overhead to function calls
+- **Problem**: 10ms performance thresholds unrealistic with coverage active
+- **Solution**: Dynamic threshold adjustment based on coverage detection
+- **Key Learning**: ⚠️ **Performance tests must account for coverage overhead** - adjust thresholds or skip during coverage runs
+
+```python
+# ✅ SOLUTION: Coverage-aware performance testing
+try:
+    import coverage
+    coverage_active = coverage.process_startup.coverage is not None
+except (ImportError, AttributeError):
+    coverage_active = bool(os.environ.get('COV_CORE_SOURCE'))
+
+threshold = 50 if coverage_active else 10  # ms
+```
+
+### 🏗️ Architecture and Design Insights
+
+#### Authentication Context Enhancement
+**Challenge**: Extending FastMCP Context with authentication information
+- **Discovery**: FastMCP Context objects don't support dynamic attributes by design
+- **Anti-Pattern**: Direct attribute assignment causes type safety violations
+- **Best Practice**: Use single `_auth_info` attribute with structured dataclass
+- **Key Learning**: ✅ **Framework constraints guide good architectural decisions** - work with the framework, not against it
+
+#### Database Migration Strategy
+**Issue**: Schema evolution requires careful coordination across components
+- **Challenge**: Adding `sender_type` column affected multiple systems simultaneously
+- **Solution**: Migration scripts + comprehensive test updates + mock database alignment
+- **Best Practice**: Schema changes as coordinated multi-system updates
+- **Key Learning**: 🔄 **Database migrations are multi-system coordination events** - plan accordingly
+
+### 🧪 Testing Infrastructure Revelations
+
+#### Modern Database Testing Approach
+**Anti-Pattern**: Fragile hardcoded mocks that break on schema changes
+**Modern Approach**: Real in-memory SQLite databases for each test
+- **Benefits**: Schema validation, constraint testing, realistic behavior
+- **Performance**: Minimal overhead with proper fixture management
+- **Reliability**: Tests remain valid as database schemas evolve
+- **Key Learning**: ✅ **Real database testing > fragile mocks** for database-heavy applications
+
+```python
+# ✅ MODERN PATTERN: Real database testing
+@pytest.fixture
+async def test_db_manager():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+        db_manager = DatabaseManager(f"sqlite:///{temp_db.name}")
+        await db_manager.initialize()  # Real schema applied
+        yield db_manager
+    Path(temp_db.name).unlink()  # Cleanup
+```
+
+#### Test Infrastructure Crisis Resolution
+**Crisis**: Skipped test masking real implementation problems
+- **Issue**: TTL test was skipped with vague comment about "timing issues"
+- **Reality**: Actual database constraint violations were being hidden
+- **Resolution**: Fixed real database constraint issues instead of skipping tests
+- **Key Learning**: ⚠️ **Never skip tests without fixing root causes** - skipped tests hide real problems
+
+### 🔍 Code Quality and Tooling Learnings
+
+#### Path Handling Modernization
+**Issue**: Legacy `os.path` usage causing lint violations
+- **Modern Pattern**: `pathlib.Path` for all path operations
+- **Benefits**: Type safety, better API, cross-platform compatibility
+- **Migration**: Systematic replacement of `os.path.exists()` → `Path.exists()`
+- **Key Learning**: 📁 **Embrace modern Python patterns** - pathlib is superior to os.path
+
+#### Logging Performance Optimization
+**Issue**: Redundant exception objects in logging statements
+- **Anti-Pattern**: `logger.exception(f"Error: {e}")` - logs exception twice
+- **Optimization**: `logger.exception("Error description")` - exception auto-included
+- **Impact**: Better performance and cleaner logs
+- **Key Learning**: 📝 **Optimize logging patterns** - framework features reduce boilerplate
+
+### 🚀 Development Workflow Optimizations
+
+#### Hot Reload Development Setup
+**Innovation**: Live development server with automatic restart
+- **Feature**: Edit Python → 1-2 second restart → Agents reconnect automatically
+- **Implementation**: `watchdog` + `mcp-proxy` + environment detection
+- **Impact**: Dramatically faster development cycle
+- **Key Learning**: 🔥 **Investment in development tooling pays dividends** - hot reload transforms workflow
+
+#### Multi-Agent Testing Infrastructure
+**Challenge**: Testing multi-agent coordination scenarios
+- **Solution**: Multiple `MockContext` instances with proper `AuthInfo` integration
+- **Pattern**: Behavioral tests simulating real agent interactions
+- **Validation**: Session locking, coordination conflicts, permission isolation
+- **Key Learning**: 🤝 **Multi-agent systems require specialized testing approaches** - simulate real coordination
+
+### 🎯 Performance and Optimization Discoveries
+
+#### RapidFuzz Search Performance
+**Discovery**: RapidFuzz provides 5-10x performance improvement over basic fuzzy search
+- **Implementation**: Search operations consistently under 100ms even with large datasets
+- **Optimization**: Proper result limiting and threshold tuning critical
+- **Key Learning**: ⚡ **Choose performance-optimized libraries** - RapidFuzz vs basic difflib
+
+#### Database Connection Pooling
+**Pattern**: Async context managers for connection lifecycle
+- **Benefits**: Automatic cleanup, connection reuse, error handling
+- **Implementation**: `async with get_db_connection() as conn:`
+- **Performance**: Minimal connection overhead with proper pooling
+- **Key Learning**: 🏊 **Connection pooling is essential** for database-heavy async applications
+
+### 🔐 Security Implementation Insights
+
+#### JWT Authentication Best Practices
+**Implementation**: Comprehensive JWT token management
+- **Key Storage**: Environment-based secret keys with production validation
+- **Token Validation**: Clock skew tolerance, proper claim validation
+- **Permission System**: Role-based access with granular controls
+- **Key Learning**: 🔐 **Security requires comprehensive implementation** - no shortcuts on JWT
+
+#### Audit Logging Architecture
+**Pattern**: Comprehensive audit trail for all security events
+- **Coverage**: Authentication, authorization, data access, system changes
+- **Integrity**: Tamper-proof logging with structured metadata
+- **Performance**: Async logging with proper indexing
+- **Key Learning**: 📋 **Audit logging is architectural** - design in from start, not bolt-on
+
+### 💡 Multi-Agent Coordination Lessons
+
+#### Session Locking Strategy
+**Pattern**: TTL-based locks with heartbeat renewal
+- **Deadlock Prevention**: Automatic lock expiry with heartbeat requirement
+- **Conflict Resolution**: Admin override capabilities for stuck locks
+- **Performance**: Minimal database queries for lock operations
+- **Key Learning**: 🔒 **Distributed locking requires heartbeats** - pure TTL insufficient
+
+#### Agent Presence Management
+**Discovery**: Active agent tracking enables smart coordination
+- **Implementation**: Registration + heartbeat + automatic cleanup
+- **Benefits**: Conflict avoidance, intelligent routing, status awareness
+- **Optimization**: Efficient presence queries with proper indexing
+- **Key Learning**: 👥 **Presence awareness enables intelligent coordination** - worth the infrastructure investment
+
+### 🎨 Code Organization Patterns
+
+#### Agent-Specific Testing
+**Pattern**: Specialized agents for different testing scenarios
+- **TestClient**: Multi-agent behavioral testing
+- **MockContext**: Type-safe authentication simulation
+- **AuthInfo Integration**: Seamless transition from dynamic attributes
+- **Key Learning**: 🧪 **Testing infrastructure should mirror production patterns** - same abstractions everywhere
+
+#### Error Envelope Consistency
+**Pattern**: Consistent error response structure across all tools
+- **Structure**: `{"success": false, "error": "description", "code": "ERROR_TYPE"}`
+- **Benefits**: Client-side error handling, debugging, monitoring
+- **Implementation**: Centralized error creation functions
+- **Key Learning**: 📮 **Consistent error patterns improve developer experience** - standardize early
+
+### 🔄 Migration Strategy Insights
+
+#### Backward Compatibility Approach
+**Strategy**: New abstractions alongside existing patterns
+- **Migration Path**: Add new systems, update incrementally, remove old patterns
+- **Testing**: Parallel validation of old and new approaches
+- **Rollback**: Ability to revert to previous patterns if issues
+- **Key Learning**: 🔄 **Gradual migration > big bang replacement** - reduce risk
+
+#### Documentation Evolution
+**Pattern**: Living documentation that evolves with implementation
+- **Updates**: README status, architecture sections, security documentation
+- **Maintenance**: Keep documentation current with actual implementation
+- **Value**: Documentation as communication tool between phases
+- **Key Learning**: 📚 **Documentation debt compounds** - maintain continuously
+
+### 🎯 Success Metrics and Validation
+
+#### Quality Gate Enforcement
+**Standard**: 0 lint errors, 0 type errors, 70%+ test coverage
+- **Tools**: ruff, mypy, pytest-cov with enforcement
+- **Process**: Quality gates before feature implementation
+- **Value**: Technical debt prevention, maintainable codebase
+- **Key Learning**: ✅ **Quality gates prevent technical debt accumulation** - enforce strictly
+
+#### Test Coverage Evolution
+**Progress**: Systematic improvement from 54% to 70%+ coverage
+- **Focus**: Core modules (server.py, models.py) and new features
+- **Strategy**: Behavioral testing + unit testing + integration testing
+- **Tools**: pytest-cov with HTML reporting for gap analysis
+- **Key Learning**: 📊 **Coverage improvement requires focused effort** - target specific gaps
+
+### 🚀 Development Velocity Insights
+
+#### Agent Coordination Benefits
+**Discovery**: Specialized agents improve development efficiency
+- **Developer Agent**: Deep technical implementation focus
+- **Tester Agent**: Modern testing infrastructure creation
+- **Task Coordination**: Intelligent work distribution
+- **Key Learning**: 🤖 **Specialized AI agents accelerate complex development** - leverage agent strengths
+
+#### Incremental Implementation Value
+**Approach**: Phase-based implementation with validation checkpoints
+- **Benefits**: Risk reduction, incremental validation, rollback capability
+- **Challenges**: Coordination complexity, integration testing
+- **Success**: Each phase builds solid foundation for next
+- **Key Learning**: 🏗️ **Incremental development with quality gates** works for complex systems
+
+---
+
+### 💎 Golden Rules from Implementation
+
+1. **🔐 Security First**: JWT implementation requires comprehensive validation - no shortcuts
+2. **📊 Type Safety Over Suppressions**: Use proper abstractions instead of ignoring type errors
+3. **🧪 Real Database Testing**: In-memory databases > fragile mocks for database applications
+4. **⏱️ Performance Tests Need Coverage Awareness**: Account for instrumentation overhead
+5. **🔄 Schema Changes are Multi-System Events**: Coordinate databases, tests, and mocks together
+6. **🔒 Distributed Systems Need Heartbeats**: Pure TTL locks insufficient for coordination
+7. **📝 Audit Logging is Architectural**: Design in from start, not bolt-on later
+8. **🎯 Quality Gates Prevent Debt**: Enforce lint/type/coverage before implementation
+9. **🤝 Multi-Agent Testing is Specialized**: Different patterns than single-agent systems
+10. **🔥 Investment in Developer Tooling**: Hot reload and quality tools pay dividends
+
+These learnings represent the practical wisdom gained from implementing complex multi-agent authentication and coordination systems. They should guide future development and help teams avoid the pitfalls we encountered.

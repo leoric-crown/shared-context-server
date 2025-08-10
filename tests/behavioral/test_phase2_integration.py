@@ -8,9 +8,10 @@ using the search, memory, and resource systems together.
 # Import testing helpers from conftest.py
 import sys
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -27,116 +28,12 @@ from shared_context_server.server import (
 sys.path.append(str(Path(__file__).parent.parent))
 from conftest import MockContext, call_fastmcp_tool
 
-
-@pytest.fixture
-def mock_database():
-    """Mock database with in-memory storage."""
-    sessions = {}
-    messages = {}
-    agent_memory = {}
-    audit_log = []
-    message_counter = [1]
-
-    async def mock_execute(query, params=()):
-        nonlocal sessions, messages, agent_memory, audit_log, message_counter
-
-        if "INSERT INTO sessions" in query:
-            session_id, purpose, created_by, metadata = params
-            sessions[session_id] = {
-                "id": session_id,
-                "purpose": purpose,
-                "created_by": created_by,
-                "metadata": metadata,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
-                "is_active": True,
-            }
-            return AsyncMock(lastrowid=None)
-
-        if "SELECT * FROM sessions WHERE id = ?" in query:
-            session_id = params[0]
-            session = sessions.get(session_id)
-            return AsyncMock(fetchone=AsyncMock(return_value=session))
-
-        if "INSERT INTO messages" in query:
-            session_id, sender, content, visibility, metadata, parent_id = params
-            msg_id = message_counter[0]
-            message_counter[0] += 1
-            messages[msg_id] = {
-                "id": msg_id,
-                "session_id": session_id,
-                "sender": sender,
-                "content": content,
-                "visibility": visibility,
-                "metadata": metadata,
-                "timestamp": datetime.now().isoformat(),
-                "parent_message_id": parent_id,
-            }
-            return AsyncMock(lastrowid=msg_id)
-
-        if "SELECT * FROM messages" in query and "session_id = ?" in query:
-            session_id = params[0]
-            agent_id = params[1] if len(params) > 1 else None
-            filtered = [
-                msg
-                for msg in messages.values()
-                if (
-                    msg["session_id"] == session_id
-                    and (
-                        msg["visibility"] == "public"
-                        or (agent_id and msg["sender"] == agent_id)
-                    )
-                )
-            ]
-            return AsyncMock(fetchall=AsyncMock(return_value=filtered))
-
-        if "INSERT INTO agent_memory" in query:
-            agent_id, session_id, key, value, metadata, expires_at, updated_at = params
-            memory_key = f"{agent_id}:{session_id or 'global'}:{key}"
-            agent_memory[memory_key] = {
-                "agent_id": agent_id,
-                "session_id": session_id,
-                "key": key,
-                "value": value,
-                "metadata": metadata,
-                "expires_at": expires_at,
-                "created_at": updated_at,
-                "updated_at": updated_at,
-            }
-            return AsyncMock()
-
-        if "SELECT" in query and "agent_memory" in query:
-            agent_id = params[0] if params else None
-            key = params[1] if len(params) > 1 else None
-            results = [
-                entry
-                for entry in agent_memory.values()
-                if (
-                    agent_id
-                    and entry["agent_id"] == agent_id
-                    and (not key or entry["key"] == key)
-                )
-            ]
-            return AsyncMock(
-                fetchone=AsyncMock(return_value=results[0] if results else None),
-                fetchall=AsyncMock(return_value=results),
-            )
-
-        if "INSERT INTO audit_log" in query:
-            audit_log.append(params)
-            return AsyncMock()
-
-        return AsyncMock()
-
-    mock_conn = AsyncMock()
-    mock_conn.execute = mock_execute
-    mock_conn.commit = AsyncMock()
-    return mock_conn
+# Database fixtures are now provided by conftest.py - no need for hardcoded mocks
 
 
 @pytest.mark.asyncio
 @pytest.mark.behavioral
-async def test_multi_agent_search_and_memory_workflow(mock_database):
+async def test_multi_agent_search_and_memory_workflow(test_db_manager):
     """Test complete workflow: agents collaborate using search and memory systems."""
 
     with (
@@ -145,15 +42,22 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         # Agent 1 context
         agent1_ctx = MockContext("agent1_session", "agent_1")
 
         # Agent 1 creates session
-        session_result = await create_session.fn(
-            agent1_ctx,  # Pass context as first parameter
+        session_result = await call_fastmcp_tool(
+            create_session,
+            agent1_ctx,
             purpose="Phase 2 integration test - multi-agent collaboration",
             metadata={"test_type": "behavioral", "phase": "2"},
         )
@@ -162,19 +66,24 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
         session_id = session_result["session_id"]
 
         # Agent 1 adds context to the session
-        message_result = await add_message.fn(
-            agent1_ctx,  # Pass context as first parameter
+        message_result = await call_fastmcp_tool(
+            add_message,
+            agent1_ctx,
             session_id=session_id,
             content="Starting project X: implementing user authentication system with JWT tokens",
             visibility="public",
             metadata={"project": "X", "component": "auth", "priority": "high"},
         )
 
+        # Debug output to understand what's failing
+        if message_result.get("success") is not True:
+            print(f"Message creation failed: {message_result}")
         assert message_result["success"] is True
 
         # Agent 1 stores research in memory
-        memory_result = await set_memory.fn(
-            agent1_ctx,  # Pass context as first parameter
+        memory_result = await call_fastmcp_tool(
+            set_memory,
+            agent1_ctx,
             key="auth_research",
             value={
                 "jwt_libraries": ["PyJWT", "python-jose"],
@@ -186,9 +95,9 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
                 "implementation_status": "researching",
             },
             session_id=session_id,
-            expires_in=None,  # Explicitly pass None to avoid FieldInfo default
+            expires_in=None,
             metadata={"research_date": datetime.now().isoformat()},
-            overwrite=True,  # Explicitly pass default to avoid FieldInfo
+            overwrite=True,
         )
 
         assert memory_result["success"] is True
@@ -196,22 +105,24 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
         # Agent 2 joins and searches for relevant context
         agent2_ctx = MockContext("agent2_session", "agent_2")
 
-        search_result = await search_context.fn(
-            agent2_ctx,  # Pass context as first parameter
+        search_result = await call_fastmcp_tool(
+            search_context,
+            agent2_ctx,
             session_id=session_id,
             query="authentication JWT tokens",
             fuzzy_threshold=70.0,
-            limit=10,  # Explicit default
+            limit=10,
             search_metadata=True,
-            search_scope="all",  # Explicit default
+            search_scope="all",
         )
 
         assert search_result["success"] is True
         # Note: Mock database will return empty results, but the tool should succeed
 
         # Agent 2 adds complementary information
-        agent2_message = await add_message.fn(
-            agent2_ctx,  # Pass context as first parameter
+        agent2_message = await call_fastmcp_tool(
+            add_message,
+            agent2_ctx,
             session_id=session_id,
             content="For JWT implementation, recommend using RS256 algorithm and implementing refresh token rotation",
             visibility="public",
@@ -221,8 +132,9 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
         assert agent2_message["success"] is True
 
         # Verify memory isolation - Agent 2 cannot access Agent 1's memory
-        agent2_memory_access = await get_memory.fn(
-            agent2_ctx,  # Pass context as first parameter
+        agent2_memory_access = await call_fastmcp_tool(
+            get_memory,
+            agent2_ctx,
             key="auth_research",
             session_id=session_id,
         )
@@ -235,7 +147,7 @@ async def test_multi_agent_search_and_memory_workflow(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.behavioral
-async def test_search_performance_with_realistic_data(mock_database):
+async def test_search_performance_with_realistic_data(test_db_manager):
     """Test search performance with realistic multi-agent collaboration data."""
 
     with (
@@ -244,15 +156,22 @@ async def test_search_performance_with_realistic_data(mock_database):
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         # Create test context
         ctx = MockContext("perf_session", "performance_agent")
 
         # Create session
-        session_result = await create_session.fn(
-            ctx,  # Pass context as first parameter
+        session_result = await call_fastmcp_tool(
+            create_session,
+            ctx,
             purpose="Performance testing session",
             metadata={"test_type": "performance"},
         )
@@ -262,14 +181,15 @@ async def test_search_performance_with_realistic_data(mock_database):
         # Test search performance (even with mock database)
         start_time = time.time()
 
-        search_result = await search_context.fn(
-            ctx,  # Pass context as first parameter
+        search_result = await call_fastmcp_tool(
+            search_context,
+            ctx,
             session_id=session_id,
             query="authentication security implementation",
             fuzzy_threshold=60.0,
             limit=10,
-            search_metadata=True,  # Explicit default
-            search_scope="all",  # Explicit default
+            search_metadata=True,
+            search_scope="all",
         )
 
         search_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -285,7 +205,7 @@ async def test_search_performance_with_realistic_data(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.behavioral
-async def test_memory_ttl_workflow(mock_database):
+async def test_memory_ttl_workflow(test_db_manager):
     """Test memory TTL in realistic workflow scenarios."""
 
     with (
@@ -294,60 +214,99 @@ async def test_memory_ttl_workflow(mock_database):
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         ctx = MockContext("ttl_session", "ttl_agent")
 
         # Create session
-        session_result = await create_session.fn(
-            ctx, purpose="TTL testing session", metadata=None
-        )  # Add explicit default
+        session_result = await call_fastmcp_tool(
+            create_session, ctx, purpose="TTL testing session", metadata=None
+        )
 
         session_id = session_result["session_id"]
 
-        # Set temporary memory with short TTL
-        temp_memory_result = await set_memory.fn(
-            ctx,  # Pass context as first parameter
+        # Set temporary memory with reasonable TTL (30 seconds)
+        # Note: Database constraint ensures expires_at > created_at
+        temp_memory_result = await call_fastmcp_tool(
+            set_memory,
+            ctx,
             key="temp_build_status",
             value={"status": "building", "started_at": datetime.now().isoformat()},
-            expires_in=2,  # 2 seconds
+            expires_in=30,  # 30 seconds - respects database constraint
             session_id=session_id,
-            metadata=None,  # Explicit default
-            overwrite=True,  # Explicit default
+            metadata=None,
+            overwrite=True,
         )
 
+        # Debug output to understand what's failing
+        if temp_memory_result.get("success") is not True:
+            print(f"Temp memory creation failed: {temp_memory_result}")
         assert temp_memory_result["success"] is True
         assert temp_memory_result["expires_at"] is not None
 
         # Set permanent memory
-        perm_memory_result = await set_memory.fn(
-            ctx,  # Pass context as first parameter
+        perm_memory_result = await call_fastmcp_tool(
+            set_memory,
+            ctx,
             key="project_config",
             value={"name": "test_project", "version": "1.0.0"},
             session_id=session_id,
-            expires_in=None,  # Explicit default
-            metadata=None,  # Explicit default
-            overwrite=True,  # Explicit default
+            expires_in=None,
+            metadata=None,
+            overwrite=True,
         )
 
         assert perm_memory_result["success"] is True
         assert perm_memory_result["expires_at"] is None
 
-        # List all memory - should see both
-        list_result = await list_memory.fn(
-            ctx, session_id=session_id, prefix=None, limit=50
-        )  # Add explicit defaults
+        # List all memory - should see both (temp and permanent)
+        list_result = await call_fastmcp_tool(
+            list_memory, ctx, session_id=session_id, prefix=None, limit=50
+        )
 
         assert list_result["success"] is True
-        # Note: Mock database implementation will need to be enhanced for full TTL testing
+        assert len(list_result["entries"]) == 2
+
+        # Verify TTL entry has expiration
+        ttl_entries = [
+            e for e in list_result["entries"] if e["key"] == "temp_build_status"
+        ]
+        perm_entries = [
+            e for e in list_result["entries"] if e["key"] == "project_config"
+        ]
+
+        assert len(ttl_entries) == 1, "Should have exactly one TTL entry"
+        assert len(perm_entries) == 1, "Should have exactly one permanent entry"
+
+        assert (
+            ttl_entries[0]["expires_at"] is not None
+        ), "TTL entry should have expiration"
+        assert (
+            perm_entries[0]["expires_at"] is None
+        ), "Permanent entry should not expire"
+
+        # Test that we can retrieve the TTL entry (it should still be valid)
+        get_result = await call_fastmcp_tool(
+            get_memory, ctx, key="temp_build_status", session_id=session_id
+        )
+
+        assert get_result["success"] is True
+        assert get_result["value"]["status"] == "building"
+        assert get_result["expires_at"] is not None
 
         print("✅ Memory TTL workflow test completed successfully")
 
 
 @pytest.mark.asyncio
 @pytest.mark.behavioral
-async def test_agent_memory_isolation(mock_database):
+async def test_agent_memory_isolation(test_db_manager):
     """Test that agent memory is properly isolated between different agents."""
 
     with (
@@ -356,7 +315,13 @@ async def test_agent_memory_isolation(mock_database):
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         # Create two different agents sharing the same session
@@ -397,24 +362,29 @@ async def test_agent_memory_isolation(mock_database):
         assert agent2_access["code"] == "MEMORY_NOT_FOUND"
 
         # Agent 2 stores their own data with same key
-        agent2_memory = await set_memory.fn(
-            agent2_ctx,  # Pass context as first parameter
+        agent2_memory = await call_fastmcp_tool(
+            set_memory,
+            agent2_ctx,
             key="sensitive_config",
             value={"test_database": "test_db", "mock_api": "test-key"},
             session_id=session_id,
-            expires_in=None,  # Explicit default
-            metadata=None,  # Explicit default
-            overwrite=True,  # Explicit default
+            expires_in=None,
+            metadata=None,
+            overwrite=True,
         )
 
         assert agent2_memory["success"] is True
 
         # Each agent should only see their own memory
-        await get_memory.fn(
-            agent1_ctx,  # Pass context as first parameter
+        agent1_memory_check = await call_fastmcp_tool(
+            get_memory,
+            agent1_ctx,
             key="sensitive_config",
             session_id=session_id,
         )
+
+        # Verify Agent 1 can access their own memory
+        assert agent1_memory_check["success"] is True
 
         # Note: Mock implementation would need enhancement for full isolation testing
         # In real implementation, this verifies proper security boundaries
@@ -424,7 +394,7 @@ async def test_agent_memory_isolation(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.behavioral
-async def test_search_visibility_controls(mock_database):
+async def test_search_visibility_controls(test_db_manager):
     """Test search respects message visibility in collaborative scenarios."""
 
     with (
@@ -433,7 +403,13 @@ async def test_search_visibility_controls(mock_database):
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         agent1_ctx = MockContext("visibility_session", "agent_1")

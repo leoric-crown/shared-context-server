@@ -189,7 +189,7 @@ class DevelopmentServer:
             import subprocess
             import sys
 
-            from watchdog.events import FileSystemEventHandler
+            from watchdog.events import FileSystemEvent, FileSystemEventHandler
             from watchdog.observers import Observer
 
             project_root = Path.cwd()
@@ -253,19 +253,35 @@ class DevelopmentServer:
                                 )
                                 if not line:
                                     break
-                                line = line.strip()
-                                if line:
-                                    if (
-                                        "ERROR" in line
-                                        or "CRITICAL" in line
-                                        or "Exception" in line
-                                        or "Traceback" in line
-                                    ):
-                                        logger.error(f"📤 Server: {line}")
-                                    elif "WARNING" in line:
-                                        logger.warning(f"📤 Server: {line}")
-                                    else:
-                                        logger.debug(f"📤 Server: {line}")
+
+                                line = line.rstrip()
+                                if not line:
+                                    continue
+
+                                # Log each line immediately with appropriate level
+                                if any(
+                                    marker in line
+                                    for marker in [
+                                        "ERROR",
+                                        "CRITICAL",
+                                        "Exception",
+                                        "Traceback",
+                                        "Error:",
+                                        "Failed",
+                                        "failed",
+                                    ]
+                                ):
+                                    logger.error(f"📤 Server: {line}")
+                                elif "WARNING" in line:
+                                    logger.warning(f"📤 Server: {line}")
+                                elif any(
+                                    marker in line
+                                    for marker in ["INFO", "Starting", "Listening"]
+                                ):
+                                    logger.info(f"📤 Server: {line}")
+                                else:
+                                    logger.debug(f"📤 Server: {line}")
+
                         except Exception:
                             logger.debug("Subprocess output capture ended")
 
@@ -280,11 +296,18 @@ class DevelopmentServer:
                     self.debounce_time: float = 1.0  # 1 second debounce
                     self.loop = loop
 
-                def on_modified(self, event: object) -> None:
+                def on_modified(self, event: FileSystemEvent) -> None:
                     if event.is_directory:
                         return
 
-                    if not event.src_path.endswith(".py"):
+                    # Convert path to string if it's bytes
+                    path_str = (
+                        event.src_path.decode("utf-8")
+                        if isinstance(event.src_path, bytes)
+                        else str(event.src_path)
+                    )
+
+                    if not path_str.endswith(".py"):
                         return
 
                     import time
@@ -295,7 +318,7 @@ class DevelopmentServer:
 
                     self.last_reload = current_time
 
-                    logger.info(f"🔄 File changed: {event.src_path}")
+                    logger.info(f"🔄 File changed: {path_str}")
                     logger.info("♻️  Restarting server...")
 
                     # Schedule server restart from thread-safe context

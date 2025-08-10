@@ -31,29 +31,227 @@ This guide implements comprehensive testing patterns for the Shared Context MCP 
                      - Utility functions
 ```
 
-## Testing Infrastructure
+## Modern Database Testing Infrastructure
+
+### Overview: Real Database Testing
+
+**🎯 Migration Complete**: We've migrated from fragile hardcoded mock databases to modern real database testing infrastructure. This approach provides better test fidelity, handles schema evolution gracefully, and tests actual database constraints and behaviors.
+
+### Key Benefits
+- **Schema Evolution Support**: Tests remain valid when database schemas change
+- **Real Database Behavior**: Tests actual database constraints, triggers, and SQLite-specific behavior
+- **Better Test Fidelity**: No more gaps between mock behavior and real database behavior
+- **Easier Maintenance**: No need to update multiple hardcoded mocks when schemas change
+- **Isolation**: Each test gets a clean database state with proper test data seeding
 
 ### Test Configuration
 
 ```python
-# conftest.py - Shared pytest fixtures
-import pytest
-import asyncio
-from pathlib import Path
+# conftest.py - Modern database testing fixtures
+import inspect
+import os
 import tempfile
-import json
-from datetime import datetime, timezone
-from fastmcp import FastMCP
-from fastmcp.testing import TestClient
-import aiosqlite
-import aiosqlitepool
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, AsyncGenerator
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for async tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+import pytest
+from pydantic.fields import FieldInfo
+
+from shared_context_server.database import DatabaseManager
+
+@pytest.fixture(scope="function")
+async def test_db_manager():
+    """
+    Create an isolated in-memory SQLite database manager for each test.
+
+    This fixture provides a real database with the complete schema applied,
+    ensuring tests work with actual database constraints and behaviors.
+    Each test gets a clean database state.
+
+    Yields:
+        DatabaseManager: Initialized database manager with applied schema
+    """
+    # Create temporary database file for this test
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
+        temp_db_path = temp_db.name
+
+    try:
+        # Create database manager with temporary database
+        db_manager = DatabaseManager(f"sqlite:///{temp_db_path}")
+
+        # Initialize database with schema
+        await db_manager.initialize()
+
+        # Verify schema is correctly applied
+        async with db_manager.get_connection() as conn:
+            cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
+            version = await cursor.fetchone()
+            assert version and version[0] == 2, f"Expected schema version 2, got {version[0] if version else None}"
+
+        yield db_manager
+
+    finally:
+        # Clean up temporary database file
+        if os.path.exists(temp_db_path):
+            os.unlink(temp_db_path)
+
+@pytest.fixture(scope="function")
+async def test_db_connection(test_db_manager):
+    """
+    Provide a database connection for tests that need direct database access.
+
+    Args:
+        test_db_manager: The test database manager fixture
+
+    Yields:
+        aiosqlite.Connection: Database connection with optimized settings
+    """
+    async with test_db_manager.get_connection() as conn:
+        yield conn
+```
+
+### FastMCP Integration with Real Database Testing
+
+```python
+# Integration pattern for FastMCP tools with real database
+async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
+    """
+    Call a FastMCP tool function with proper default handling.
+
+    This helper automatically extracts Field defaults and merges them
+    with provided kwargs to avoid FieldInfo object issues.
+    """
+    # Get the actual defaults
+    defaults = extract_field_defaults(fastmcp_tool)
+
+    # Merge defaults with provided kwargs (kwargs override defaults)
+    call_args = {**defaults, **kwargs}
+
+    # Call the function with context as first parameter
+    return await fastmcp_tool.fn(ctx, **call_args)
+
+def patch_database_connection(test_db_manager):
+    """
+    Create a patcher for the global get_db_connection function.
+
+    Args:
+        test_db_manager: The test database manager to use
+
+    Returns:
+        unittest.mock.patch context manager
+    """
+    from unittest.mock import patch
+
+    @asynccontextmanager
+    async def mock_get_db_connection():
+        async with test_db_manager.get_connection() as conn:
+            yield conn
+
+    return patch("shared_context_server.server.get_db_connection", mock_get_db_connection)
+```
+
+## Testing Patterns
+
+### 1. Modern FastMCP Tool Testing
+
+**✅ Recommended Approach:**
+
+```python
+@pytest.mark.asyncio
+async def test_message_creation_workflow(test_db_manager):
+    """Test message creation using real database."""
+
+    with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        # Use the real test database instead of hardcoded mocks
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+
+        mock_db_conn.side_effect = mock_get_db_connection
+
+        # Create test context
+        ctx = MockContext("test_session", "test_agent")
+
+        # Test session creation
+        session_result = await call_fastmcp_tool(
+            create_session,
+            ctx,
+            purpose="Test session",
+            metadata={"test": True}
+        )
+
+        assert session_result["success"] is True
+        session_id = session_result["session_id"]
+
+        # Test message creation with proper schema support
+        message_result = await call_fastmcp_tool(
+            add_message,
+            ctx,
+            session_id=session_id,
+            content="Test message",
+            visibility="public",
+            metadata={"agent": "test"}
+        )
+
+        assert message_result["success"] is True
+```
+
+**❌ Old Approach (Don't Use):**
+
+```python
+# DEPRECATED: Hardcoded mock database (fragile and unmaintainable)
+@pytest.fixture
+def mock_database():
+    """DEPRECATED: Don't use hardcoded mocks."""
+    messages = {}
+
+    async def mock_execute(query, params=()):
+        if "INSERT INTO messages" in query:
+            # ❌ This breaks when schema changes!
+            session_id, sender, content, visibility, metadata, parent_id = params  # Only 6 params!
+            # Real schema now has 7 parameters including sender_type
+            # This causes "Error binding parameter 7: type 'FieldInfo' is not supported"
+
+    # ... hardcoded mock implementation
+```
+
+### 2. Migration Guide
+
+If you encounter failing tests with messages like:
+- `"Error binding parameter 7: type 'FieldInfo' is not supported"`
+- Parameter count mismatches in mock databases
+
+**Follow these steps:**
+
+1. **Replace hardcoded mock fixtures** with `test_db_manager`
+2. **Use `call_fastmcp_tool()` instead of `.fn()`** to handle FieldInfo defaults
+3. **Patch database connections** properly using the new pattern
+4. **Remove hardcoded parameter parsing** that expects specific counts
+
+**Example Migration:**
+
+```python
+# Before (broken with schema changes)
+@pytest.mark.asyncio
+async def test_example(mock_database):
+    with patch("server.get_db_connection") as mock_db:
+        mock_db.return_value.__aenter__.return_value = mock_database
+        result = await add_message.fn(ctx, session_id, content, visibility)  # ❌ FieldInfo error
+
+# After (schema evolution safe)
+@pytest.mark.asyncio
+async def test_example(test_db_manager):
+    with patch("server.get_db_connection") as mock_db:
+        @asynccontextmanager
+        async def mock_get_db_connection():
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+        mock_db.side_effect = mock_get_db_connection
+
+        result = await call_fastmcp_tool(add_message, ctx, session_id=session_id, content=content)  # ✅ Works
+```
 
 @pytest.fixture
 async def test_database():
