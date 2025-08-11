@@ -935,6 +935,35 @@ def sanitize_memory_key(key: str) -> str:
     return key
 
 
+def parse_mcp_metadata(metadata: Any) -> dict[str, Any] | None:
+    """
+    Parse metadata parameter from MCP client requests.
+
+    MCP clients may send metadata as JSON strings when using Any type annotations,
+    while direct API calls send dict objects. This function handles both cases.
+
+    Args:
+        metadata: Metadata from MCP request (str, dict, or None)
+
+    Returns:
+        Parsed metadata dictionary or None
+
+    Raises:
+        ValueError: If metadata string is invalid JSON
+    """
+    if metadata is None:
+        return None
+
+    if isinstance(metadata, str):
+        try:
+            return cast("dict[str, Any]", json.loads(metadata))
+        except (json.JSONDecodeError, TypeError) as e:
+            raise ValueError(f"Invalid JSON in metadata parameter: {e}") from e
+
+    # Assume it's already a dict (from direct API calls)
+    return cast("dict[str, Any]", metadata)
+
+
 def validate_json_serializable_value(value: Any) -> Any:
     """
     Validate that a value is JSON serializable.

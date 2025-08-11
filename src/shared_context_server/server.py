@@ -40,6 +40,7 @@ from .auth import (
 )
 from .database import get_db_connection, initialize_database
 from .models import (
+    parse_mcp_metadata,
     sanitize_text_input,
     serialize_metadata,
 )
@@ -295,8 +296,10 @@ async def authenticate_agent(
 async def create_session(
     ctx: Context,
     purpose: str = Field(description="Purpose or description of the session"),
-    metadata: dict[str, Any] | None = Field(
-        default=None, description="Optional metadata for the session"
+    metadata: Any = Field(
+        default=None,
+        description="Optional metadata for the session (JSON object or null)",
+        examples=[{"test": True, "version": 1}, None],
     ),
 ) -> dict[str, Any]:
     """
@@ -318,7 +321,13 @@ async def create_session(
         if not purpose:
             return ERROR_MESSAGE_PATTERNS["purpose_empty"]()  # type: ignore[no-any-return,operator]
 
-        # Serialize metadata
+        # Parse metadata from MCP client (handles both string and dict inputs)
+        try:
+            metadata = parse_mcp_metadata(metadata)
+        except ValueError:
+            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
+
+        # Serialize metadata for database storage
         metadata_str = serialize_metadata(metadata) if metadata else None
 
         async with get_db_connection() as conn:
@@ -410,8 +419,10 @@ async def add_message(
         default="public",
         description="Message visibility: public, private, or agent_only",
     ),
-    metadata: dict[str, Any] | None = Field(
-        default=None, description="Optional message metadata"
+    metadata: Any = Field(
+        default=None,
+        description="Optional message metadata (JSON object or null)",
+        examples=[{"message_type": "test", "priority": "high"}, None],
     ),
     parent_message_id: int | None = Field(
         default=None, description="ID of parent message for threading"
@@ -460,7 +471,13 @@ async def add_message(
         if not content:
             return ERROR_MESSAGE_PATTERNS["content_empty"]()  # type: ignore[no-any-return,operator]
 
-        # Serialize metadata
+        # Parse metadata from MCP client (handles both string and dict inputs)
+        try:
+            metadata = parse_mcp_metadata(metadata)
+        except ValueError:
+            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
+
+        # Serialize metadata for database storage
         metadata_str = serialize_metadata(metadata) if metadata else None
 
         async with get_db_connection() as conn:
@@ -1022,8 +1039,10 @@ async def set_memory(
         ge=1,
         le=86400 * 365,  # Max 1 year
     ),
-    metadata: dict[str, Any] | None = Field(
-        default=None, description="Optional metadata for the memory entry"
+    metadata: Any = Field(
+        default=None,
+        description="Optional metadata for the memory entry (JSON object or null)",
+        examples=[{"source": "user_input", "tags": ["important"]}, None],
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"
@@ -1051,6 +1070,12 @@ async def set_memory(
                 context={"field": "key", "requirement": "non_empty_string"},
                 severity=ErrorSeverity.WARNING,
             )
+
+        # Parse metadata from MCP client (handles both string and dict inputs)
+        try:
+            metadata = parse_mcp_metadata(metadata)
+        except ValueError:
+            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
 
         if len(key) > 255:
             return create_llm_error_response(
