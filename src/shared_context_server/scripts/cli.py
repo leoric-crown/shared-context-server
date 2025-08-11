@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 import sys
 from typing import Any
 
@@ -89,7 +90,12 @@ class ProductionServer:
 
             # Use FastMCP's native Streamable HTTP transport
             # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
-            await server.run_http_async(host=host, port=port)
+            # Configure uvicorn to use the modern websockets Sans-I/O implementation
+            # to avoid deprecation warnings from the legacy websockets API
+            uvicorn_config = {"ws": "websockets-sansio"}
+            await server.run_http_async(
+                host=host, port=port, uvicorn_config=uvicorn_config
+            )
 
         except ImportError:
             logger.exception(
@@ -164,6 +170,28 @@ Claude Desktop Integration:
         "--version", action="version", version="shared-context-server 1.0.0"
     )
 
+    # Add subcommands for Docker workflow
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Client configuration command
+    client_parser = subparsers.add_parser(
+        "client-config", help="Generate MCP client configuration"
+    )
+    client_parser.add_argument(
+        "client",
+        choices=["claude", "cursor", "windsurf", "vscode", "generic"],
+        help="MCP client type",
+    )
+    client_parser.add_argument(
+        "--host", default="localhost", help="Server host (default: localhost)"
+    )
+    client_parser.add_argument(
+        "--port", type=int, default=23456, help="Server port (default: 23456)"
+    )
+
+    # Status command
+    subparsers.add_parser("status", help="Show server status and connected clients")
+
     return parser.parse_args()
 
 
@@ -198,9 +226,114 @@ async def run_server_http(host: str, port: int) -> None:
     await production_server.start_http_server(host, port)
 
 
+def generate_client_config(client: str, host: str, port: int) -> None:
+    """Generate MCP client configuration."""
+    server_url = f"http://{host}:{port}/mcp/"
+
+    configs = {
+        "claude": f"""Add to Claude Code MCP configuration:
+claude mcp add-json shared-context-server '{{
+  "type": "http",
+  "url": "{server_url}"
+}}'""",
+        "cursor": f"""Add to Cursor settings.json:
+{{
+  "mcp.servers": {{
+    "shared-context-server": {{
+      "type": "http",
+      "url": "{server_url}"
+    }}
+  }}
+}}""",
+        "windsurf": f"""Add to Windsurf MCP configuration:
+{{
+  "shared-context-server": {{
+    "type": "http",
+    "url": "{server_url}"
+  }}
+}}""",
+        "vscode": f"""Add to VS Code settings.json:
+{{
+  "mcp.servers": {{
+    "shared-context-server": {{
+      "type": "http",
+      "url": "{server_url}"
+    }}
+  }}
+}}""",
+        "generic": f"""Generic MCP client configuration:
+Type: http
+URL: {server_url}""",
+    }
+
+    print(f"\\n=== {client.upper()} MCP Client Configuration ===\\n")
+    print(configs[client])
+    print(f"\\nServer URL: {server_url}")
+    print("\\nNOTE: Ensure the server is running with 'docker compose up -d'\\n")
+
+
+def show_status(host: str = "localhost", port: int = 23456) -> None:
+    """Show server status."""
+    import requests
+
+    try:
+        # Check health endpoint
+        health_url = f"http://{host}:{port}/health"
+        response = requests.get(health_url, timeout=5)
+
+        if response.status_code == 200:
+            print(f"✅ Server is running at http://{host}:{port}")
+            print(f"✅ Health check: {response.json()}")
+
+            # Try to get MCP endpoint info
+            try:
+                requests.get(f"http://{host}:{port}/mcp/", timeout=5)
+                print("✅ MCP endpoint: Available")
+            except Exception:
+                print("⚠️  MCP endpoint: Not accessible")
+
+        else:
+            print(f"❌ Server health check failed: {response.status_code}")
+
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Cannot connect to server at http://{host}:{port}")
+        print("   Make sure the server is running with 'docker compose up -d'")
+    except Exception as e:
+        print(f"❌ Error checking server status: {e}")
+
+
+def setup_signal_handlers() -> None:
+    """Setup signal handlers for graceful shutdown in containers."""
+
+    def signal_handler(signum: int, _frame: Any) -> None:
+        signal_name = signal.Signals(signum).name
+        logger.info(f"Received signal {signal_name}, initiating graceful shutdown...")
+        sys.exit(0)
+
+    # Handle SIGTERM (Docker stop) and SIGINT (Ctrl+C)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Handle SIGHUP for configuration reload (if needed)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, signal_handler)
+
+
 def main() -> None:
     """Main CLI entry point."""
     args = parse_arguments()
+
+    # Handle subcommands first
+    if hasattr(args, "command") and args.command:
+        if args.command == "client-config":
+            generate_client_config(args.client, args.host, args.port)
+            return
+        if args.command == "status":
+            show_status()
+            return
+
+    # Setup signal handlers for container environments
+    setup_signal_handlers()
 
     # Set logging level
     logging.getLogger().setLevel(getattr(logging, args.log_level))

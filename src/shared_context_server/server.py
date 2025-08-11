@@ -20,14 +20,18 @@ import time
 import traceback
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 import aiosqlite
 from fastmcp import Context, FastMCP
 from fastmcp.resources import Resource
 from pydantic import AnyUrl, Field
 from rapidfuzz import fuzz, process
+from starlette.responses import JSONResponse
 
 from .auth import (
     audit_log_auth_event,
@@ -106,6 +110,50 @@ mcp = FastMCP(
     version=os.getenv("MCP_SERVER_VERSION", "1.0.0"),
     instructions="Centralized memory store for multi-agent collaboration",
 )
+
+
+# ============================================================================
+# HEALTH CHECK ENDPOINT
+# ============================================================================
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(_request: Request) -> JSONResponse:
+    """
+    Health check endpoint for Docker containers and load balancers.
+
+    Returns:
+        JSONResponse: Health status with timestamp
+    """
+    try:
+        # Import here to avoid circular imports
+        from .database import health_check as db_health_check
+
+        # Check database connectivity
+        db_status = await db_health_check()
+
+        return JSONResponse(
+            {
+                "status": "healthy"
+                if db_status["status"] == "healthy"
+                else "unhealthy",
+                "timestamp": db_status["timestamp"],
+                "database": db_status,
+                "server": "shared-context-server",
+                "version": os.getenv("MCP_SERVER_VERSION", "1.0.0"),
+            }
+        )
+    except Exception as e:
+        logger.exception("Health check failed")
+        return JSONResponse(
+            {
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            status_code=500,
+        )
+
 
 # ============================================================================
 # AGENT IDENTITY & AUTHENTICATION

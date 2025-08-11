@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test format lint type pre-commit quality clean
+.PHONY: help install dev test format lint type pre-commit quality clean docker
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -44,3 +44,14 @@ clean: ## Clean caches and temporary files
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Cleanup complete"
+
+docker: ## Full Docker lifecycle: stop → rebuild → up → logs
+	@echo "🐳 Starting Docker lifecycle..."
+	@echo "1/4 Stopping containers..."
+	docker-compose down || true
+	@echo "2/4 Building with --no-cache..."
+	docker-compose build --no-cache
+	@echo "3/4 Starting containers..."
+	docker-compose up -d
+	@echo "4/4 Following logs (Ctrl+C to exit)..."
+	docker-compose logs -f

@@ -243,25 +243,48 @@ class TestSharedContextServerConfig:
 class TestConfigCoverage:
     """Additional tests to improve config coverage."""
 
+    def setup_method(self):
+        """Setup method to clear global config before each test."""
+        import shared_context_server.config
+
+        shared_context_server.config._config = None
+
     def test_get_config_function(self):
         """Test get_config function."""
-        config = get_config()
-        assert isinstance(config, SharedContextServerConfig)
-        assert hasattr(config, "database")
-        assert hasattr(config, "security")
-        assert hasattr(config, "mcp_server")
-        assert hasattr(config, "operational")
-        assert hasattr(config, "development")
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "test-key",
+                "ENVIRONMENT": "development",
+                "CORS_ORIGINS": "http://localhost:3000",
+            },
+            clear=True,
+        ):
+            config = get_config()
+            assert isinstance(config, SharedContextServerConfig)
+            assert hasattr(config, "database")
+            assert hasattr(config, "security")
+            assert hasattr(config, "mcp_server")
+            assert hasattr(config, "operational")
+            assert hasattr(config, "development")
 
     def test_load_config_function(self):
         """Test load_config function."""
-        with patch.dict(os.environ, {"API_KEY": "test-key"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"API_KEY": "test-key", "ENVIRONMENT": "development"},
+            clear=True,
+        ):
             config = load_config()
             assert isinstance(config, SharedContextServerConfig)
 
     def test_config_field_access(self):
         """Test accessing configuration fields."""
-        with patch.dict(os.environ, {"API_KEY": "test-key"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"API_KEY": "test-key", "ENVIRONMENT": "development"},
+            clear=True,
+        ):
             config = load_config()
 
             # Test all major config sections

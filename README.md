@@ -4,6 +4,30 @@ A centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to
 
 ## Quick Setup
 
+### Option 1: Docker (Recommended for Multi-Client Use)
+
+**30-second setup for multiple MCP clients:**
+
+```bash
+# 1. Clone repository
+git clone <repository-url> && cd shared-context-server
+
+# 2. Generate secure keys
+echo "API_KEY=$(openssl rand -base64 32)" > .env
+echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+
+# 3. Start server
+docker compose up -d
+
+# 4. Configure MCP clients
+docker exec shared-context-server shared-context-server client-config claude
+# Follow the output instructions to connect Claude Code, Cursor, Windsurf, etc.
+```
+
+See [DOCKER.md](./DOCKER.md) for complete Docker setup guide.
+
+### Option 2: Development Setup
+
 ### Prerequisites
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager

@@ -167,11 +167,23 @@ class TestInvalidEnvironmentVariableHandling:
 
     def test_invalid_api_key_production_detection(self):
         """Test detection of invalid API key in production environment."""
-        with (
-            patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True),
-            pytest.raises(ValueError, match="Default API_KEY detected in production"),
+        # Test that SharedContextServerConfig validates API key in production
+        from pydantic import ValidationError
+
+        from shared_context_server.config import (
+            DevelopmentConfig,
+            SharedContextServerConfig,
+        )
+
+        with pytest.raises(
+            ValidationError, match="Default API_KEY detected in production"
         ):
-            SecurityConfig(api_key="your-secure-api-key-replace-this-in-production")
+            SharedContextServerConfig(
+                security=SecurityConfig(
+                    api_key="your-secure-api-key-replace-this-in-production"
+                ),
+                development=DevelopmentConfig(environment="production"),
+            )
 
     def test_invalid_cors_origins_handling(self):
         """Test handling of various CORS origins formats."""

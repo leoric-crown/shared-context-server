@@ -207,6 +207,60 @@ class DatabaseManager:
             logger.exception("Failed to apply PRAGMA settings")
             raise DatabaseConnectionError(f"PRAGMA application failed: {e}") from e
 
+    def _load_schema_file(self) -> str:
+        """
+        Load database schema file from multiple possible locations.
+
+        Tries to find database.sql in:
+        1. Project root (development environment)
+        2. Package installation directory (pip installed)
+        3. Site-packages root (wheel installation)
+
+        Returns:
+            Schema file contents as string
+
+        Raises:
+            DatabaseSchemaError: If schema file not found in any location
+        """
+        current_file = Path(__file__).resolve()
+
+        # Location 1: Project root (development)
+        project_root = current_file.parent.parent.parent
+        schema_paths = [
+            project_root / "database.sql",
+            # Location 2: Package directory (installed package)
+            current_file.parent / "database.sql",
+            # Location 3: Site-packages root (wheel installation)
+            Path(current_file.parts[0]).joinpath(*current_file.parts[1:-3])
+            / "database.sql",
+        ]
+
+        # Additional location: Check based on Python path
+        try:
+            import sys
+
+            schema_paths.extend(
+                [
+                    Path(site_pkg) / "database.sql"
+                    for site_pkg in sys.path
+                    if "site-packages" in site_pkg
+                ]
+            )
+        except Exception:
+            pass  # Ignore if we can't detect site-packages
+
+        for schema_path in schema_paths:
+            if schema_path.exists():
+                logger.info(f"Loading schema from: {schema_path}")
+                with open(schema_path) as f:
+                    return f.read()
+
+        # If we get here, schema file not found anywhere
+        tried_paths = "\n".join(str(p) for p in schema_paths)
+        raise DatabaseSchemaError(
+            f"Schema file not found in any of the following locations:\n{tried_paths}"
+        )
+
     def _raise_schema_not_found_error(self, schema_path: Path) -> None:
         """Raise a schema not found error."""
         raise DatabaseSchemaError(f"Schema file not found: {schema_path}")
@@ -229,20 +283,12 @@ class DatabaseManager:
 
             if not await cursor.fetchone():
                 # Schema not applied, read and execute schema file
-                # Resolve schema path relative to project root
-                current_file = Path(__file__).resolve()
-                project_root = current_file.parent.parent.parent
-                schema_path = project_root / "database.sql"
+                # Try multiple possible locations for schema file
+                schema_content = self._load_schema_file()
 
-                if schema_path.exists():
-                    with open(schema_path) as f:
-                        schema_sql = f.read()
-
-                    # Execute schema (split by semicolon for multiple statements)
-                    await conn.executescript(schema_sql)
-                    logger.info("Database schema applied successfully")
-                else:
-                    self._raise_schema_not_found_error(schema_path)
+                # Execute schema (split by semicolon for multiple statements)
+                await conn.executescript(schema_content)
+                logger.info("Database schema applied successfully")
 
         except Exception as e:
             logger.exception("Schema application failed")

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dotenv
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_serializer, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,9 @@ class SecurityConfig(BaseSettings):
     """Security and authentication configuration."""
 
     # API authentication
-    api_key: str = Field(json_schema_extra={"env": "API_KEY"})
+    api_key: str = Field(
+        default="dev-key-change-in-production", json_schema_extra={"env": "API_KEY"}
+    )
     jwt_secret_key: str | None = Field(
         default=None, json_schema_extra={"env": "JWT_SECRET_KEY"}
     )
@@ -203,21 +205,9 @@ class SecurityConfig(BaseSettings):
                 "  3. Restart the server\n"
             )
 
-        # Allow insecure key only in development
-        if v == "your-secure-api-key-replace-this-in-production":
-            import os
-
-            env_mode = os.getenv("ENVIRONMENT", "development")
-            if env_mode == "production":
-                raise ValueError(
-                    "❌ Default API_KEY detected in production!\n\n"
-                    "Security risk: Using the default API_KEY in production.\n"
-                    "Quick fix:\n"
-                    "  1. Generate secure key: openssl rand -base64 32\n"
-                    "  2. Update .env: API_KEY=your-new-secure-key\n"
-                    "  3. Restart the server\n"
-                )
-            logger.warning("Using default API_KEY - only suitable for development")
+        # Note: Production validation for default API key is now handled
+        # in SharedContextServerConfig.validate_api_key_for_environment()
+        # This allows access to the environment configuration.
 
         if len(v) < 32 and v not in [
             "your-secure-api-key-replace-this-in-production",
@@ -339,6 +329,30 @@ class SharedContextServerConfig(BaseSettings):
             kwargs["development"] = DevelopmentConfig()
 
         super().__init__(**kwargs)
+
+    @model_validator(mode="after")
+    def validate_api_key_for_environment(self) -> SharedContextServerConfig:
+        """Validate API key security based on the actual environment configuration."""
+        if (
+            self.security.api_key == "your-secure-api-key-replace-this-in-production"
+            and self.is_production()
+        ):
+            raise ValueError(
+                "❌ Default API_KEY detected in production!\n\n"
+                "Security risk: Using the default API_KEY in production.\n"
+                "Quick fix:\n"
+                "  1. Generate secure key: openssl rand -base64 32\n"
+                "  2. Update .env: API_KEY=your-new-secure-key\n"
+                "  3. Restart the server\n"
+            )
+
+        if (
+            self.security.api_key == "your-secure-api-key-replace-this-in-production"
+            and self.is_development()
+        ):
+            logger.warning("Using default API_KEY - only suitable for development")
+
+        return self
 
     def is_production(self) -> bool:
         """Check if running in production mode."""

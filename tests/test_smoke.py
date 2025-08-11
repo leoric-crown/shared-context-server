@@ -148,7 +148,7 @@ class TestWALSchemaSmoke:
         required_env = {
             "API_KEY": os.environ.get("API_KEY", "test-api-key"),
             "DATABASE_PATH": os.environ.get("DATABASE_PATH", ":memory:"),
-            "ENVIRONMENT": os.environ.get("ENVIRONMENT", "test"),
+            "ENVIRONMENT": os.environ.get("ENVIRONMENT", "testing"),
         }
 
         # Temporarily set environment

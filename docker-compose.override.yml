@@ -1,0 +1,32 @@
+# Docker Compose Development Override
+# Provides development-friendly configuration with hot reload support
+services:
+  shared-context-server:
+    # Development build configuration
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+
+    # Development environment variables
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
+      - DEV_RESET_DATABASE_ON_START=false
+      - ENABLE_PERFORMANCE_MONITORING=true
+
+    # Mount source code for development (optional hot reload)
+    volumes:
+      - shared-context-data:/app/data
+      - shared-context-logs:/app/logs
+      # Uncomment for development with code changes:
+      # - ./src:/app/src:ro
+
+    # Development health check (more frequent)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:23456/health"]
+      interval: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -115,11 +115,20 @@ class TestConfigurationSchemaValidation:
 
     def test_security_config_api_key_validation_default_production(self):
         """Test API key validation with default key in production."""
-        with (
-            patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True),
-            pytest.raises(ValueError, match="Default API_KEY detected in production"),
+        from pydantic import ValidationError
+
+        with pytest.raises(
+            ValidationError, match="Default API_KEY detected in production"
         ):
-            SecurityConfig(api_key="your-secure-api-key-replace-this-in-production")
+            SharedContextServerConfig(
+                database=DatabaseConfig(),
+                mcp_server=MCPServerConfig(),
+                security=SecurityConfig(
+                    api_key="your-secure-api-key-replace-this-in-production"
+                ),
+                operational=OperationalConfig(),
+                development=DevelopmentConfig(environment="production"),
+            )
 
     def test_security_config_api_key_validation_default_development(self):
         """Test API key validation with default key in development."""
@@ -167,18 +176,20 @@ class TestConfigurationConflictDetection:
 
     def test_production_validation_api_key_conflict(self):
         """Test production validation detects API key conflicts."""
-        config = SharedContextServerConfig(
-            database=DatabaseConfig(),
-            mcp_server=MCPServerConfig(),
-            security=SecurityConfig(
-                api_key="your-secure-api-key-replace-this-in-production"
-            ),
-            operational=OperationalConfig(),
-            development=DevelopmentConfig(environment="production"),
-        )
+        from pydantic import ValidationError
 
-        issues = config.validate_production_settings()
-        assert "API_KEY must be changed from default value" in issues
+        with pytest.raises(ValidationError) as exc_info:
+            SharedContextServerConfig(
+                database=DatabaseConfig(),
+                mcp_server=MCPServerConfig(),
+                security=SecurityConfig(
+                    api_key="your-secure-api-key-replace-this-in-production"
+                ),
+                operational=OperationalConfig(),
+                development=DevelopmentConfig(environment="production"),
+            )
+
+        assert "Default API_KEY detected in production" in str(exc_info.value)
 
     def test_production_validation_cors_conflict(self):
         """Test production validation detects CORS conflicts."""
@@ -406,21 +417,37 @@ class TestConfigurationInheritanceAndOverrides:
             env_file.write("API_KEY=custom-env-file-key\n")
             env_file.write("LOG_LEVEL=WARNING\n")
             env_file.write("MCP_SERVER_NAME=custom-server\n")
+            env_file.write(
+                "ENVIRONMENT=development\n"
+            )  # Prevent production validation issues
+            env_file.write(
+                "CORS_ORIGINS=http://localhost:3000\n"
+            )  # Valid CORS for production if needed
             env_file_path = env_file.name
 
         try:
-            # Test that custom env file path parameter works
-            # Note: The current implementation doesn't actually use the env_file parameter
-            # in SharedContextServerConfig, so we test that the function accepts it
-            config = load_config(env_file=env_file_path)
+            # Patch the environment to ensure we're in development mode
+            with patch.dict(
+                os.environ,
+                {
+                    "API_KEY": "custom-env-file-key",
+                    "ENVIRONMENT": "development",
+                    "CORS_ORIGINS": "http://localhost:3000",
+                },
+                clear=True,
+            ):
+                # Test that custom env file path parameter works
+                # Note: The current implementation doesn't actually use the env_file parameter
+                # in SharedContextServerConfig, so we test that the function accepts it
+                config = load_config(env_file=env_file_path)
 
-            # Verify config loads successfully with custom env file parameter
-            assert config is not None
-            assert config.operational.log_level in [
-                "INFO",
-                "WARNING",
-            ]  # Could be default or from file
-            assert config.mcp_server.mcp_server_name is not None
+                # Verify config loads successfully with custom env file parameter
+                assert config is not None
+                assert config.operational.log_level in [
+                    "INFO",
+                    "WARNING",
+                ]  # Could be default or from file
+                assert config.mcp_server.mcp_server_name is not None
         finally:
             Path(env_file_path).unlink(missing_ok=True)
 

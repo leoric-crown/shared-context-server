@@ -30,9 +30,10 @@ dependencies = [
     "httpx>=0.25.0",
     "typing-extensions>=4.0.0",
     "fastapi>=0.100.0",
-    "uvicorn[standard]>=0.23.0",
+    "uvicorn[standard]>=0.35.0",
     "watchdog>=6.0.0",
     "PyJWT>=2.8.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -72,11 +73,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/shared_context_server"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"database.sql" = "database.sql"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/tests",
     "/docs",
+    "/database.sql",
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
@@ -266,6 +271,7 @@ dev = [
     "pytest-cov>=6.2.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.12.8",
+    "types-requests>=2.32.4.20250809",
 ]
 test = [
     "pytest>=8.4.1",

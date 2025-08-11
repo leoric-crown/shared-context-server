@@ -1,0 +1,62 @@
+# Shared Context MCP Server - Docker Compose Configuration
+# Provides easy multi-client setup with persistent database storage
+
+services:
+  shared-context-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shared-context-server:latest
+    container_name: shared-context-server
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-23456}:23456"
+    volumes:
+      - shared-context-data:/app/data
+      - shared-context-logs:/app/logs
+    environment:
+      # Database configuration
+      - DATABASE_PATH=/app/data/chat_history.db
+
+      # Security configuration
+      - API_KEY=${API_KEY:-dev-key-please-change}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-please-change}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+
+      # Server configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HTTP_PORT=23456
+      - HTTP_HOST=0.0.0.0
+
+      # Environment configuration
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:23456/health"]
+      interval: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+volumes:
+  # Persistent storage for database
+  shared-context-data:
+    driver: local
+
+  # Optional: Persistent storage for logs
+  shared-context-logs:
+    driver: local
+
+# Networks (using default bridge network for simplicity)
+# All MCP clients connect to http://localhost:23456/mcp/
