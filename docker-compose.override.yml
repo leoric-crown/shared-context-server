@@ -15,6 +15,7 @@ services:
       - ENVIRONMENT=development
       - DEV_RESET_DATABASE_ON_START=false
       - ENABLE_PERFORMANCE_MONITORING=true
+      - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
     # Mount source code for development (optional hot reload)
     volumes:

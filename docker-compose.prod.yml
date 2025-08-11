@@ -29,6 +29,7 @@ services:
       # Server configuration
       - HTTP_PORT=23456
       - HTTP_HOST=0.0.0.0
+      - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
       # Production optimizations
       - ENABLE_PERFORMANCE_MONITORING=true

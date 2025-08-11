@@ -19,8 +19,10 @@ echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
 chmod 600 .env
 docker compose up -d
 
-# Configure any MCP client
+# Get configuration instructions for any MCP client
 docker exec shared-context-server shared-context-server client-config claude
+
+# Then run the displayed commands in your local terminal to actually configure the client
 ```
 
 ### 🔥 Development Mode (Hot Reload)

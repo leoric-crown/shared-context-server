@@ -29,7 +29,14 @@ import os
 
 from ..config import get_config, load_config
 
-log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+# Check if we're running client-config command to suppress logging
+client_config_mode = len(sys.argv) >= 2 and sys.argv[1] == "client-config"
+
+log_level = (
+    logging.CRITICAL
+    if client_config_mode
+    else getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+)
 
 logging.basicConfig(
     level=log_level,
@@ -182,11 +189,31 @@ Claude Desktop Integration:
         choices=["claude", "cursor", "windsurf", "vscode", "generic"],
         help="MCP client type",
     )
+    # Get default host and port from config/environment
+    try:
+        config = get_config()
+        default_client_port = config.mcp_server.http_port
+        # For client config, we need the externally accessible hostname, not the server bind address
+        default_client_host = os.getenv("CLIENT_HOST") or os.getenv(
+            "MCP_CLIENT_HOST", "localhost"
+        )
+    except Exception:
+        # Fallback to environment variables or hardcoded defaults
+        default_client_host = os.getenv("CLIENT_HOST") or os.getenv(
+            "MCP_CLIENT_HOST", "localhost"
+        )
+        default_client_port = int(os.getenv("HTTP_PORT", "8000"))
+
     client_parser.add_argument(
-        "--host", default="localhost", help="Server host (default: localhost)"
+        "--host",
+        default=default_client_host,
+        help=f"Server host (default: {default_client_host})",
     )
     client_parser.add_argument(
-        "--port", type=int, default=23456, help="Server port (default: 23456)"
+        "--port",
+        type=int,
+        default=default_client_port,
+        help=f"Server port (default: {default_client_port})",
     )
 
     # Status command
@@ -266,15 +293,33 @@ Type: http
 URL: {server_url}""",
     }
 
-    print(f"\\n=== {client.upper()} MCP Client Configuration ===\\n")
+    print(f"\n=== {client.upper()} MCP Client Configuration ===\n")
     print(configs[client])
-    print(f"\\nServer URL: {server_url}")
-    print("\\nNOTE: Ensure the server is running with 'docker compose up -d'\\n")
+    print(f"\nServer URL: {server_url}\n")
 
 
-def show_status(host: str = "localhost", port: int = 23456) -> None:
+def show_status(host: str | None = None, port: int | None = None) -> None:
     """Show server status."""
     import requests
+
+    # Get default host and port from config/environment if not provided
+    if host is None or port is None:
+        try:
+            config = get_config()
+            port = port or config.mcp_server.http_port
+            # For status check, use client-accessible hostname
+            host = (
+                host
+                or os.getenv("CLIENT_HOST")
+                or os.getenv("MCP_CLIENT_HOST", "localhost")
+            )
+        except Exception:
+            host = (
+                host
+                or os.getenv("CLIENT_HOST")
+                or os.getenv("MCP_CLIENT_HOST", "localhost")
+            )
+            port = port or int(os.getenv("HTTP_PORT", "8000"))
 
     try:
         # Check health endpoint
