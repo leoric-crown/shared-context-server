@@ -4,66 +4,55 @@ A centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to
 
 ## Quick Setup
 
-### Option 1: Docker (Recommended for Multi-Client Use)
+Choose your preferred setup method:
 
-**30-second setup for multiple MCP clients:**
+### 🐳 Docker (Recommended - Multi-Client Ready)
 
 ```bash
-# 1. Clone repository
-git clone <repository-url> && cd shared-context-server
-
-# 2. Generate secure keys
+# Generate secure keys and start server
 echo "API_KEY=$(openssl rand -base64 32)" > .env
 echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
-
-# 3. Start server
+chmod 600 .env
 docker compose up -d
 
-# 4. Configure MCP clients
+# Configure any MCP client
 docker exec shared-context-server shared-context-server client-config claude
-# Follow the output instructions to connect Claude Code, Cursor, Windsurf, etc.
 ```
 
-See [DOCKER.md](./DOCKER.md) for complete Docker setup guide.
+### 🔥 Development Mode (Hot Reload)
 
-### Option 2: Development Setup
-
-### Prerequisites
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
-
-### Installation
-
-1. **Clone and setup**:
 ```bash
-git clone https://www.github.com/leoric-crown/shared-context-server.git
-cd shared-context-server
-```
-
-2. **Install with uv**:
-```bash
+# Install dependencies
 uv sync
-```
 
-3. **Setup environment**:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
+# Start development server with hot reload
+uv run python -m shared_context_server.scripts.dev
 
-4. **Run development server**:
-```bash
-# Start with hot reload
-MCP_TRANSPORT=http HTTP_PORT=23456 uv run python -m shared_context_server.scripts.dev
-```
-
-5. **Connect Claude Code**:
-```bash
-# Install mcp-proxy and configure Claude Code
-uv tool install mcp-proxy
+# Connect Claude Code
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
-claude mcp list  # Verify connection
 ```
+
+### ⚡ Direct Run (Production)
+
+```bash
+# Install dependencies
+uv sync
+
+# Setup secure environment
+echo "API_KEY=$(openssl rand -base64 32)" > .env
+echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+chmod 600 .env
+
+# Run server
+uv run shared-context-server --transport http --port 23456
+
+# Connect Claude Code
+claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+```
+
+**Prerequisites**: Python 3.11+ and [uv](https://docs.astral.sh/uv/) package manager
+
+See [DOCKER.md](./DOCKER.md) for complete Docker setup and troubleshooting.
 
 ## Development
 

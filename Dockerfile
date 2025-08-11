@@ -77,8 +77,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 
 # Default environment variables (can be overridden)
 ENV DATABASE_PATH=/app/data/chat_history.db \
-    LOG_LEVEL=INFO \
-    API_KEY=dev-key-please-change-in-production
+    LOG_LEVEL=INFO
 
 # Default command - HTTP transport for multi-client access
 CMD ["shared-context-server", "--transport", "http", "--host", "0.0.0.0", "--port", "23456"]
