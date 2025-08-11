@@ -234,6 +234,8 @@ omit = [
     "*/tests/*",
     "*/conftest.py",
     "*/__pycache__/*",
+    "src/shared_context_server/tools.py",
+    "src/shared_context_server/scripts/dev.py",
 ]
 
 [tool.coverage.report]

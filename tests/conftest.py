@@ -269,7 +269,10 @@ async def seed_test_data(test_db_connection):
 
 def patch_database_connection(test_db_manager):
     """
-    Create a patcher for the global get_db_connection function.
+    Create a comprehensive patcher for all get_db_connection function usages.
+
+    This patches the source function in the database module to ensure
+    all imports and usages get the test database connection.
 
     Args:
         test_db_manager: The test database manager to use
@@ -284,9 +287,34 @@ def patch_database_connection(test_db_manager):
         async with test_db_manager.get_connection() as conn:
             yield conn
 
-    return patch(
+    # Patch the source function in database module (most comprehensive)
+    database_patch = patch(
+        "shared_context_server.database.get_db_connection", mock_get_db_connection
+    )
+
+    # Also patch the imported references for extra safety
+    server_patch = patch(
         "shared_context_server.server.get_db_connection", mock_get_db_connection
     )
+    auth_patch = patch(
+        "shared_context_server.auth.get_db_connection", mock_get_db_connection
+    )
+
+    # Return a context manager that applies all patches
+    from contextlib import ExitStack
+
+    class MultiPatch:
+        def __enter__(self):
+            self.stack = ExitStack()
+            self.stack.enter_context(database_patch)  # Primary patch
+            self.stack.enter_context(server_patch)  # Safety patch
+            self.stack.enter_context(auth_patch)  # Safety patch
+            return self
+
+        def __exit__(self, *args):
+            self.stack.__exit__(*args)
+
+    return MultiPatch()
 
 
 # Example usage patterns for common tools:

@@ -1,5 +1,9 @@
 MARKET_RESEARCH*.md
 STRATEGIC_VISION*.md
+UAT_FINDINGS*.md
+SECURITY_VALIDATION_REPORT*.md
+
+:memory:
 
 # Python
 __pycache__/

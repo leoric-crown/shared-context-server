@@ -216,6 +216,52 @@ class TestVisibilityControls:
                 filtered_messages.sort(key=lambda x: x["timestamp"])
                 return AsyncMock(fetchall=AsyncMock(return_value=filtered_messages))
 
+            if "SELECT COUNT(*)" in query:
+                # Handle count queries for pagination
+                session_id = params[0]
+
+                # Apply same filtering logic as SELECT * query to get accurate count
+                agent_id = None
+                visibility_filter = None
+
+                # Determine query type by analyzing the SQL and parameters
+                if "visibility = 'public'" in query and len(params) == 3:
+                    visibility_filter = "public"
+                elif (
+                    "visibility = 'private'" in query
+                    or "visibility = 'agent_only'" in query
+                ) and len(params) == 4:
+                    agent_id = params[1]
+                    if "private" in query:
+                        visibility_filter = "private"
+                    elif "agent_only" in query:
+                        visibility_filter = "agent_only"
+                elif len(params) >= 2:
+                    agent_id = params[1]
+
+                # Count messages matching the criteria
+                count = 0
+                for msg in messages.values():
+                    if msg["session_id"] == session_id:
+                        should_include = False
+
+                        # Apply normal visibility rules
+                        if msg["visibility"] == "public" or (
+                            msg["visibility"] == "private" and msg["sender"] == agent_id
+                        ):
+                            should_include = True
+                        elif msg["visibility"] == "agent_only":
+                            should_include = msg["sender"] == agent_id
+
+                        # Apply visibility_filter if provided
+                        if should_include and visibility_filter:
+                            should_include = msg["visibility"] == visibility_filter
+
+                        if should_include:
+                            count += 1
+
+                return AsyncMock(fetchone=AsyncMock(return_value=[count]))
+
             if "INSERT INTO audit_log" in query:
                 return AsyncMock()
 
@@ -264,6 +310,10 @@ class TestVisibilityControls:
             bob_messages = await call_fastmcp_tool(
                 get_messages, bob_context, session_id=session_id
             )
+
+            # Debug output to understand what's failing
+            if bob_messages.get("success") is not True:
+                print(f"Bob get_messages failed: {bob_messages}")
 
             assert bob_messages["success"] is True
             assert len(bob_messages["messages"]) == 1

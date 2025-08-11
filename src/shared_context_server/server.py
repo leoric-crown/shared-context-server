@@ -185,18 +185,21 @@ async def authenticate_agent(
         expires_at = datetime.now(timezone.utc) + timedelta(
             seconds=auth_manager.token_expiry
         )
-        await audit_log_auth_event(
-            "agent_authenticated",
-            agent_id,
-            None,
-            {
-                "agent_type": agent_type,
-                "permissions_granted": granted_permissions,
-                "permissions_requested": requested_permissions,
-                "token_expires_at": expires_at.isoformat(),
-                "auth_method": "jwt",
-            },
-        )
+        try:
+            await audit_log_auth_event(
+                "agent_authenticated",
+                agent_id,
+                None,
+                {
+                    "agent_type": agent_type,
+                    "permissions_granted": granted_permissions,
+                    "permissions_requested": requested_permissions,
+                    "token_expires_at": expires_at.isoformat(),
+                    "auth_method": "jwt",
+                },
+            )
+        except Exception as audit_error:
+            logger.warning(f"Failed to audit successful authentication: {audit_error}")
 
         return {
             "success": True,
@@ -211,12 +214,15 @@ async def authenticate_agent(
 
     except Exception as e:
         logger.exception("Agent authentication failed")
-        await audit_log_auth_event(
-            "authentication_error",
-            agent_id,
-            None,
-            {"error": str(e), "agent_type": agent_type},
-        )
+        try:
+            await audit_log_auth_event(
+                "authentication_error",
+                agent_id,
+                None,
+                {"error": str(e), "agent_type": agent_type},
+            )
+        except Exception as audit_error:
+            logger.warning(f"Failed to audit authentication error: {audit_error}")
 
         return create_error_response(
             error=f"Authentication failed: {str(e)}", code="AUTHENTICATION_ERROR"
@@ -320,11 +326,12 @@ async def get_session(
                 SELECT * FROM messages
                 WHERE session_id = ?
                 AND (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?))
+                     (visibility = 'private' AND sender = ?) OR
+                     (visibility = 'agent_only' AND sender = ?))
                 ORDER BY timestamp DESC
                 LIMIT 50
             """,
-                (session_id, agent_id),
+                (session_id, agent_id, agent_id),
             )
 
             messages = await cursor.fetchall()
@@ -475,17 +482,34 @@ async def get_messages(
     """
 
     try:
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        from .auth import get_auth_info
+
+        auth_info = get_auth_info(ctx)
+        agent_id = auth_info.agent_id
 
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             conn.row_factory = aiosqlite.Row
+
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return create_error_response(
+                    error="Session not found",
+                    code="SESSION_NOT_FOUND",
+                    metadata={"session_id": session_id},
+                )
 
             # Build query with visibility controls
             where_conditions = ["session_id = ?"]
             params: list[Any] = [session_id]
 
             # Agent-specific visibility filtering
+            agent_context = extract_agent_context(ctx)
+            has_admin_permission = "admin" in agent_context.get("permissions", [])
+
             if visibility_filter:
                 # Apply specific visibility filter with agent access rules
                 if visibility_filter == "public":
@@ -496,16 +520,33 @@ async def get_messages(
                 elif visibility_filter == "agent_only":
                     where_conditions.append("visibility = 'agent_only' AND sender = ?")
                     params.append(agent_id)
+                elif visibility_filter == "admin_only" and has_admin_permission:
+                    where_conditions.append("visibility = 'admin_only'")
             else:
-                # Default visibility rules: public + own private/agent_only
+                # Default visibility rules: public + own private/agent_only + admin_only (if admin)
                 visibility_conditions = [
                     "visibility = 'public'",
                     "(visibility = 'private' AND sender = ?)",
                     "(visibility = 'agent_only' AND sender = ?)",
                 ]
                 params.extend([agent_id, agent_id])
+
+                # Add admin_only messages if agent has admin permission
+                if has_admin_permission:
+                    visibility_conditions.append("visibility = 'admin_only'")
+
                 where_conditions.append(f"({' OR '.join(visibility_conditions)})")
 
+            # First, get total count for pagination
+            count_query = f"""
+                SELECT COUNT(*) FROM messages
+                WHERE {" AND ".join(where_conditions)}
+            """
+            cursor = await conn.execute(count_query, params)
+            count_row = await cursor.fetchone()
+            total_count = count_row[0] if count_row else 0
+
+            # Then get the actual messages
             query = f"""
                 SELECT * FROM messages
                 WHERE {" AND ".join(where_conditions)}
@@ -522,7 +563,8 @@ async def get_messages(
                 "success": True,
                 "messages": messages,
                 "count": len(messages),
-                "has_more": len(messages) == limit,
+                "total_count": total_count,
+                "has_more": offset + limit < total_count,
             }
 
     except Exception as e:
@@ -590,7 +632,7 @@ async def search_context(
 
             # Add recency filter to reduce scan scope
             where_conditions.append(
-                f"timestamp >= datetime('now', '-{recent_hours} hours')"
+                f"datetime(timestamp) >= datetime('now', '-{recent_hours} hours')"
             )
 
             # Apply visibility controls
@@ -602,8 +644,10 @@ async def search_context(
             else:  # all accessible messages
                 where_conditions.append("""
                     (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?))
+                     (visibility = 'private' AND sender = ?) OR
+                     (visibility = 'agent_only' AND sender = ?))
                 """)
+                params.append(agent_id)
                 params.append(agent_id)
 
             cursor = await conn.execute(
@@ -653,23 +697,32 @@ async def search_context(
                 searchable_items.append((searchable_text, msg))
 
             # Use RapidFuzz for high-performance matching
-            choices = [(item[0], idx) for idx, item in enumerate(searchable_items)]
+            # Extract just the searchable text for simpler processing
+            searchable_texts = [item[0] for item in searchable_items]
 
             # RapidFuzz process.extract for optimal performance
             matches = process.extract(
                 query.lower(),
-                choices,
-                scorer=fuzz.WRatio,  # Best balance of speed and accuracy
+                searchable_texts,
+                scorer=fuzz.partial_ratio,  # Better for finding substrings in search context
                 limit=limit,
                 score_cutoff=fuzzy_threshold,
-                processor=lambda x: x[0],
             )
 
             # Build optimized results
             results = []
             for match in matches:
-                _, score, choice_idx = match
-                message = searchable_items[choice_idx][1]
+                match_text, score, _ = match
+
+                # Find the corresponding message by matching the searchable text
+                message = None
+                for text, msg in searchable_items:
+                    if text == match_text:
+                        message = msg
+                        break
+
+                if not message:
+                    continue
 
                 # Parse metadata for result
                 metadata = {}
@@ -752,16 +805,32 @@ async def search_by_sender(
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
+
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return create_error_response(
+                    error="Session not found",
+                    code="SESSION_NOT_FOUND",
+                    metadata={"session_id": session_id},
+                )
+
             cursor = await conn.execute(
                 """
                 SELECT * FROM messages
                 WHERE session_id = ? AND sender = ?
                 AND (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?))
+                     (visibility = 'private' AND sender = ?) OR
+                     (visibility = 'agent_only' AND sender = ?))
                 ORDER BY timestamp DESC
                 LIMIT ?
             """,
-                (session_id, sender, agent_id, limit),
+                (session_id, sender, agent_id, agent_id, limit),
             )
 
             messages_rows = await cursor.fetchall()
@@ -794,17 +863,34 @@ async def search_by_timerange(
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
         async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
+
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return create_error_response(
+                    error="Session not found",
+                    code="SESSION_NOT_FOUND",
+                    metadata={"session_id": session_id},
+                )
+
             cursor = await conn.execute(
                 """
                 SELECT * FROM messages
                 WHERE session_id = ?
-                AND timestamp >= ? AND timestamp <= ?
+                AND datetime(timestamp) >= datetime(?)
+                AND datetime(timestamp) <= datetime(?)
                 AND (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?))
+                     (visibility = 'private' AND sender = ?) OR
+                     (visibility = 'agent_only' AND sender = ?))
                 ORDER BY timestamp ASC
                 LIMIT ?
             """,
-                (session_id, start_time, end_time, agent_id, limit),
+                (session_id, start_time, end_time, agent_id, agent_id, limit),
             )
 
             messages_rows = await cursor.fetchall()
@@ -1259,7 +1345,7 @@ notification_manager = ResourceNotificationManager()
 
 
 @mcp.resource("session://{session_id}")
-async def get_session_resource(session_id: str) -> Resource:
+async def get_session_resource(session_id: str, ctx: Context) -> Resource:
     """
     Provide session as an MCP resource with real-time updates.
 
@@ -1267,11 +1353,14 @@ async def get_session_resource(session_id: str) -> Resource:
     """
 
     try:
-        # Note: In a full implementation, agent_id would be extracted from MCP context
-        # For Phase 2, we'll use a simplified approach
-        agent_id = (
-            "current_agent"  # This would be extracted from MCP context in production
-        )
+        # Extract agent_id from MCP context (Phase 3 implementation)
+        agent_id = getattr(ctx, "agent_id", None)
+        if agent_id is None:
+            try:
+                agent_id = f"agent_{ctx.session_id[:8]}"
+            except (ValueError, AttributeError):
+                # Fallback for test environment or contexts without request
+                agent_id = "current_agent"
 
         async with get_db_connection() as conn:
             conn.row_factory = (
@@ -1293,10 +1382,11 @@ async def get_session_resource(session_id: str) -> Resource:
                 SELECT * FROM messages
                 WHERE session_id = ?
                 AND (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?))
+                     (visibility = 'private' AND sender = ?) OR
+                     (visibility = 'agent_only' AND sender = ?))
                 ORDER BY timestamp ASC
             """,
-                (session_id, agent_id),
+                (session_id, agent_id, agent_id),
             )
 
             messages = list(await cursor.fetchall())
@@ -1367,7 +1457,7 @@ async def get_session_resource(session_id: str) -> Resource:
 
 
 @mcp.resource("agent://{agent_id}/memory")
-async def get_agent_memory_resource(agent_id: str) -> Resource:
+async def get_agent_memory_resource(agent_id: str, ctx: Context) -> Resource:
     """
     Provide agent memory as a resource with security controls.
 
@@ -1375,8 +1465,14 @@ async def get_agent_memory_resource(agent_id: str) -> Resource:
     """
 
     try:
-        # Note: In production, this would be extracted from proper MCP authentication
-        requesting_agent = "current_agent"  # Simplified for Phase 2
+        # Extract requesting agent from MCP context (Phase 3 implementation)
+        requesting_agent = getattr(ctx, "agent_id", None)
+        if requesting_agent is None:
+            try:
+                requesting_agent = f"agent_{ctx.session_id[:8]}"
+            except (ValueError, AttributeError):
+                # Fallback for test environment or contexts without request
+                requesting_agent = "current_agent"
 
         # Security check: only allow agents to access their own memory
         if requesting_agent != agent_id:

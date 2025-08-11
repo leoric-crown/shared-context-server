@@ -206,14 +206,39 @@ class TestGetMessages:
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
-            mock_cursor = AsyncMock()
-            mock_cursor.fetchall.return_value = mock_message_rows
-            mock_conn.execute.return_value = mock_cursor
+
+            # Set up row factory like real connection
+            mock_conn.row_factory = None
+
+            # Track execute call count to return different results for count vs select
+            call_count = [0]
+
+            async def mock_execute(query, params):
+                call_count[0] += 1
+                mock_cursor = AsyncMock()
+
+                if "SELECT COUNT(*)" in query:
+                    # First call: COUNT query - return count of messages (3)
+                    mock_cursor.fetchone.return_value = [3]
+                    return mock_cursor
+                if "SELECT id FROM sessions" in query:
+                    # Session existence check - return valid session
+                    mock_cursor.fetchone.return_value = {"id": "session_abc123"}
+                    return mock_cursor
+                # Second call: SELECT query - return message rows
+                mock_cursor.fetchall.return_value = mock_message_rows
+                return mock_cursor
+
+            mock_conn.execute.side_effect = mock_execute
             mock_db_conn.return_value.__aenter__.return_value = mock_conn
 
             result = await call_fastmcp_tool(
                 get_messages, mock_context, session_id="session_abc123"
             )
+
+            # Debug output to understand what's failing
+            if result.get("success") is not True:
+                print(f"get_messages failed: {result}")
 
             assert result["success"] is True
             assert result["count"] == 3
@@ -229,11 +254,29 @@ class TestGetMessages:
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
-            mock_cursor = AsyncMock()
-            # Simulate full page (limit reached)
+
+            # Set up row factory like real connection
+            mock_conn.row_factory = None
+
+            # Track execute call count to return different results for count vs select
             limited_rows = mock_message_rows[:2]
-            mock_cursor.fetchall.return_value = limited_rows
-            mock_conn.execute.return_value = mock_cursor
+
+            async def mock_execute(query, params):
+                mock_cursor = AsyncMock()
+
+                if "SELECT COUNT(*)" in query:
+                    # COUNT query - return total count (3), but only 2 will be returned due to limit
+                    mock_cursor.fetchone.return_value = [3]
+                    return mock_cursor
+                if "SELECT id FROM sessions" in query:
+                    # Session existence check - return valid session
+                    mock_cursor.fetchone.return_value = {"id": "session_abc123"}
+                    return mock_cursor
+                # SELECT query - return limited rows for pagination test
+                mock_cursor.fetchall.return_value = limited_rows
+                return mock_cursor
+
+            mock_conn.execute.side_effect = mock_execute
             mock_db_conn.return_value.__aenter__.return_value = mock_conn
 
             result = await call_fastmcp_tool(
@@ -287,9 +330,26 @@ class TestGetMessages:
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
-            mock_cursor = AsyncMock()
-            mock_cursor.fetchall.return_value = mixed_messages
-            mock_conn.execute.return_value = mock_cursor
+
+            # Set up row factory like real connection
+            mock_conn.row_factory = None
+
+            async def mock_execute(query, params):
+                mock_cursor = AsyncMock()
+
+                if "SELECT COUNT(*)" in query:
+                    # COUNT query - return count of mixed messages (2)
+                    mock_cursor.fetchone.return_value = [2]
+                    return mock_cursor
+                if "SELECT id FROM sessions" in query:
+                    # Session existence check - return valid session
+                    mock_cursor.fetchone.return_value = {"id": "session_abc123"}
+                    return mock_cursor
+                # SELECT query - return mixed messages
+                mock_cursor.fetchall.return_value = mixed_messages
+                return mock_cursor
+
+            mock_conn.execute.side_effect = mock_execute
             mock_db_conn.return_value.__aenter__.return_value = mock_conn
 
             result = await call_fastmcp_tool(
@@ -330,9 +390,26 @@ class TestGetMessages:
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
-            mock_cursor = AsyncMock()
-            mock_cursor.fetchall.return_value = public_messages
-            mock_conn.execute.return_value = mock_cursor
+
+            # Set up row factory like real connection
+            mock_conn.row_factory = None
+
+            async def mock_execute(query, params):
+                mock_cursor = AsyncMock()
+
+                if "SELECT COUNT(*)" in query:
+                    # COUNT query - return count of public messages (1)
+                    mock_cursor.fetchone.return_value = [1]
+                    return mock_cursor
+                if "SELECT id FROM sessions" in query:
+                    # Session existence check - return valid session
+                    mock_cursor.fetchone.return_value = {"id": "session_abc123"}
+                    return mock_cursor
+                # SELECT query - return public messages only
+                mock_cursor.fetchall.return_value = public_messages
+                return mock_cursor
+
+            mock_conn.execute.side_effect = mock_execute
             mock_db_conn.return_value.__aenter__.return_value = mock_conn
 
             result = await call_fastmcp_tool(
