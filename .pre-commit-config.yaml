@@ -38,7 +38,7 @@ repos:
 
 # Configuration
 default_stages: [pre-commit]
-fail_fast: true  # Stop on first failure for faster feedback
+fail_fast: false
 minimum_pre_commit_version: 3.0.0
 
 # CI configuration

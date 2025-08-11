@@ -91,8 +91,11 @@ class TestCreateSession:
             )
 
             assert result["success"] is False
-            assert result["code"] == "SESSION_CREATION_FAILED"
-            assert "Database connection failed" in result["error"]
+            assert result["code"] in ["SESSION_CREATION_FAILED", "DATABASE_UNAVAILABLE"]
+            assert (
+                "database temporarily unavailable" in result["error"].lower()
+                or "database connection failed" in result["error"].lower()
+            )
 
 
 class TestGetSession:

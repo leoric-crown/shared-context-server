@@ -276,13 +276,34 @@ class TestBackgroundTaskSystem:
         """Test server lifecycle helper functions."""
         from shared_context_server.server import (
             initialize_server,
+            lifespan,
             server,
             shutdown_server,
         )
 
-        # Test initialize_server
-        initialized_server = await initialize_server()
-        assert initialized_server is server
+        # Test server lifecycle using proper lifespan context manager
+        # This ensures background tasks are properly created and cleaned up
+        async with lifespan():
+            # Test that server is available during lifespan
+            assert server is not None
+
+        # Test direct initialize_server function (mocked to avoid background tasks)
+        with (
+            patch(
+                "shared_context_server.utils.performance.start_performance_monitoring"
+            ) as mock_perf,
+            patch(
+                "shared_context_server.utils.caching.start_cache_maintenance"
+            ) as mock_cache,
+            patch("asyncio.create_task") as mock_task,
+        ):
+            # Mock the background task creation to prevent actual tasks from running
+            mock_perf.return_value = AsyncMock()
+            mock_cache.return_value = AsyncMock()
+            mock_task.return_value = AsyncMock()
+
+            initialized_server = await initialize_server()
+            assert initialized_server is server
 
         # Test shutdown_server (should complete without error)
         try:
@@ -352,7 +373,10 @@ class TestBackgroundTaskSystem:
             server_with_db.get_memory, ctx, key="short_lived"
         )
         assert result["success"] is False
-        assert "not found or expired" in result["error"]
+        assert (
+            "not found" in result["error"].lower()
+            or "expired" in result["error"].lower()
+        )
 
         # Verify permanent entry still exists
         result = await call_fastmcp_tool(

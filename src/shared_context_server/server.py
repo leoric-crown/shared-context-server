@@ -36,10 +36,23 @@ from .auth import (
 )
 from .database import get_db_connection, initialize_database
 from .models import (
-    create_error_response,
     sanitize_text_input,
     serialize_metadata,
 )
+from .utils.caching import (
+    cache_manager,
+    generate_search_cache_key,
+    generate_session_cache_key,
+    invalidate_agent_memory_cache,
+    invalidate_session_cache,
+)
+from .utils.llm_errors import (
+    ERROR_MESSAGE_PATTERNS,
+    ErrorSeverity,
+    create_llm_error_response,
+    create_system_error,
+)
+from .utils.performance import get_performance_metrics_dict
 
 
 def _raise_session_not_found_error(session_id: str) -> None:
@@ -167,11 +180,7 @@ async def authenticate_agent(
                 },
             )
 
-            return create_error_response(
-                error="Invalid API key",
-                code="AUTH_FAILED",
-                metadata={"agent_id": agent_id},
-            )
+            return ERROR_MESSAGE_PATTERNS["invalid_api_key"](agent_id)  # type: ignore[no-any-return,operator]
 
         # Determine granted permissions based on agent type and request
         granted_permissions = auth_manager.determine_permissions(
@@ -224,8 +233,8 @@ async def authenticate_agent(
         except Exception as audit_error:
             logger.warning(f"Failed to audit authentication error: {audit_error}")
 
-        return create_error_response(
-            error=f"Authentication failed: {str(e)}", code="AUTHENTICATION_ERROR"
+        return create_system_error(
+            "authenticate_agent", "authentication_service", temporary=True
         )
 
 
@@ -259,9 +268,7 @@ async def create_session(
         # Input sanitization
         purpose = sanitize_text_input(purpose)
         if not purpose:
-            return create_error_response(
-                error="Purpose cannot be empty after sanitization", code="INVALID_INPUT"
-            )
+            return ERROR_MESSAGE_PATTERNS["purpose_empty"]()  # type: ignore[no-any-return,operator]
 
         # Serialize metadata
         metadata_str = serialize_metadata(metadata) if metadata else None
@@ -286,10 +293,10 @@ async def create_session(
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create session")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="SESSION_CREATION_FAILED")
+        return create_system_error("create_session", "database", temporary=True)
 
 
 @mcp.tool()
@@ -314,11 +321,7 @@ async def get_session(
             session = await cursor.fetchone()
 
             if not session:
-                return {
-                    "success": False,
-                    "error": "Session not found",
-                    "code": "SESSION_NOT_FOUND",
-                }
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Get accessible messages
             cursor = await conn.execute(
@@ -344,10 +347,10 @@ async def get_session(
                 "message_count": len(message_list),
             }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get session")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="SESSION_RETRIEVAL_FAILED")
+        return create_system_error("get_session", "database", temporary=True)
 
 
 @mcp.tool()
@@ -383,27 +386,31 @@ async def add_message(
 
         # Validate visibility level (Phase 3 adds admin_only)
         if visibility not in ["public", "private", "agent_only", "admin_only"]:
-            return create_error_response(
+            return create_llm_error_response(
                 error=f"Invalid visibility level: {visibility}",
                 code="INVALID_VISIBILITY",
+                suggestions=[
+                    "Use one of the supported visibility levels",
+                    "Available options: 'public', 'private', 'agent_only', 'admin_only'",
+                    "Check the API documentation for visibility rules",
+                ],
+                context={
+                    "provided_visibility": visibility,
+                    "allowed_values": ["public", "private", "agent_only", "admin_only"],
+                },
+                severity=ErrorSeverity.WARNING,
             )
 
         # Check permission for admin_only visibility
         if visibility == "admin_only" and "admin" not in agent_context.get(
             "permissions", []
         ):
-            return create_error_response(
-                error="Admin permission required for admin_only visibility",
-                code="PERMISSION_DENIED",
-                metadata={"required_permission": "admin"},
-            )
+            return ERROR_MESSAGE_PATTERNS["admin_required"]()  # type: ignore[no-any-return,operator]
 
         # Input sanitization
         content = sanitize_text_input(content)
         if not content:
-            return create_error_response(
-                error="Content cannot be empty after sanitization", code="INVALID_INPUT"
-            )
+            return ERROR_MESSAGE_PATTERNS["content_empty"]()  # type: ignore[no-any-return,operator]
 
         # Serialize metadata
         metadata_str = serialize_metadata(metadata) if metadata else None
@@ -414,11 +421,7 @@ async def add_message(
                 "SELECT id FROM sessions WHERE id = ?", (session_id,)
             )
             if not await cursor.fetchone():
-                return {
-                    "success": False,
-                    "error": "Session not found",
-                    "code": "SESSION_NOT_FOUND",
-                }
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Insert message with sender_type (Phase 3 enhancement)
             cursor = await conn.execute(
@@ -459,10 +462,10 @@ async def add_message(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to add message")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="MESSAGE_ADDITION_FAILED")
+        return create_system_error("add_message", "database", temporary=True)
 
 
 @mcp.tool()
@@ -487,6 +490,20 @@ async def get_messages(
         auth_info = get_auth_info(ctx)
         agent_id = auth_info.agent_id
 
+        # Phase 4: Try cache first for frequently accessed message lists
+        cache_context = {
+            "agent_id": agent_id,
+            "visibility_filter": visibility_filter or "all",
+            "offset": offset,
+        }
+        cache_key = generate_session_cache_key(session_id, agent_id, limit)
+
+        # Check cache for this specific query (5-minute TTL for message lists)
+        cached_result = await cache_manager.get(cache_key, cache_context)
+        if cached_result is not None:
+            logger.debug(f"Cache hit for get_messages: {cache_key}")
+            return cached_result  # type: ignore[no-any-return]
+
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             conn.row_factory = aiosqlite.Row
@@ -496,11 +513,7 @@ async def get_messages(
                 "SELECT id FROM sessions WHERE id = ?", (session_id,)
             )
             if not await cursor.fetchone():
-                return create_error_response(
-                    error="Session not found",
-                    code="SESSION_NOT_FOUND",
-                    metadata={"session_id": session_id},
-                )
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Build query with visibility controls
             where_conditions = ["session_id = ?"]
@@ -559,7 +572,7 @@ async def get_messages(
             messages_rows = await cursor.fetchall()
             messages = [dict(msg) for msg in messages_rows]
 
-            return {
+            result = {
                 "success": True,
                 "messages": messages,
                 "count": len(messages),
@@ -567,10 +580,16 @@ async def get_messages(
                 "has_more": offset + limit < total_count,
             }
 
-    except Exception as e:
+            # Phase 4: Cache the result for faster subsequent access (5-minute TTL)
+            await cache_manager.set(cache_key, result, ttl=300, context=cache_context)
+            logger.debug(f"Cached get_messages result: {cache_key}")
+
+            return result
+
+    except Exception:
         logger.exception("Failed to retrieve messages")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="MESSAGE_RETRIEVAL_FAILED")
+        return create_system_error("get_messages", "database", temporary=True)
 
 
 # ============================================================================
@@ -607,6 +626,22 @@ async def search_context(
         start_time = time.time()
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
+        # Phase 4: Try cache first for search results (10-minute TTL due to compute cost)
+        cache_key = generate_search_cache_key(
+            session_id, query, fuzzy_threshold, search_scope
+        )
+        cache_context = {"agent_id": agent_id, "search_metadata": search_metadata}
+
+        cached_result = await cache_manager.get(cache_key, cache_context)
+        if cached_result is not None:
+            logger.debug(f"Cache hit for search_context: {cache_key}")
+            # Update search_time_ms to reflect cache hit
+            cached_result["search_time_ms"] = round(
+                (time.time() - start_time) * 1000, 2
+            )
+            cached_result["cache_hit"] = True
+            return cached_result  # type: ignore[no-any-return]
+
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             conn.row_factory = aiosqlite.Row
@@ -616,11 +651,7 @@ async def search_context(
                 "SELECT id FROM sessions WHERE id = ?", (session_id,)
             )
             if not await cursor.fetchone():
-                return create_error_response(
-                    error="Session not found",
-                    code="SESSION_NOT_FOUND",
-                    metadata={"session_id": session_id},
-                )
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Pre-filter optimization: Apply time window and row limits first
             max_rows_scanned = 1000  # Maximum rows to scan for large datasets
@@ -635,18 +666,34 @@ async def search_context(
                 f"datetime(timestamp) >= datetime('now', '-{recent_hours} hours')"
             )
 
-            # Apply visibility controls
+            # Apply visibility controls with admin support
             if search_scope == "public":
                 where_conditions.append("visibility = 'public'")
             elif search_scope == "private":
                 where_conditions.append("visibility = 'private' AND sender = ?")
                 params.append(agent_id)
             else:  # all accessible messages
-                where_conditions.append("""
-                    (visibility = 'public' OR
-                     (visibility = 'private' AND sender = ?) OR
-                     (visibility = 'agent_only' AND sender = ?))
-                """)
+                # Check if agent has admin permissions
+                auth_info = getattr(ctx, "_auth_info", None)
+                has_admin_permission = (
+                    auth_info
+                    and hasattr(auth_info, "permissions")
+                    and "admin" in auth_info.permissions
+                )
+
+                if has_admin_permission:
+                    where_conditions.append("""
+                        (visibility = 'public' OR
+                         (visibility = 'private' AND sender = ?) OR
+                         (visibility = 'agent_only' AND sender = ?) OR
+                         visibility = 'admin_only')
+                    """)
+                else:
+                    where_conditions.append("""
+                        (visibility = 'public' OR
+                         (visibility = 'private' AND sender = ?) OR
+                         (visibility = 'agent_only' AND sender = ?))
+                    """)
                 params.append(agent_id)
                 params.append(agent_id)
 
@@ -775,7 +822,7 @@ async def search_context(
                 },
             )
 
-        return {
+        result = {
             "success": True,
             "results": results,
             "query": query,
@@ -784,12 +831,19 @@ async def search_context(
             "message_count": len(results),
             "search_time_ms": search_time_ms,
             "performance_note": "RapidFuzz enabled (5-10x faster than standard fuzzy search)",
+            "cache_hit": False,
         }
 
-    except Exception as e:
+        # Phase 4: Cache search results (10-minute TTL due to computational cost)
+        await cache_manager.set(cache_key, result, ttl=600, context=cache_context)
+        logger.debug(f"Cached search_context result: {cache_key}")
+
+    except Exception:
         logger.exception("Failed to search context")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="SEARCH_FAILED")
+        return create_system_error("search_context", "database", temporary=True)
+    else:
+        return result
 
 
 @mcp.tool()
@@ -814,11 +868,7 @@ async def search_by_sender(
                 "SELECT id FROM sessions WHERE id = ?", (session_id,)
             )
             if not await cursor.fetchone():
-                return create_error_response(
-                    error="Session not found",
-                    code="SESSION_NOT_FOUND",
-                    metadata={"session_id": session_id},
-                )
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             cursor = await conn.execute(
                 """
@@ -843,10 +893,10 @@ async def search_by_sender(
                 "count": len(messages),
             }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to search by sender")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="SEARCH_BY_SENDER_FAILED")
+        return create_system_error("search_by_sender", "database", temporary=True)
 
 
 @mcp.tool()
@@ -872,11 +922,7 @@ async def search_by_timerange(
                 "SELECT id FROM sessions WHERE id = ?", (session_id,)
             )
             if not await cursor.fetchone():
-                return create_error_response(
-                    error="Session not found",
-                    code="SESSION_NOT_FOUND",
-                    metadata={"session_id": session_id},
-                )
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             cursor = await conn.execute(
                 """
@@ -903,10 +949,10 @@ async def search_by_timerange(
                 "count": len(messages),
             }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to search by timerange")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="SEARCH_BY_TIMERANGE_FAILED")
+        return create_system_error("search_by_timerange", "database", temporary=True)
 
 
 # ============================================================================
@@ -946,21 +992,33 @@ async def set_memory(
         # Validate and sanitize the key
         key = key.strip()
         if not key:
-            return create_error_response(
+            return create_llm_error_response(
                 error="Memory key cannot be empty after trimming whitespace",
                 code="INVALID_KEY",
+                suggestions=[
+                    "Provide a non-empty memory key",
+                    "Use descriptive key names like 'user_preferences' or 'session_state'",
+                    "Keys should be alphanumeric with underscores or dashes",
+                ],
+                context={"field": "key", "requirement": "non_empty_string"},
+                severity=ErrorSeverity.WARNING,
             )
 
         if len(key) > 255:
-            return create_error_response(
-                error="Memory key too long (max 255 characters)", code="INVALID_KEY"
+            return create_llm_error_response(
+                error="Memory key too long (max 255 characters)",
+                code="INVALID_KEY",
+                suggestions=[
+                    "Shorten the memory key to 255 characters or less",
+                    "Use abbreviated key names",
+                    "Consider using hierarchical keys with dots or underscores",
+                ],
+                context={"key_length": len(key), "max_length": 255},
+                severity=ErrorSeverity.WARNING,
             )
 
         if "\n" in key or "\t" in key or " " in key:
-            return create_error_response(
-                error="Memory key cannot contain spaces, newlines, or tabs",
-                code="INVALID_KEY",
-            )
+            return ERROR_MESSAGE_PATTERNS["memory_key_invalid"](key)  # type: ignore[no-any-return,operator]
 
         # Use actual agent_id from context if available, otherwise derive from session
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
@@ -979,11 +1037,17 @@ async def set_memory(
             else:
                 serialized_value = value
         except (TypeError, ValueError) as e:
-            return {
-                "success": False,
-                "error": f"Value is not JSON serializable: {str(e)}",
-                "code": "SERIALIZATION_ERROR",
-            }
+            return create_llm_error_response(
+                error=f"Value is not JSON serializable: {str(e)}",
+                code="SERIALIZATION_ERROR",
+                suggestions=[
+                    "Ensure the value contains only JSON-compatible data types",
+                    "Supported types: strings, numbers, booleans, lists, dictionaries",
+                    "Remove or convert unsupported types like functions, classes, or custom objects",
+                ],
+                context={"value_type": type(value).__name__, "error_detail": str(e)},
+                severity=ErrorSeverity.WARNING,
+            )
 
         async with get_db_connection() as conn:
             conn.row_factory = (
@@ -995,11 +1059,7 @@ async def set_memory(
                     "SELECT id FROM sessions WHERE id = ?", (session_id,)
                 )
                 if not await cursor.fetchone():
-                    return {
-                        "success": False,
-                        "error": "Session not found",
-                        "code": "SESSION_NOT_FOUND",
-                    }
+                    return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Check for existing key if overwrite is False
             if not overwrite:
@@ -1020,11 +1080,7 @@ async def set_memory(
                 )
 
                 if await cursor.fetchone():
-                    return {
-                        "success": False,
-                        "error": f"Memory key '{key}' already exists",
-                        "code": "KEY_EXISTS",
-                    }
+                    return ERROR_MESSAGE_PATTERNS["memory_key_exists"](key)  # type: ignore[no-any-return,operator]
 
             # Insert or update memory entry
             await conn.execute(
@@ -1078,10 +1134,10 @@ async def set_memory(
             "stored_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to set memory")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="MEMORY_SET_FAILED")
+        return create_system_error("set_memory", "database", temporary=True)
 
 
 @mcp.tool()
@@ -1129,11 +1185,7 @@ async def get_memory(
             row = await cursor.fetchone()
 
             if not row:
-                return {
-                    "success": False,
-                    "error": f"Memory key '{key}' not found or expired",
-                    "code": "MEMORY_NOT_FOUND",
-                }
+                return ERROR_MESSAGE_PATTERNS["memory_not_found"](key)  # type: ignore[no-any-return,operator]
 
             # Parse stored value
             stored_value = row["value"]
@@ -1163,10 +1215,10 @@ async def get_memory(
                 "scope": "session" if session_id else "global",
             }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get memory")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="MEMORY_GET_FAILED")
+        return create_system_error("get_memory", "database", temporary=True)
 
 
 @mcp.tool()
@@ -1250,10 +1302,50 @@ async def list_memory(
                 "scope_filter": session_id or "global",
             }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list memory")
         logger.debug(traceback.format_exc())
-        return create_error_response(error=str(e), code="MEMORY_LIST_FAILED")
+        return create_system_error("list_memory", "database", temporary=True)
+
+
+# ============================================================================
+# PHASE 4: PERFORMANCE MONITORING TOOL
+# ============================================================================
+
+
+@mcp.tool()
+async def get_performance_metrics(
+    ctx: Context,
+) -> dict[str, Any]:
+    """
+    Get comprehensive performance metrics for monitoring.
+    Requires admin permission.
+    """
+
+    try:
+        # Extract enhanced agent context (includes JWT authentication if available)
+        agent_context = extract_agent_context(ctx)
+        agent_id = agent_context["agent_id"]
+
+        # Check permission for admin access
+        if "admin" not in agent_context.get("permissions", []):
+            return ERROR_MESSAGE_PATTERNS["admin_required"]()  # type: ignore[no-any-return,operator]
+
+        # Get performance metrics from the performance module
+        metrics = get_performance_metrics_dict()
+
+        # Add requesting agent info
+        if metrics.get("success"):
+            metrics["requesting_agent"] = agent_id
+            metrics["request_timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    except Exception:
+        logger.exception("Failed to get performance metrics")
+        return create_system_error(
+            "get_performance_metrics", "performance_monitoring", temporary=True
+        )
+    else:
+        return metrics
 
 
 # ============================================================================
@@ -1573,6 +1665,10 @@ async def trigger_resource_notifications(session_id: str, agent_id: str) -> None
     """Trigger resource update notifications after changes."""
 
     try:
+        # Phase 4: Invalidate caches for updated data
+        await invalidate_session_cache(cache_manager, session_id)
+        await invalidate_agent_memory_cache(cache_manager, agent_id)
+
         # Notify session resource subscribers
         await notification_manager.notify_resource_updated(f"session://{session_id}")
 
@@ -1646,9 +1742,31 @@ async def lifespan() -> Any:
     # Initialize database schema
     await initialize_database()
 
+    # Phase 4: Initialize performance optimization system
+    from .utils.caching import start_cache_maintenance
+    from .utils.performance import db_pool, start_performance_monitoring
+
+    try:
+        # Initialize connection pool
+        database_url = os.getenv("DATABASE_URL", "chat_history.db")
+        await db_pool.initialize_pool(database_url, min_size=5, max_size=50)
+        print("Database connection pool initialized")
+
+    except Exception:
+        logger.exception("Failed to initialize connection pool")
+        print("Warning: Running without connection pooling")
+
     # Start background tasks
     cleanup_tasks = []
     try:
+        # Phase 4: Start performance monitoring
+        perf_task = await start_performance_monitoring()
+        cleanup_tasks.append(perf_task)
+
+        # Phase 4: Start cache maintenance
+        cache_task = await start_cache_maintenance()
+        cleanup_tasks.append(cache_task)
+
         # Start subscription cleanup task
         cleanup_task = asyncio.create_task(cleanup_subscriptions_task())
         cleanup_tasks.append(cleanup_task)
@@ -1657,16 +1775,23 @@ async def lifespan() -> Any:
         memory_task = asyncio.create_task(cleanup_expired_memory_task())
         cleanup_tasks.append(memory_task)
 
-        print("Background cleanup tasks started")
+        print("Background tasks started (performance, cache, cleanup)")
     except Exception as e:
         logger.warning(f"Could not start background tasks: {e}")
 
-    print("Server ready with Phase 2 essential features!")
+    print("Server ready with Phase 4 production features!")
 
     yield
 
     # Shutdown
     print("Shutting down...")
+
+    # Phase 4: Shutdown performance system
+    try:
+        await db_pool.shutdown_pool()
+        print("Connection pool shutdown complete")
+    except Exception as e:
+        logger.warning(f"Error shutting down connection pool: {e}")
 
     # Cancel background tasks
     for task in cleanup_tasks:

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dotenv
-from pydantic import Field, field_validator
+from pydantic import Field, field_serializer, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class MCPServerConfig(BaseSettings):
         default="shared-context-server", json_schema_extra={"env": "MCP_SERVER_NAME"}
     )
     mcp_server_version: str = Field(
-        default="1.0.2-hot-reload-working",
+        default="1.0.0",
         json_schema_extra={"env": "MCP_SERVER_VERSION"},
     )
 
@@ -142,6 +142,17 @@ class SecurityConfig(BaseSettings):
         default="localhost,127.0.0.1", json_schema_extra={"env": "ALLOWED_HOSTS"}
     )
 
+    @field_validator("cors_origins")
+    @classmethod
+    def parse_cors_origins(cls, v: str) -> list[str]:
+        """Parse CORS origins from comma-separated string."""
+        return [origin.strip() for origin in v.split(",")]
+
+    @field_serializer("cors_origins")
+    def serialize_cors_origins(self, v: list[str]) -> str:
+        """Serialize CORS origins list back to comma-separated string."""
+        return ",".join(v)
+
     @field_validator("api_key")
     @classmethod
     def validate_api_key(cls, v: str) -> str:
@@ -179,12 +190,6 @@ class SecurityConfig(BaseSettings):
                 "⚠️ API_KEY should be at least 32 characters for security. Generate with: openssl rand -base64 32"
             )
         return v
-
-    @field_validator("cors_origins")
-    @classmethod
-    def parse_cors_origins(cls, v: str) -> list[str]:
-        """Parse CORS origins from comma-separated string."""
-        return [origin.strip() for origin in v.split(",")]
 
 
 class OperationalConfig(BaseSettings):

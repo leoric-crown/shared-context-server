@@ -596,7 +596,7 @@ class TestMultiComponentIntegration:
 
         # Should fail gracefully
         assert invalid_memory["success"] is False
-        assert "Session not found" in invalid_memory["error"]
+        assert "not found" in invalid_memory["error"].lower()
 
     async def test_performance_under_load_workflow(
         self, server_with_db, test_db_manager

@@ -203,7 +203,7 @@ def get_tools_summary() -> dict[str, Any]:
     Returns:
         Dict with category summaries and counts
     """
-    summary = {
+    summary: dict[str, Any] = {
         "total_tools": len(TOOL_REGISTRY),
         "categories": {},
         "auth_required_count": 0,
@@ -221,9 +221,9 @@ def get_tools_summary() -> dict[str, Any]:
     # Count special attributes
     for metadata in TOOL_REGISTRY.values():
         if metadata.requires_auth:
-            summary["auth_required_count"] += 1
+            summary["auth_required_count"] = int(summary["auth_required_count"]) + 1
         if metadata.is_experimental:
-            summary["experimental_count"] += 1
+            summary["experimental_count"] = int(summary["experimental_count"]) + 1
 
     return summary
 

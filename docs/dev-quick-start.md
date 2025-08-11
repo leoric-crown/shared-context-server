@@ -4,7 +4,7 @@
 
 ```bash
 # 1. Start hot reload server
-MCP_TRANSPORT=http HTTP_PORT=8000 uv run python -m shared_context_server.scripts.dev
+uv run python -m shared_context_server.scripts.dev
 
 # 2. Configure Claude Code (in another terminal)
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]}'

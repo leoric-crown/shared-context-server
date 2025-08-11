@@ -1,58 +1,31 @@
-MARKET_RESEARCH*.md
-STRATEGIC_VISION*.md
-UAT_FINDINGS*.md
-SECURITY_VALIDATION_REPORT*.md
-
-:memory:
+.kiro/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
 
-# Database files (keep schema file)
-# database.sql - keep this for reference
-*.backup
-*.bak
-
-# FastAPI & Pydantic
+# Environment
 .env
 
 # SQLite databases
+:memory:
 *.db
 *.sqlite
 *.sqlite3
 chat_history.db*
-test_chat_history.db*
-dev_*.db
 test_*.db
-# Keep database.sql in repo, ignore other SQL files
-generated_*.sql
-temp_*.sql
+dev_*.db
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
 
 # IDE
 .vscode/
@@ -62,37 +35,21 @@ htmlcov/
 
 # OS
 .DS_Store
-.DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
 # Logs
 *.log
 logs/
 
-.coverage*
-
 # Virtual environments
 venv/
-env/
-ENV/
 .venv/
-
-# MCP server data
-.claude/settings.local.json
 
 # Quality tools
 .ruff_cache/
 .mypy_cache/
-.pre-commit-config.yaml.bak
 
-# Additional development files
+# Development files
 *.tmp
 *.temp
-cache/
-profiling/
-*.prof
-*.profile

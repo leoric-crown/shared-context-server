@@ -205,11 +205,8 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-n=auto",                    # Parallel execution with auto CPU detection
-    "--durations=10",             # Show 10 slowest tests
-    "--durations-min=1.0",        # Only show tests taking >1 second
     "--tb=short",                 # Shorter traceback format
-    "-v",                         # Verbose output
-    "--disable-warnings",         # Clean output (can override with -W)
+    "-q",                         # Quiet output
     "--color=yes",                # Force color output
     "--show-capture=no",          # Don't show captured stdout/stderr by default
 ]
@@ -234,11 +231,12 @@ omit = [
     "*/tests/*",
     "*/conftest.py",
     "*/__pycache__/*",
-    "src/shared_context_server/tools.py",
     "src/shared_context_server/scripts/dev.py",
 ]
 
 [tool.coverage.report]
+fail_under = 85
+skip_covered = false
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -252,10 +250,15 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
 ]
 
+[tool.coverage.html]
+directory = "htmlcov"
+show_contexts = true
+
 [dependency-groups]
 dev = [
     "mcp>=1.12.4",
     "mypy>=1.17.1",
+    "pip-audit>=2.6.0",
     "pre-commit>=4.3.0",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",

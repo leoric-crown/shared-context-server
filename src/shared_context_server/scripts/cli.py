@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from typing import Any
 
 # Import uvloop conditionally for better performance
 try:
@@ -19,6 +20,7 @@ try:
 
     UVLOOP_AVAILABLE = True
 except ImportError:
+    uvloop = None  # type: ignore[assignment]
     UVLOOP_AVAILABLE = False
 
 # Configure logging - use environment LOG_LEVEL if available
@@ -99,8 +101,8 @@ class ProductionServer:
             sys.exit(1)
 
 
-def main() -> None:
-    """Main CLI entry point."""
+def parse_arguments() -> Any:
+    """Parse command line arguments."""
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -162,7 +164,43 @@ Claude Desktop Integration:
         "--version", action="version", version="shared-context-server 1.0.0"
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def run_with_optimal_loop(coro: Any) -> Any:
+    """Run coroutine with optimal event loop (uvloop if available)."""
+    if UVLOOP_AVAILABLE:
+        import uvloop
+
+        logger.debug("Using uvloop for enhanced async performance")
+        return uvloop.run(coro)
+    logger.debug("Using default asyncio event loop")
+    return asyncio.run(coro)
+
+
+async def run_server_stdio() -> None:
+    """Run server with STDIO transport."""
+    if not SERVER_AVAILABLE:
+        logger.error("Server components not available")
+        sys.exit(1)
+
+    production_server = ProductionServer()
+    await production_server.start_stdio_server()
+
+
+async def run_server_http(host: str, port: int) -> None:
+    """Run server with HTTP transport."""
+    if not SERVER_AVAILABLE:
+        logger.error("Server components not available")
+        sys.exit(1)
+
+    production_server = ProductionServer()
+    await production_server.start_http_server(host, port)
+
+
+def main() -> None:
+    """Main CLI entry point."""
+    args = parse_arguments()
 
     # Set logging level
     logging.getLogger().setLevel(getattr(logging, args.log_level))
@@ -177,20 +215,12 @@ Claude Desktop Integration:
         logger.exception("Failed to load configuration")
         sys.exit(1)
 
-    # Create production server
-    production_server = ProductionServer()
-
-    # Use uvloop for better performance if available
-    if UVLOOP_AVAILABLE:
-        uvloop.install()
-        logger.debug("Using uvloop for enhanced async performance")
-
-    # Start server based on transport
+    # Start server based on transport with optimal event loop
     try:
         if args.transport == "stdio":
-            asyncio.run(production_server.start_stdio_server())
+            run_with_optimal_loop(run_server_stdio())
         elif args.transport == "http":
-            asyncio.run(production_server.start_http_server(args.host, args.port))
+            run_with_optimal_loop(run_server_http(args.host, args.port))
     except KeyboardInterrupt:
         logger.info("Server interrupted by user")
         sys.exit(0)

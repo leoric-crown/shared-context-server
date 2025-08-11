@@ -14,7 +14,7 @@ Our development setup provides true hot reload with automatic server restart on 
 
 ```bash
 # Start hot reload server
-MCP_TRANSPORT=http HTTP_PORT=8000 uv run python -m shared_context_server.scripts.dev
+uv run python -m shared_context_server.scripts.dev
 
 # Configure Claude Code
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]}'

@@ -13,48 +13,61 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.12"
+            is-main: true
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: actions/setup-python@v5
-        with: 
+
+      - name: Setup uv with cache
+        uses: astral-sh/setup-uv@v4
+        with:
           python-version: ${{ matrix.python-version }}
-      
-      - name: Install uv
-        run: pipx install uv
-      
+          enable-cache: true
+
       - name: Sync dependencies
         run: uv sync --dev
-      
+
       - name: Lint check (ruff)
         run: uv run ruff check .
-        
+
       - name: Format check (ruff)
         run: uv run ruff format --check .
-      
+
       - name: Type check (mypy)
         run: uv run mypy src
-        
-      - name: Test suite
-        run: uv run pytest -q --maxfail=3 --tb=short
+
+      - name: Security audit
+        run: uv run pip-audit
+
+      - name: Test with coverage
+        run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.is-main
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   smoke-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: actions/setup-python@v5
-        with: 
+
+      - name: Setup uv with cache
+        uses: astral-sh/setup-uv@v4
+        with:
           python-version: "3.12"
-      
-      - name: Install uv
-        run: pipx install uv
-      
+          enable-cache: true
+
       - name: Sync dependencies
         run: uv sync --dev
-        
+
       - name: WAL/Schema smoke test
         run: uv run pytest tests/test_smoke.py -v
         env:

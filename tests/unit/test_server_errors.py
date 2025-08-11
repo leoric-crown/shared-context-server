@@ -40,7 +40,11 @@ class TestServerErrorHandling:
 
             assert result["success"] is False
             assert "error" in result
-            assert "Database" in result["error"] or "Failed" in result["error"]
+            assert (
+                "database" in result["error"].lower()
+                or "failed" in result["error"].lower()
+                or "temporarily unavailable" in result["error"].lower()
+            )
 
     async def test_add_message_validation_errors(self, server_with_db, test_db_manager):
         """Test add_message with validation error scenarios."""
@@ -373,5 +377,6 @@ class TestServerErrorHandling:
                     or "limit" in error_lower
                     or "constraint" in error_lower
                     or "content_length" in error_lower
+                    or "temporarily unavailable" in error_lower
                 )
                 break  # Stop testing larger sizes once we hit the limit

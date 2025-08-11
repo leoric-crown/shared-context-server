@@ -96,9 +96,15 @@ class DatabaseManager:
         Initialize database manager.
 
         Args:
-            database_path: Path to SQLite database file
+            database_path: Path to SQLite database file or sqlite:/// URL
         """
-        self.database_path = Path(database_path).resolve()
+        # Handle sqlite:/// URLs by extracting the file path
+        if database_path.startswith("sqlite:///"):
+            actual_path = database_path[10:]  # Remove "sqlite:///" prefix
+        else:
+            actual_path = database_path
+
+        self.database_path = Path(actual_path).resolve()
         self.is_initialized = False
         self._connection_count = 0
 

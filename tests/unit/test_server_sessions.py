@@ -372,7 +372,7 @@ class TestSessionLifecycle:
             server_with_db.get_session, ctx, session_id=fake_session_id
         )
         assert get_result["success"] is False
-        assert get_result["error"] == "Session not found"
+        assert "not found" in get_result["error"].lower()
         assert get_result["code"] == "SESSION_NOT_FOUND"
 
         # Test add_message to nonexistent session
@@ -384,7 +384,7 @@ class TestSessionLifecycle:
             visibility="public",
         )
         assert add_result["success"] is False
-        assert add_result["error"] == "Session not found"
+        assert "not found" in add_result["error"].lower()
         assert add_result["code"] == "SESSION_NOT_FOUND"
 
         # Test get_messages from nonexistent session
