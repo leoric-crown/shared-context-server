@@ -79,7 +79,357 @@ coverage report         # MANDATORY: Must achieve ≥85% test coverage
 
 ### Core Requirements
 
-#### 1. Performance Optimization System
+#### 1. LLM-Optimized MCP Error Messages
+
+**Enhanced Error Response Framework**:
+Building on research from production MCP servers including modelcontextprotocol/python-sdk, jlowin/fastmcp, and cyanheads/mcp-ts-template, this implementation enhances our existing `create_error_response` function with LLM-friendly error messaging optimized for AI agent decision-making.
+
+```python
+from typing import Dict, List, Any, Optional, Literal
+from datetime import datetime, timezone
+from enum import Enum
+
+class ErrorSeverity(str, Enum):
+    """Error severity levels for LLM decision-making."""
+    WARNING = "warning"     # Non-critical, operation may continue
+    ERROR = "error"         # Operation failed, retry possible
+    CRITICAL = "critical"   # System issue, immediate attention required
+
+class LLMOptimizedErrorResponse:
+    """Enhanced error response optimized for LLM understanding and recovery."""
+
+    def __init__(
+        self,
+        error: str,                    # Clear, actionable description
+        code: str,                     # Semantic error code
+        suggestions: List[str] = None, # Specific next actions for LLMs
+        context: Dict[str, Any] = None,# Relevant context for decision-making
+        severity: ErrorSeverity = ErrorSeverity.ERROR,
+        recoverable: bool = True,      # Whether operation can be retried
+        retry_after: Optional[int] = None,  # Seconds to wait before retry
+        related_resources: List[str] = None, # Related MCP resources/tools
+        **kwargs: Any
+    ):
+        self.error = error
+        self.code = code
+        self.suggestions = suggestions or []
+        self.context = context or {}
+        self.severity = severity
+        self.recoverable = recoverable
+        self.retry_after = retry_after
+        self.related_resources = related_resources or []
+        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.additional_data = kwargs
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for MCP response."""
+        response = {
+            "success": False,
+            "error": self.error,
+            "code": self.code,
+            "severity": self.severity.value,
+            "recoverable": self.recoverable,
+            "timestamp": self.timestamp
+        }
+
+        if self.suggestions:
+            response["suggestions"] = self.suggestions
+
+        if self.context:
+            response["context"] = self.context
+
+        if self.retry_after:
+            response["retry_after"] = self.retry_after
+
+        if self.related_resources:
+            response["related_resources"] = self.related_resources
+
+        response.update(self.additional_data)
+        return response
+
+# Enhanced error creation functions
+def create_llm_error_response(
+    error: str,
+    code: str,
+    suggestions: List[str] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create LLM-optimized error response."""
+
+    enhanced_error = LLMOptimizedErrorResponse(
+        error=error,
+        code=code,
+        suggestions=suggestions or [],
+        **kwargs
+    )
+    return enhanced_error.to_dict()
+
+def create_input_validation_error(
+    field: str,
+    value: Any,
+    expected: str,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create input validation error with recovery guidance."""
+
+    suggestions = [
+        f"Check the {field} parameter format",
+        f"Expected format: {expected}",
+        "Review the API documentation for parameter requirements"
+    ]
+
+    context = {
+        "invalid_field": field,
+        "provided_value": str(value)[:100],  # Truncate long values
+        "expected_format": expected
+    }
+
+    return create_llm_error_response(
+        error=f"Invalid {field} format. Expected {expected}",
+        code="INVALID_INPUT_FORMAT",
+        suggestions=suggestions,
+        context=context,
+        severity=ErrorSeverity.WARNING,
+        **kwargs
+    )
+
+def create_resource_not_found_error(
+    resource_type: str,
+    resource_id: str,
+    available_alternatives: List[str] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create resource not found error with alternatives."""
+
+    suggestions = [
+        f"Verify the {resource_type} ID is correct",
+        f"Use create_{resource_type} to create a new {resource_type}"
+    ]
+
+    if available_alternatives:
+        suggestions.append(f"Available {resource_type}s: {', '.join(available_alternatives[:3])}")
+
+    context = {
+        "resource_type": resource_type,
+        "resource_id": resource_id
+    }
+
+    if available_alternatives:
+        context["available_alternatives"] = available_alternatives[:5]  # Limit context size
+
+    return create_llm_error_response(
+        error=f"{resource_type.title()} '{resource_id}' not found",
+        code=f"{resource_type.upper()}_NOT_FOUND",
+        suggestions=suggestions,
+        context=context,
+        related_resources=[f"create_{resource_type}", f"list_{resource_type}s"],
+        **kwargs
+    )
+
+def create_permission_denied_error(
+    required_permission: str,
+    current_permissions: List[str] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create permission denied error with guidance."""
+
+    suggestions = [
+        "Check your agent authentication and permissions",
+        f"Request {required_permission} permission from the user",
+        "Use operations that require lower permissions"
+    ]
+
+    if current_permissions:
+        suggestions.insert(1, f"Current permissions: {', '.join(current_permissions)}")
+
+    context = {
+        "required_permission": required_permission,
+        "current_permissions": current_permissions or []
+    }
+
+    return create_llm_error_response(
+        error=f"{required_permission.title()} permission required for this operation",
+        code="PERMISSION_DENIED",
+        suggestions=suggestions,
+        context=context,
+        severity=ErrorSeverity.ERROR,
+        recoverable=False,  # Requires user intervention
+        related_resources=["authenticate_agent"],
+        **kwargs
+    )
+
+def create_system_error(
+    operation: str,
+    system_component: str,
+    temporary: bool = True,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create system error with recovery guidance."""
+
+    if temporary:
+        suggestions = [
+            "Retry the operation in a few seconds",
+            "Check system health with the health endpoint",
+            "Contact support if the issue persists"
+        ]
+        severity = ErrorSeverity.ERROR
+        retry_after = 5
+    else:
+        suggestions = [
+            "Contact system administrator",
+            "Check system logs for detailed error information",
+            "Use alternative operations if available"
+        ]
+        severity = ErrorSeverity.CRITICAL
+        retry_after = None
+
+    context = {
+        "failed_operation": operation,
+        "system_component": system_component,
+        "temporary_issue": temporary
+    }
+
+    return create_llm_error_response(
+        error=f"{system_component} temporarily unavailable during {operation}. {'This is likely temporary.' if temporary else 'This requires system maintenance.'}",
+        code=f"{system_component.upper()}_UNAVAILABLE",
+        suggestions=suggestions,
+        context=context,
+        severity=severity,
+        retry_after=retry_after,
+        related_resources=["get_performance_metrics"] if temporary else [],
+        **kwargs
+    )
+
+# Enhanced error patterns for existing tools
+ERROR_MESSAGE_PATTERNS = {
+    # Session management errors
+    "session_not_found": lambda session_id, available_sessions=[]: create_resource_not_found_error(
+        "session", session_id, available_alternatives=available_sessions
+    ),
+
+    # Input validation errors
+    "invalid_session_id": lambda session_id: create_input_validation_error(
+        "session_id", session_id, "session_[16-character-hex]",
+        suggestions=[
+            "Check the session_id parameter format",
+            "Use create_session to generate a valid session ID",
+            "Session IDs must start with 'session_' followed by 16 hex characters"
+        ]
+    ),
+
+    "content_too_large": lambda content_size, max_size=100000: create_llm_error_response(
+        error=f"Message content too large ({content_size} characters). Maximum allowed: {max_size}",
+        code="CONTENT_TOO_LARGE",
+        suggestions=[
+            "Reduce message content length",
+            "Split large content into multiple messages",
+            f"Maximum content size is {max_size} characters"
+        ],
+        context={
+            "content_size": content_size,
+            "max_allowed": max_size,
+            "excess_characters": content_size - max_size
+        },
+        severity=ErrorSeverity.WARNING
+    ),
+
+    # Permission errors
+    "admin_required": lambda: create_permission_denied_error(
+        "admin",
+        suggestions=[
+            "Use 'public' or 'private' visibility instead",
+            "Request admin privileges from user",
+            "Check agent authentication and role assignment"
+        ]
+    ),
+
+    # System errors
+    "database_error": lambda operation: create_system_error(
+        operation, "database", temporary=True
+    ),
+
+    "memory_limit_exceeded": lambda: create_llm_error_response(
+        error="Agent memory storage limit exceeded. Clean up unused memory entries.",
+        code="MEMORY_LIMIT_EXCEEDED",
+        suggestions=[
+            "Remove unused memory entries with delete operations",
+            "Set shorter TTL values for temporary data",
+            "Use session-scoped memory instead of global memory",
+            "Contact administrator if limit needs to be increased"
+        ],
+        context={"recommended_action": "cleanup_old_entries"},
+        related_resources=["list_memory", "delete_memory"],
+        severity=ErrorSeverity.WARNING
+    )
+}
+```
+
+**Integration with Existing Error Handling**:
+```python
+# Enhanced versions of existing error functions
+def _raise_session_not_found_error(session_id: str, available_sessions: List[str] = None) -> None:
+    """Enhanced session not found error with LLM guidance."""
+    error_response = ERROR_MESSAGE_PATTERNS["session_not_found"](session_id, available_sessions or [])
+    raise ValueError(error_response["error"])
+
+def _create_enhanced_error_response(error_key: str, *args, **kwargs) -> Dict[str, Any]:
+    """Create enhanced error response using patterns."""
+    if error_key in ERROR_MESSAGE_PATTERNS:
+        return ERROR_MESSAGE_PATTERNS[error_key](*args, **kwargs)
+    else:
+        # Fallback to basic error response
+        return create_error_response(str(args[0]) if args else "Unknown error", error_key.upper())
+
+# Progressive error message enhancement
+def enhance_existing_error_responses():
+    """Enhance all existing error responses in server.py with LLM optimization."""
+
+    # Example enhancements for key error scenarios:
+    error_enhancements = {
+        # Session validation
+        "purpose_empty": lambda: create_llm_error_response(
+            error="Session purpose cannot be empty after sanitization",
+            code="INVALID_INPUT",
+            suggestions=[
+                "Provide a descriptive purpose for the session",
+                "Purpose should describe the collaboration goal",
+                "Example: 'Feature planning for user authentication'"
+            ],
+            context={"field": "purpose", "requirement": "non_empty_string"},
+            severity=ErrorSeverity.WARNING
+        ),
+
+        # Content validation
+        "content_empty": lambda: create_llm_error_response(
+            error="Message content cannot be empty after sanitization",
+            code="INVALID_INPUT",
+            suggestions=[
+                "Provide meaningful message content",
+                "Content should contain relevant information for other agents",
+                "Empty or whitespace-only content is not allowed"
+            ],
+            context={"field": "content", "requirement": "non_empty_string"},
+            severity=ErrorSeverity.WARNING
+        ),
+
+        # Memory validation
+        "memory_key_invalid": lambda key: create_llm_error_response(
+            error="Memory key contains invalid characters. Keys cannot contain spaces, newlines, or tabs",
+            code="INVALID_KEY",
+            suggestions=[
+                "Use underscore or dash separators instead of spaces",
+                "Example: 'user_preferences' instead of 'user preferences'",
+                "Keys should contain only alphanumeric characters, underscores, and dashes"
+            ],
+            context={"invalid_key": key, "allowed_characters": "alphanumeric, underscore, dash"},
+            severity=ErrorSeverity.WARNING
+        )
+    }
+
+    return error_enhancements
+```
+
+#### 2. Performance Optimization System
 **Connection Pooling with aiosqlitepool**:
 ```python
 import aiosqlitepool
@@ -1599,18 +1949,43 @@ def write_documentation_files(documentation: Dict[str, Any]):
 **Complexity Assessment**: Production-ready features with highest complexity
 **File Count**: 15-20 files (performance/, testing/, documentation/, monitoring/, multiple test categories)
 **Integration Risk**: Very High (validating entire system, production deployment, comprehensive testing)
-**Time Estimation**: 6 hours with rigorous testing and documentation
+**Time Estimation**: 7.5 hours with rigorous testing, LLM-optimized error handling, and documentation
 
 **Agent Assignment**: **Multi-Agent Coordination Approach**
-- **Developer Agent** (3 hours): Performance optimization, monitoring systems, production hardening
-- **Tester Agent** (2 hours): Comprehensive test suite, behavioral testing, performance validation
-- **Docs Agent** (1 hour): Documentation generation, integration guides, API reference
+- **Developer Agent** (3.5 hours): LLM-optimized error framework, performance optimization, monitoring systems, production hardening
+- **Tester Agent** (2 hours): Comprehensive test suite, behavioral testing, performance validation, error message testing
+- **Docs Agent** (2 hours): Documentation generation, integration guides, API reference
 
 **Coordination Rationale**: Phase 4 requires specialized expertise in performance optimization, comprehensive testing, and documentation - each agent contributes their core competencies for maximum quality
 
 ### Implementation Phases
 
-#### Phase 4.1: Performance Optimization (2 hours) - Developer Agent
+#### Phase 4.1: LLM-Optimized Error Framework (1.5 hours) - Developer Agent
+**Implementation Steps**:
+1. **Enhanced Error Response System** (45 minutes): Implement LLMOptimizedErrorResponse class and error creation functions
+2. **Error Pattern Integration** (30 minutes): Integrate enhanced error patterns with existing server.py error handling
+3. **Error Message Testing** (15 minutes): Create tests validating error message clarity and actionability for LLMs
+
+**Validation Checkpoints**:
+```python
+# Error response validation
+error_response = create_input_validation_error("session_id", "invalid", "session_[16-hex]")
+assert "suggestions" in error_response
+assert "context" in error_response
+assert error_response["recoverable"] is True
+
+# LLM guidance validation
+llm_error = create_resource_not_found_error("session", "session_abc123", ["session_def456"])
+assert "Use create_session" in str(llm_error["suggestions"])
+assert "available_alternatives" in llm_error["context"]
+
+# Integration validation with existing tools
+enhanced_response = _create_enhanced_error_response("session_not_found", "session_test")
+assert enhanced_response["code"] == "SESSION_NOT_FOUND"
+assert len(enhanced_response["suggestions"]) >= 2
+```
+
+#### Phase 4.2: Performance Optimization Foundation (2 hours) - Developer Agent
 **Implementation Steps**:
 1. **Connection Pooling** (60 minutes): aiosqlitepool integration, optimized database manager
 2. **Multi-Level Caching** (45 minutes): L1/L2 cache system, performance monitoring
@@ -1631,7 +2006,7 @@ metrics = await client.call_tool("get_performance_metrics")
 assert metrics["success"] is True
 ```
 
-#### Phase 4.2: Comprehensive Testing Suite (2 hours) - Tester Agent
+#### Phase 4.3: Comprehensive Testing Suite (2 hours) - Tester Agent
 **Implementation Steps**:
 1. **Behavioral Test Suite** (60 minutes): Complete agent workflows, multi-agent scenarios
 2. **Performance Testing** (45 minutes): Benchmark validation, load testing, concurrent agents
@@ -1653,7 +2028,7 @@ load_results = await test_concurrent_agent_load()
 assert load_results["success_rate"] >= 0.95
 ```
 
-#### Phase 4.3: Documentation & Integration Guides (2 hours) - Docs Agent
+#### Phase 4.4: Documentation & Integration Guides (2 hours) - Docs Agent
 **Implementation Steps**:
 1. **API Documentation** (60 minutes): Complete tool and resource documentation with examples
 2. **Integration Guides** (45 minutes): Framework-specific guides, deployment documentation
@@ -1707,6 +2082,12 @@ assert len(docs["documentation"]["examples"]) >= 3
 ## Success Criteria
 
 ### Functional Success
+**LLM-Optimized Error Messages**:
+- ✅ Enhanced error response framework with contextual suggestions operational
+- ✅ Error message patterns providing actionable guidance for AI agents
+- ✅ Progressive error recovery paths with clear next steps
+- ✅ Context-rich error responses enabling informed LLM decision-making
+
 **Performance Optimization**:
 - ✅ Connection pooling achieving 20+ concurrent agent support
 - ✅ Multi-level caching system with >70% hit ratio
@@ -1757,6 +2138,13 @@ integration_tester --test-guides docs/integration-*/
 
 ### Validation Checklist
 
+#### ✅ LLM-Optimized Error Messages
+- [ ] Enhanced error response framework with LLMOptimizedErrorResponse class implemented
+- [ ] Error message patterns providing actionable suggestions for AI agents
+- [ ] Context-rich error responses with recovery guidance operational
+- [ ] Integration with existing error handling in server.py completed
+- [ ] Error message testing validating LLM guidance effectiveness
+
 #### ✅ Performance Optimization
 - [ ] Connection pooling with aiosqlitepool operational and optimized
 - [ ] Multi-level caching system achieving target hit ratios
@@ -1783,18 +2171,20 @@ integration_tester --test-guides docs/integration-*/
 ## Implementation Notes
 
 ### Critical Success Factors
-1. **Performance Excellence**: Connection pooling, caching, and optimization achieving all targets
-2. **Testing Rigor**: Comprehensive coverage validating production readiness across all scenarios
-3. **Documentation Quality**: Complete, accurate documentation enabling ecosystem adoption
-4. **Production Readiness**: Monitoring, error handling, and deployment patterns for real-world use
-5. **Multi-Agent Validation**: Real-world collaboration scenarios working flawlessly at scale
+1. **LLM-Optimized Error Communication**: Error messages providing clear, actionable guidance for AI agent decision-making and recovery
+2. **Performance Excellence**: Connection pooling, caching, and optimization achieving all targets
+3. **Testing Rigor**: Comprehensive coverage validating production readiness across all scenarios
+4. **Documentation Quality**: Complete, accurate documentation enabling ecosystem adoption
+5. **Production Readiness**: Monitoring, error handling, and deployment patterns for real-world use
+6. **Multi-Agent Validation**: Real-world collaboration scenarios working flawlessly at scale
 
 ### Common Pitfalls to Avoid
-1. **❌ Performance Bottlenecks**: Connection pool exhaustion, cache memory issues, query optimization gaps
-2. **❌ Testing Gaps**: Incomplete coverage, missing edge cases, performance regression
-3. **❌ Documentation Inconsistencies**: Outdated examples, missing integration steps, unclear instructions
-4. **❌ Production Issues**: Monitoring gaps, error handling failures, deployment configuration problems
-5. **❌ Scale Problems**: Multi-agent coordination failures, resource exhaustion, race conditions
+1. **❌ Error Message Ambiguity**: Vague error messages without actionable guidance for LLM recovery
+2. **❌ Performance Bottlenecks**: Connection pool exhaustion, cache memory issues, query optimization gaps
+3. **❌ Testing Gaps**: Incomplete coverage, missing edge cases, performance regression
+4. **❌ Documentation Inconsistencies**: Outdated examples, missing integration steps, unclear instructions
+5. **❌ Production Issues**: Monitoring gaps, error handling failures, deployment configuration problems
+6. **❌ Scale Problems**: Multi-agent coordination failures, resource exhaustion, race conditions
 
 ### Production Launch Readiness
 **Infrastructure Ready**:
