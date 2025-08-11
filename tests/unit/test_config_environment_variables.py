@@ -304,16 +304,17 @@ class TestDefaultValueApplication:
 
     def test_database_config_defaults(self):
         """Test database configuration default values."""
-        config = DatabaseConfig()
+        with patch.dict(os.environ, {}, clear=True):
+            config = DatabaseConfig()
 
-        assert config.database_path == str(Path("./chat_history.db").resolve())
-        assert config.database_url is None
-        assert config.database_timeout == 30
-        assert config.database_busy_timeout == 5
-        assert config.database_max_connections == 20
-        assert config.database_min_connections == 2
-        assert config.audit_log_retention_days == 30
-        assert config.inactive_session_retention_days == 7
+            assert config.database_path == str(Path("./chat_history.db").resolve())
+            assert config.database_url is None
+            assert config.database_timeout == 30
+            assert config.database_busy_timeout == 5
+            assert config.database_max_connections == 20
+            assert config.database_min_connections == 2
+            assert config.audit_log_retention_days == 30
+            assert config.inactive_session_retention_days == 7
 
     def test_mcp_server_config_defaults(self):
         """Test MCP server configuration default values."""
@@ -347,14 +348,15 @@ class TestDefaultValueApplication:
 
     def test_development_config_defaults(self):
         """Test development configuration default values."""
-        config = DevelopmentConfig()
+        with patch.dict(os.environ, {}, clear=True):
+            config = DevelopmentConfig()
 
-        assert config.environment == "development"
-        assert config.debug is False
-        assert config.enable_debug_tools is False
-        assert config.dev_reset_database_on_start is False
-        assert config.dev_seed_test_data is False
-        assert config.test_database_path == "./test_chat_history.db"
+            assert config.environment == "development"
+            assert config.debug is False
+            assert config.enable_debug_tools is False
+            assert config.dev_reset_database_on_start is False
+            assert config.dev_seed_test_data is False
+            assert config.test_database_path == "./test_chat_history.db"
 
     def test_security_config_defaults_with_api_key(self):
         """Test security configuration default values when API key is provided."""

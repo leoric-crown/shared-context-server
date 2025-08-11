@@ -8,7 +8,7 @@ The `shared-context-server` is a centralized memory store designed to enable col
 
 ## Technology Stack
 
-*   **Language:** Python 3.9+
+*   **Language:** Python 3.10+
 *   **Web Framework:** FastAPI (for high-performance asynchronous web services)
 *   **Data Validation:** Pydantic (for data validation and settings management using type hints)
 *   **Database:** SQLite (with `aiosqlite` for asynchronous database operations)
@@ -21,7 +21,7 @@ To set up and run the `shared-context-server` project, follow these steps:
 
 ### Prerequisites
 
-*   Python 3.9 or higher
+*   Python 3.10 or higher
 *   `pip` (Python package installer)
 
 ### Installation
