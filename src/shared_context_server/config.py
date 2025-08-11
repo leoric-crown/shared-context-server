@@ -30,12 +30,49 @@ logger = logging.getLogger(__name__)
 dotenv.load_dotenv()
 
 
+def get_default_data_directory() -> str:
+    """Get appropriate data directory for the application."""
+    # Try to use XDG data directory on Unix systems
+    if os.name == "posix":
+        xdg_data_home = os.environ.get("XDG_DATA_HOME")
+        if xdg_data_home:
+            data_dir = Path(xdg_data_home) / "shared-context-server"
+        else:
+            data_dir = Path.home() / ".local" / "share" / "shared-context-server"
+    # Use AppData on Windows
+    elif os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            data_dir = Path(appdata) / "shared-context-server"
+        else:
+            data_dir = Path.home() / "AppData" / "Roaming" / "shared-context-server"
+    else:
+        # Fallback to home directory
+        data_dir = Path.home() / ".shared-context-server"
+
+    # Create directory if it doesn't exist
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir)
+
+
+def get_default_database_path() -> str:
+    """Get default database path that works for both development and containerized deployments."""
+    # If we're in a development environment with a local .env file, use relative path
+    if Path(".env").exists() or Path("pyproject.toml").exists():
+        return "./chat_history.db"
+
+    # Otherwise use the user data directory
+    data_dir = get_default_data_directory()
+    return str(Path(data_dir) / "chat_history.db")
+
+
 class DatabaseConfig(BaseSettings):
     """Database configuration settings."""
 
     # Database connection
     database_path: str = Field(
-        default="./chat_history.db", json_schema_extra={"env": "DATABASE_PATH"}
+        default_factory=get_default_database_path,
+        json_schema_extra={"env": "DATABASE_PATH"},
     )
     database_url: str | None = Field(
         default=None, json_schema_extra={"env": "DATABASE_URL"}
@@ -261,7 +298,9 @@ class DevelopmentConfig(BaseSettings):
         default=False, json_schema_extra={"env": "DEV_SEED_TEST_DATA"}
     )
     test_database_path: str = Field(
-        default="./test_chat_history.db",
+        default_factory=lambda: str(
+            Path(get_default_data_directory()) / "test_chat_history.db"
+        ),
         json_schema_extra={"env": "TEST_DATABASE_PATH"},
     )
 

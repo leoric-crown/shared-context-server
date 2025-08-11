@@ -4,7 +4,7 @@ Command Line Interface for Shared Context MCP Server.
 
 This module provides the main CLI entry point for production use,
 supporting both STDIO and HTTP transports with proper configuration
-management for pipx installation and system deployment.
+management for system deployment.
 """
 
 from __future__ import annotations

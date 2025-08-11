@@ -626,8 +626,8 @@ class TestRealWorldScenarios:
             main()
             mock_run_loop.assert_called_once()
 
-    def test_pipx_installation_scenario(self):
-        """Test scenario where CLI is installed via pipx."""
+    def test_isolated_installation_scenario(self):
+        """Test scenario where CLI is installed in isolated environment."""
         if not SERVER_AVAILABLE:
             pytest.skip("Server not available")
 
@@ -639,9 +639,9 @@ class TestRealWorldScenarios:
         mock_args.log_level = "INFO"
         mock_args.config = None
 
-        # Simulate pipx environment
+        # Simulate isolated environment
         with (
-            patch.dict(os.environ, {"PIPX_SHARED_LIBS": "/some/path"}),
+            patch.dict(os.environ, {"ISOLATED_ENV": "true"}),
             patch(
                 "shared_context_server.scripts.cli.parse_arguments",
                 return_value=mock_args,

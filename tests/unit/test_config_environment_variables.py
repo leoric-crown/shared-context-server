@@ -356,7 +356,9 @@ class TestDefaultValueApplication:
             assert config.enable_debug_tools is False
             assert config.dev_reset_database_on_start is False
             assert config.dev_seed_test_data is False
-            assert config.test_database_path == "./test_chat_history.db"
+            # Test database path uses smart detection now
+            assert "test_chat_history.db" in config.test_database_path
+            assert config.test_database_path.endswith("test_chat_history.db")
 
     def test_security_config_defaults_with_api_key(self):
         """Test security configuration default values when API key is provided."""
