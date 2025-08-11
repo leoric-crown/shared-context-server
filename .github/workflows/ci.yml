@@ -6,7 +6,7 @@ on:
 env:
   # Test environment variables to prevent startup crashes
   API_KEY: "test-api-key-for-ci-only"
-  DATABASE_PATH: ":memory:"
+  DATABASE_URL: "sqlite:///:memory:"
   ENVIRONMENT: "testing"
 
 jobs:
@@ -66,5 +66,5 @@ jobs:
         run: uv run pytest tests/test_smoke.py -v
         env:
           API_KEY: "test-api-key-for-ci-smoke-test"
-          DATABASE_PATH: "./test_smoke.db"
-          ENVIRONMENT: "test"
+          DATABASE_URL: "sqlite:///./test_smoke.db"
+          ENVIRONMENT: "development"
