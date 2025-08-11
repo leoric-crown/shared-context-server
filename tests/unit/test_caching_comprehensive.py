@@ -1076,9 +1076,9 @@ class TestConcurrentAccessPatterns:
         # Performance should not degrade excessively
         # Allow for some degradation due to concurrency overhead
         acceptable_degradation_factor = 5.0
-        assert (
-            max_batch_duration < baseline_duration * acceptable_degradation_factor
-        ), f"Excessive performance degradation: {max_batch_duration} vs baseline {baseline_duration}"
+        assert max_batch_duration < baseline_duration * acceptable_degradation_factor, (
+            f"Excessive performance degradation: {max_batch_duration} vs baseline {baseline_duration}"
+        )
 
         # Verify cache integrity after load test
         stats = cache_mgr.get_cache_stats()
@@ -1091,9 +1091,9 @@ class TestConcurrentAccessPatterns:
                 key = f"load_{batch_id}_{i}"
                 value = await cache_mgr.get(key)
                 expected_value = f"value_{batch_id}_{i}"
-                assert (
-                    value == expected_value
-                ), f"Data integrity error: {key} = {value}, expected {expected_value}"
+                assert value == expected_value, (
+                    f"Data integrity error: {key} = {value}, expected {expected_value}"
+                )
 
     @pytest.mark.asyncio
     async def test_concurrent_cache_invalidation_operations(self, cache_mgr):
@@ -1747,9 +1747,9 @@ class TestCacheStatisticsAndPerformanceValidation:
             actual_hit_ratio = stats["performance_metrics"]["hit_ratio"]
 
             # Allow some tolerance for timing variations in tests
-            assert (
-                abs(actual_hit_ratio - target_ratio) < 0.1
-            ), f"{description}: Expected ~{target_ratio}, got {actual_hit_ratio}"
+            assert abs(actual_hit_ratio - target_ratio) < 0.1, (
+                f"{description}: Expected ~{target_ratio}, got {actual_hit_ratio}"
+            )
 
             # Health status should match expectations (with some flexibility)
             if target_ratio >= 0.7:

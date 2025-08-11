@@ -357,9 +357,9 @@ class TestAuthenticateAgentTool:
                     requested_permissions=["read"],
                 )
 
-                assert (
-                    result["success"] is True
-                ), f"Failed for case: {case['description']}"
+                assert result["success"] is True, (
+                    f"Failed for case: {case['description']}"
+                )
                 assert result["agent_id"] == case["agent_id"]
                 assert result["agent_type"] == case["agent_type"]
 

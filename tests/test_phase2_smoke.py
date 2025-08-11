@@ -72,9 +72,9 @@ def test_phase2_server_tools():
     all_tools = phase2_search_tools + phase2_memory_tools + phase1_tools
     actual_names = {tool.name for tool in all_tools}
 
-    assert expected_names.issubset(
-        actual_names
-    ), f"Missing tools: {expected_names - actual_names}"
+    assert expected_names.issubset(actual_names), (
+        f"Missing tools: {expected_names - actual_names}"
+    )
 
     print("✅ All Phase 2 tools are properly defined and callable")
 

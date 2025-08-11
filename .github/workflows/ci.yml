@@ -31,14 +31,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Lint check (ruff)
-        run: uv run ruff check .
-
-      - name: Format check (ruff)
-        run: uv run ruff format --check .
-
-      - name: Type check (mypy)
-        run: uv run mypy src
+      - name: Pre-commit (all hooks)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Security audit
         run: uv run pip-audit

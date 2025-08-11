@@ -23,7 +23,7 @@ You have **ZERO-ERROR TOLERANCE**. Fix errors immediately - never work around th
 ### 1. Pre-Implementation Research (Required)
 - **Crawl4AI**: Scrape official docs for current patterns with intelligent content filtering
   - Official framework documentation for patterns and best practices
-  - API reference docs for implementation details  
+  - API reference docs for implementation details
 
 ### 2. Pattern Discovery (Required)
 - **Octocode**: Find star-backed implementations
@@ -114,7 +114,7 @@ Follow established error handling patterns from `.claude/tech-guides/error-handl
 ### ❌ Implementation Without Research
 Never start coding without researching current best practices first.
 
-### ❌ Complex Abstractions  
+### ❌ Complex Abstractions
 "Simple code that works" beats "elegant architecture that's planned".
 
 ### ❌ Error Workarounds
@@ -180,7 +180,7 @@ Provide structured status updates that preserve context for coordination and deb
 ### Escalation Triggers - STOP and Escalate When:
 - **Architecture Flaws**: Design issues requiring user decisions
 - **Test Failures**: Fundamental logic errors indicating deeper problems
-- **Security Issues**: Any security concerns requiring user approval  
+- **Security Issues**: Any security concerns requiring user approval
 - **File Size Violations**: Code exceeding 500 lines before refactoring
 - **Dependency Conflicts**: Missing deps you cannot resolve
 - **Integration Failures**: Components not working together

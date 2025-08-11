@@ -5,7 +5,7 @@ Brief description of the feature or enhancement.
 
 ## Requirements
 - Functional requirements
-- Non-functional requirements  
+- Non-functional requirements
 - Dependencies
 
 ## Implementation Plan

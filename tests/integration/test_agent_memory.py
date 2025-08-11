@@ -408,9 +408,9 @@ async def test_memory_performance_requirements(mock_database):
         set_time = (time.time() - start_time) * 1000
 
         assert set_result["success"] is True
-        assert (
-            set_time < threshold
-        ), f"Memory set took {set_time:.2f}ms, expected <{threshold}ms"
+        assert set_time < threshold, (
+            f"Memory set took {set_time:.2f}ms, expected <{threshold}ms"
+        )
 
         # Test get operation performance
         start_time = time.time()
@@ -418,9 +418,9 @@ async def test_memory_performance_requirements(mock_database):
         get_time = (time.time() - start_time) * 1000
 
         assert get_result["success"] is True
-        assert (
-            get_time < threshold
-        ), f"Memory get took {get_time:.2f}ms, expected <{threshold}ms"
+        assert get_time < threshold, (
+            f"Memory get took {get_time:.2f}ms, expected <{threshold}ms"
+        )
 
         # Test list operation performance
         start_time = time.time()
@@ -428,9 +428,9 @@ async def test_memory_performance_requirements(mock_database):
         list_time = (time.time() - start_time) * 1000
 
         assert list_result["success"] is True
-        assert (
-            list_time < threshold
-        ), f"Memory list took {list_time:.2f}ms, expected <{threshold}ms"
+        assert list_time < threshold, (
+            f"Memory list took {list_time:.2f}ms, expected <{threshold}ms"
+        )
 
         print("\nMemory Performance Results:")
         print(f"  - Set operation: {set_time:.2f}ms")
@@ -481,19 +481,19 @@ async def test_memory_json_serialization(mock_database):
                 metadata={"original_type": test_case["type"]},
             )
 
-            assert (
-                set_result["success"] is True
-            ), f"Failed to set {test_case['type']} value"
+            assert set_result["success"] is True, (
+                f"Failed to set {test_case['type']} value"
+            )
 
             # Retrieve and verify
             get_result = await call_fastmcp_tool(get_memory, ctx, key=key)
 
-            assert (
-                get_result["success"] is True
-            ), f"Failed to get {test_case['type']} value"
-            assert (
-                get_result["value"] == test_case["value"]
-            ), f"Value mismatch for {test_case['type']}"
+            assert get_result["success"] is True, (
+                f"Failed to get {test_case['type']} value"
+            )
+            assert get_result["value"] == test_case["value"], (
+                f"Value mismatch for {test_case['type']}"
+            )
             assert get_result["metadata"]["original_type"] == test_case["type"]
 
         print("✅ Memory JSON serialization test completed")

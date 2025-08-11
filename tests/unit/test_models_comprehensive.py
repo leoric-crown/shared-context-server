@@ -538,9 +538,9 @@ class TestSanitizationBoundaryTesting:
 
             # Performance should be reasonable (< 100ms for large inputs)
             duration = (end_time - start_time).total_seconds()
-            assert (
-                duration < 0.1
-            ), f"Sanitization took {duration}s for {len(large_text)} chars"
+            assert duration < 0.1, (
+                f"Sanitization took {duration}s for {len(large_text)} chars"
+            )
 
             # Result should be valid
             assert isinstance(sanitized, str)

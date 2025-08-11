@@ -10,7 +10,7 @@
 repos:
   # Fast Python linting and formatting (most important)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.12.8
     hooks:
       - id: ruff-format
         name: Format (ruff)
@@ -20,9 +20,18 @@ repos:
         args: [--fix]
         description: "Fast Python linting with automatic fixes"
 
+  - repo: local
+    hooks:
+      - id: mypy
+        name: Type check (mypy via uv)
+        language: system
+        pass_filenames: false
+        entry: uv
+        args: ["run", "mypy", "src"]
+
   # Essential file hygiene (fast, prevents diff noise)
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
         name: Fix EOF

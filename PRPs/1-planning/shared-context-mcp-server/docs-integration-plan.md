@@ -1,7 +1,7 @@
 # Documentation Integration Strategy: Shared Context MCP Server
 
-**Created**: 2025-01-10  
-**Type**: Documentation Strategy  
+**Created**: 2025-01-10
+**Type**: Documentation Strategy
 **Research Period**: January 2025
 
 ## Executive Summary
@@ -68,7 +68,7 @@ messages = await client.get_context(session_id)
 ## Core Tools
 [Auto-generated from FastMCP tool decorators with examples]
 
-## Resources  
+## Resources
 [Auto-generated from MCP resource definitions with subscription examples]
 ```
 
@@ -82,16 +82,16 @@ messages = await client.get_context(session_id)
 2. **Integration Guide Structure**
    ```markdown
    # MCP Server Integration Guide
-   
+
    ## For Claude Code Agents
    [Specific examples for agent integration]
-   
-   ## For Custom MCP Clients  
+
+   ## For Custom MCP Clients
    [Python SDK examples, JavaScript examples]
-   
+
    ## Authentication Setup
    [Bearer token examples, environment configuration]
-   
+
    ## Error Handling Patterns
    [Common errors and recovery strategies]
    ```
@@ -100,7 +100,7 @@ messages = await client.get_context(session_id)
 
 **Principle**: Every API endpoint must have 3 examples:
 1. **Minimal Example**: Simplest possible usage
-2. **Real-World Example**: Complete workflow scenario  
+2. **Real-World Example**: Complete workflow scenario
 3. **Error Handling Example**: What happens when things go wrong
 
 #### Example Pattern Template
@@ -122,7 +122,7 @@ session_id = await client.create_session(
     purpose="Code review for PR #123",
     metadata={
         "pr_number": 123,
-        "repository": "shared-context-server", 
+        "repository": "shared-context-server",
         "reviewers": ["developer", "tester", "security"]
     }
 )
@@ -167,7 +167,7 @@ python -m shared_context_server
 ## Production Deployment (10 minutes)
 [Docker, systemd, environment variables, monitoring setup]
 
-## Agent Configuration (3 minutes)  
+## Agent Configuration (3 minutes)
 [CLAUDE.md updates, agent authentication, connection testing]
 ```
 
@@ -182,9 +182,9 @@ python -m shared_context_server
 1. **Agent Registration** (30 seconds)
    ```markdown
    # Quick Start for New Agents
-   
+
    1. Get your authentication token: `export MCP_TOKEN="your-token"`
-   2. Test connection: `mcp-client test shared-context-server`  
+   2. Test connection: `mcp-client test shared-context-server`
    3. Create first session: [working example]
    4. Your first collaboration: [step-by-step example]
    ```
@@ -200,12 +200,12 @@ python -m shared_context_server
    - Code review workflows
    - Implementation coordination
    - Status sharing patterns
-   
-   ## For Tester Agents  
+
+   ## For Tester Agents
    - Test result sharing
    - Issue coordination
    - Validation workflows
-   
+
    ## For Documentation Agents
    - Information gathering
    - Cross-agent context building
@@ -235,7 +235,7 @@ session_id = await client.create_session(
 )
 
 # Share requirements
-await client.add_message(session_id, "main", 
+await client.add_message(session_id, "main",
     "Implementing OAuth2 authentication. See requirements in auth-requirements.md"
 )
 ```
@@ -257,7 +257,7 @@ await client.add_message(session_id, "developer",
 
 ## Common Patterns
 - Status updates with metadata
-- File change notifications  
+- File change notifications
 - Error sharing and resolution
 - Decision documentation
 ```
@@ -275,7 +275,7 @@ await client.add_message(session_id, "developer",
 
 ### Problem: "Cannot connect to MCP server"
 **Symptoms**: Client hangs on connection, timeout errors
-**Solution**: 
+**Solution**:
 1. Check server status: `curl http://localhost:3000/health`
 2. Verify authentication: [token validation example]
 3. Network troubleshooting: [port checking, firewall rules]
@@ -287,7 +287,7 @@ await client.add_message(session_id, "developer",
 
 ## Multi-Agent Coordination Issues
 
-### Problem: Message ordering conflicts  
+### Problem: Message ordering conflicts
 **Symptoms**: Agents see different message sequences
 **Solution**: [UTC timestamp debugging, sync strategies]
 
@@ -309,7 +309,7 @@ await client.add_message(session_id, "developer",
 │   ├── tools.md           # Generated from FastMCP tool decorators
 │   ├── resources.md       # Generated from MCP resource definitions
 │   └── models.md          # Generated from Pydantic models
-├── guides/                # Hand-written user guides  
+├── guides/                # Hand-written user guides
 │   ├── quick-start.md     # 5-minute onboarding
 │   ├── integration/       # Platform-specific integration
 │   ├── workflows/         # Multi-agent collaboration patterns
@@ -336,12 +336,12 @@ await client.add_message(session_id, "developer",
    ) -> SessionResponse:
        """
        Create new shared context session.
-       
+
        Examples:
            Basic usage:
                >>> session = await create_session("My session")
-               
-           With metadata:  
+
+           With metadata:
                >>> session = await create_session(
                ...     purpose="Code review",
                ...     metadata={"pr": 123}
@@ -376,11 +376,11 @@ jobs:
   validate-examples:
     - name: Test documentation examples
       run: pytest docs/examples/ --doctest-modules
-      
+
   generate-api-docs:
     - name: Generate API reference
       run: python scripts/generate_api_docs.py
-      
+
   deploy-docs:
     if: github.ref == 'refs/heads/main'
     - name: Deploy to GitHub Pages
@@ -420,21 +420,21 @@ async def agent_workflow(task):
     # Connect to shared session
     client = SharedContextClient()
     session_id = get_current_session_id()
-    
+
     # Share progress
-    await client.add_message(session_id, "developer", 
+    await client.add_message(session_id, "developer",
         f"Starting {task}, estimated 15 minutes"
     )
-    
+
     # Get context from other agents
     recent_context = await client.get_context(session_id, limit=10)
-    
+
     # Execute task with context...
 ```
 
 ### Agent Coordination Updates
 - **Context Preservation**: All agent decisions logged to shared context
-- **Cross-Agent Visibility**: Agents can see real-time updates from collaborators  
+- **Cross-Agent Visibility**: Agents can see real-time updates from collaborators
 - **Audit Trail**: Complete history of multi-agent workflows
 - **Error Recovery**: Shared error context helps agents recover from failures
 ```
@@ -451,7 +451,7 @@ async def agent_workflow(task):
 ## For Existing Developer Agents
 ### What Changes
 - New MCP connection for session sharing
-- Status reporting patterns  
+- Status reporting patterns
 - Context-aware decision making
 
 ### What Stays the Same
@@ -468,7 +468,7 @@ async def agent_workflow(task):
 ## For Tester Agents
 [Similar structure with testing-specific guidance]
 
-## For Documentation Agents  
+## For Documentation Agents
 [Similar structure with docs-specific guidance]
 ```
 
@@ -540,7 +540,7 @@ If issues arise:
 - [ ] Write core integration guides
 - [ ] Develop troubleshooting documentation
 
-### Phase 2: User Experience (Week 2)  
+### Phase 2: User Experience (Week 2)
 - [ ] Create agent onboarding flows
 - [ ] Write workflow examples for common scenarios
 - [ ] Build interactive tutorials
@@ -548,7 +548,7 @@ If issues arise:
 
 ### Phase 3: Integration (Week 3)
 - [ ] Update CLAUDE.md with server integration
-- [ ] Create agent training materials  
+- [ ] Create agent training materials
 - [ ] Write migration guides
 - [ ] Test full integration with existing agent workflows
 

@@ -108,7 +108,7 @@ Always document integration patterns:
 - **Database Operations**: Use aiosqlite patterns from core-architecture.md
 - **API Integration**: Document MCP tool and resource usage patterns
 
-### MCP Server Features  
+### MCP Server Features
 Explain system behavior clearly:
 - **Operation Results**: Document MCP tool response patterns and status indicators
 - **Error States**: Reference `.claude/tech-guides/error-handling.md` for error response patterns

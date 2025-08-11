@@ -104,7 +104,7 @@ For multi-phase coordination, you must return structured status objects:
 ```
 
 ### Escalation Triggers - STOP and Escalate When:
-- **Agent Conflicts**: Multiple agents providing contradictory guidance  
+- **Agent Conflicts**: Multiple agents providing contradictory guidance
 - **Phase Dependencies**: Later phases cannot proceed without resolving earlier issues
 - **Resource Constraints**: Coordination requires more time/complexity than estimated
 - **Quality Gate Failures**: Agents reporting failures that block overall progress

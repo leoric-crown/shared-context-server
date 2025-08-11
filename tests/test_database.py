@@ -302,12 +302,12 @@ class TestUtcTimestampValidation:
 
         # Verify round-trip integrity
         assert retrieved_metadata == test_metadata, "Metadata round-trip failed"
-        assert (
-            retrieved_metadata["unicode_test"] == "こんにちは世界 🌍"
-        ), "Unicode handling failed"
-        assert (
-            retrieved_metadata["nested_array"][2]["nested"] == "value"
-        ), "Nested structure failed"
+        assert retrieved_metadata["unicode_test"] == "こんにちは世界 🌍", (
+            "Unicode handling failed"
+        )
+        assert retrieved_metadata["nested_array"][2]["nested"] == "value", (
+            "Nested structure failed"
+        )
 
 
 @pytest.fixture
@@ -778,9 +778,9 @@ class TestIndexPerformance:
             plan_text = " ".join([str(row) for row in plan])
 
             # Check that index is mentioned in query plan
-            assert (
-                "idx_messages_session_id" in plan_text
-            ), f"Index not used in query plan: {plan_text}"
+            assert "idx_messages_session_id" in plan_text, (
+                f"Index not used in query plan: {plan_text}"
+            )
 
 
 class TestUtcTimestamps:

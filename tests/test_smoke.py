@@ -37,9 +37,9 @@ class TestWALSchemaSmoke:
             async with db_manager.get_connection() as conn:
                 cursor = await conn.execute("PRAGMA journal_mode;")
                 mode = (await cursor.fetchone())[0].lower()
-                assert (
-                    mode == "wal"
-                ), f"❌ WAL mode not enabled, got: {mode}. This breaks concurrent agent access!"
+                assert mode == "wal", (
+                    f"❌ WAL mode not enabled, got: {mode}. This breaks concurrent agent access!"
+                )
 
         finally:
             # Cleanup
@@ -132,9 +132,9 @@ class TestWALSchemaSmoke:
         try:
             config = get_config()
             assert config is not None, "❌ Configuration should load successfully"
-            assert (
-                config.security.api_key is not None
-            ), "❌ API_KEY should be available from .env or environment"
+            assert config.security.api_key is not None, (
+                "❌ API_KEY should be available from .env or environment"
+            )
             assert len(config.security.api_key) > 0, "❌ API_KEY should not be empty"
 
         except Exception as e:
@@ -157,14 +157,14 @@ class TestWALSchemaSmoke:
 
         try:
             config = get_config()
-            assert (
-                config is not None
-            ), "❌ Configuration failed to load with required environment variables"
+            assert config is not None, (
+                "❌ Configuration failed to load with required environment variables"
+            )
             assert config.security.api_key == required_env["API_KEY"]
             # DATABASE_PATH gets resolved to absolute path by validator, so just check it's not None
-            assert (
-                config.database.database_path is not None
-            ), "❌ Database path should be configured"
+            assert config.database.database_path is not None, (
+                "❌ Database path should be configured"
+            )
 
         except Exception as e:
             pytest.fail(
@@ -188,9 +188,9 @@ class TestFoundationIntegrity:
             async with db_manager.get_connection() as conn:
                 cursor = await conn.execute("PRAGMA foreign_keys;")
                 result = (await cursor.fetchone())[0]
-                assert (
-                    str(result) == "1"
-                ), f"❌ Foreign keys not enabled, got: {result}. This breaks data integrity!"
+                assert str(result) == "1", (
+                    f"❌ Foreign keys not enabled, got: {result}. This breaks data integrity!"
+                )
 
         finally:
             with contextlib.suppress(FileNotFoundError):
@@ -209,9 +209,9 @@ class TestFoundationIntegrity:
             async with db_manager.get_connection() as conn:
                 cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
                 version = (await cursor.fetchone())[0]
-                assert (
-                    version is not None and version >= 1
-                ), f"❌ Schema version not tracked properly, got: {version}"
+                assert version is not None and version >= 1, (
+                    f"❌ Schema version not tracked properly, got: {version}"
+                )
 
         finally:
             with contextlib.suppress(FileNotFoundError):

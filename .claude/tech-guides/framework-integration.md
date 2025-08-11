@@ -60,16 +60,16 @@ async def create_session(
 ) -> Dict[str, Any]:
     """
     Create a new shared context session.
-    
+
     Returns session_id for future operations.
     """
-    
+
     # Generate unique session ID
     session_id = f"session_{uuid4().hex[:16]}"
-    
+
     # Get agent identity from context
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with db_pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO sessions (id, purpose, created_by, metadata)
@@ -81,10 +81,10 @@ async def create_session(
             json.dumps(metadata or {})
         ))
         await conn.commit()
-        
+
         # Audit log
         await audit_log(conn, "session_created", agent_id, session_id)
-    
+
     return {
         "success": True,
         "session_id": session_id,
@@ -116,20 +116,20 @@ async def add_message(
 ) -> Dict[str, Any]:
     """
     Add a message to the shared context session.
-    
+
     Visibility controls:
     - public: Visible to all agents
     - private: Visible only to sender
     - agent_only: Visible only to agents of same type
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     # Sanitize inputs
     content = sanitize_text(content)
     if metadata:
         metadata = sanitize_json(metadata)
-    
+
     async with db_pool.acquire() as conn:
         # Verify session exists
         cursor = await conn.execute(
@@ -142,10 +142,10 @@ async def add_message(
                 "error": "Session not found",
                 "code": "SESSION_NOT_FOUND"
             }
-        
+
         # Insert message
         cursor = await conn.execute("""
-            INSERT INTO messages 
+            INSERT INTO messages
             (session_id, sender, content, visibility, metadata, parent_message_id)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
@@ -156,16 +156,16 @@ async def add_message(
             json.dumps(metadata or {}),
             parent_message_id
         ))
-        
+
         message_id = cursor.lastrowid
         await conn.commit()
-        
+
         # Invalidate cache
         await cache.invalidate(session_id)
-        
+
         # Trigger resource update notification
         await mcp.notify_resource_updated(f"session://{session_id}")
-    
+
     return {
         "success": True,
         "message_id": message_id,
@@ -201,42 +201,42 @@ async def search_context(
 ) -> Dict[str, Any]:
     """
     Fuzzy search messages using RapidFuzz for 5-10x performance.
-    
+
     Searches content, sender, and optionally metadata fields.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     # Get all accessible messages
     async with db_pool.acquire() as conn:
         cursor = await conn.execute("""
-            SELECT * FROM messages 
-            WHERE session_id = ? 
-            AND (visibility = 'public' OR 
+            SELECT * FROM messages
+            WHERE session_id = ?
+            AND (visibility = 'public' OR
                  (visibility = 'private' AND sender = ?))
             ORDER BY timestamp DESC
         """, (session_id, agent_id))
-        
+
         rows = await cursor.fetchall()
-        
+
         if not rows:
             return {
                 "success": True,
                 "results": [],
                 "query": query
             }
-        
+
         # Prepare searchable text
         searchable_items = []
         for row in rows:
             msg = dict(row)
-            
+
             # Build searchable text
             text_parts = [
                 msg.get('sender', ''),
                 msg.get('content', '')
             ]
-            
+
             if search_metadata and msg.get('metadata'):
                 try:
                     metadata = json.loads(msg['metadata'])
@@ -247,10 +247,10 @@ async def search_context(
                         ])
                 except json.JSONDecodeError:
                     pass
-            
+
             searchable_text = ' '.join(text_parts).lower()
             searchable_items.append((searchable_text, msg))
-        
+
         # Use RapidFuzz for matching
         choices = [(item[0], idx) for idx, item in enumerate(searchable_items)]
         matches = process.extract(
@@ -261,22 +261,22 @@ async def search_context(
             score_cutoff=fuzzy_threshold,
             processor=lambda x: x[0]
         )
-        
+
         # Build results
         results = []
         for match in matches:
             _, score, idx = match
             message = searchable_items[idx][1]
-            
+
             if message.get('metadata'):
                 message['metadata'] = json.loads(message['metadata'])
-            
+
             results.append({
                 "message": message,
                 "score": score,
                 "match_preview": message['content'][:100]
             })
-    
+
     return {
         "success": True,
         "results": results,
@@ -311,27 +311,27 @@ async def set_memory(
 ) -> Dict[str, Any]:
     """
     Store value in agent's private memory.
-    
+
     Can be session-scoped or global to the agent.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     expires_at = None
     if expires_in:
         expires_at = datetime.now(timezone.utc).timestamp() + expires_in
-    
+
     # Serialize value
     if not isinstance(value, str):
         value = json.dumps(value)
-    
+
     async with db_pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO agent_memory 
+            INSERT INTO agent_memory
             (agent_id, session_id, key, value, metadata, expires_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(agent_id, session_id, key) 
-            DO UPDATE SET 
+            ON CONFLICT(agent_id, session_id, key)
+            DO UPDATE SET
                 value = excluded.value,
                 metadata = excluded.metadata,
                 updated_at = CURRENT_TIMESTAMP,
@@ -345,7 +345,7 @@ async def set_memory(
             expires_at
         ))
         await conn.commit()
-    
+
     return {
         "success": True,
         "key": key,
@@ -364,20 +364,20 @@ async def get_memory(
     """
     Retrieve value from agent's private memory.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with db_pool.acquire() as conn:
         # Clean expired entries
         await conn.execute("""
-            DELETE FROM agent_memory 
+            DELETE FROM agent_memory
             WHERE expires_at IS NOT NULL AND expires_at < ?
         """, (datetime.now(timezone.utc).timestamp(),))
-        
+
         # Retrieve value
         cursor = await conn.execute("""
             SELECT value, metadata FROM agent_memory
-            WHERE agent_id = ? AND key = ? 
+            WHERE agent_id = ? AND key = ?
             AND (session_id = ? OR (? IS NULL AND session_id IS NULL))
             AND (expires_at IS NULL OR expires_at > ?)
         """, (
@@ -387,27 +387,27 @@ async def get_memory(
             session_id,
             datetime.now(timezone.utc).timestamp()
         ))
-        
+
         row = await cursor.fetchone()
-        
+
         if not row:
             return {
                 "success": False,
                 "error": "Memory key not found",
                 "code": "MEMORY_NOT_FOUND"
             }
-        
+
         value = row['value']
         # Try to deserialize JSON
         try:
             value = json.loads(value)
         except json.JSONDecodeError:
             pass
-        
+
         metadata = {}
         if row['metadata']:
             metadata = json.loads(row['metadata'])
-        
+
         return {
             "success": True,
             "key": key,
@@ -425,33 +425,33 @@ async def get_memory(
 async def get_session_resource(session_id: str) -> Resource:
     """
     Provide session as an MCP resource with real-time updates.
-    
+
     Clients can subscribe to changes.
     """
-    
+
     agent_id = mcp.context.get("agent_id", "unknown")
-    
+
     async with db_pool.acquire() as conn:
         # Get session info
         cursor = await conn.execute("""
             SELECT * FROM sessions WHERE id = ?
         """, (session_id,))
-        
+
         session = await cursor.fetchone()
         if not session:
             raise ResourceNotFound(f"Session {session_id} not found")
-        
+
         # Get visible messages
         cursor = await conn.execute("""
-            SELECT * FROM messages 
-            WHERE session_id = ? 
-            AND (visibility = 'public' OR 
+            SELECT * FROM messages
+            WHERE session_id = ?
+            AND (visibility = 'public' OR
                  (visibility = 'private' AND sender = ?))
             ORDER BY timestamp ASC
         """, (session_id, agent_id))
-        
+
         messages = await cursor.fetchall()
-        
+
         # Format as resource
         content = {
             "session": dict(session),
@@ -459,7 +459,7 @@ async def get_session_resource(session_id: str) -> Resource:
             "message_count": len(messages),
             "last_updated": datetime.now(timezone.utc).isoformat()
         }
-        
+
         return Resource(
             uri=f"session://{session_id}",
             name=f"Session: {session['purpose']}",
@@ -471,43 +471,43 @@ async def get_session_resource(session_id: str) -> Resource:
 async def get_agent_memory_resource(agent_id: str) -> Resource:
     """
     Provide agent memory as a resource.
-    
+
     Only accessible by the agent itself.
     """
-    
+
     requesting_agent = mcp.context.get("agent_id", "unknown")
-    
+
     # Security check
     if requesting_agent != agent_id:
         raise ResourceNotFound("Unauthorized access to agent memory")
-    
+
     async with db_pool.acquire() as conn:
         cursor = await conn.execute("""
-            SELECT key, value, session_id, expires_at 
+            SELECT key, value, session_id, expires_at
             FROM agent_memory
             WHERE agent_id = ?
             AND (expires_at IS NULL OR expires_at > ?)
         """, (agent_id, datetime.now(timezone.utc).timestamp()))
-        
+
         memories = await cursor.fetchall()
-        
+
         memory_dict = {}
         for row in memories:
             scope = "global" if row['session_id'] is None else row['session_id']
             if scope not in memory_dict:
                 memory_dict[scope] = {}
-            
+
             value = row['value']
             try:
                 value = json.loads(value)
             except json.JSONDecodeError:
                 pass
-            
+
             memory_dict[scope][row['key']] = {
                 "value": value,
                 "expires_at": row['expires_at']
             }
-        
+
         return Resource(
             uri=f"agent://{agent_id}/memory",
             name=f"Agent Memory: {agent_id}",
@@ -533,10 +533,10 @@ async def client():
 @pytest.mark.asyncio
 async def test_session_workflow(client):
     """Test complete session workflow."""
-    
+
     # Set agent context
     client.set_context({"agent_id": "test_agent"})
-    
+
     # Create session
     result = await client.call_tool(
         "create_session",
@@ -544,7 +544,7 @@ async def test_session_workflow(client):
     )
     assert result["success"] is True
     session_id = result["session_id"]
-    
+
     # Add message
     result = await client.call_tool(
         "add_message",
@@ -555,7 +555,7 @@ async def test_session_workflow(client):
         }
     )
     assert result["success"] is True
-    
+
     # Search context
     result = await client.call_tool(
         "search_context",
@@ -571,21 +571,21 @@ async def test_session_workflow(client):
 @pytest.mark.asyncio
 async def test_resource_subscription(client):
     """Test resource subscription updates."""
-    
+
     client.set_context({"agent_id": "test_agent"})
-    
+
     # Create session
     result = await client.call_tool(
         "create_session",
         {"purpose": "subscription test"}
     )
     session_id = result["session_id"]
-    
+
     # Subscribe to resource
     subscription = await client.subscribe_to_resource(
         f"session://{session_id}"
     )
-    
+
     # Add message (should trigger update)
     await client.call_tool(
         "add_message",
@@ -594,7 +594,7 @@ async def test_resource_subscription(client):
             "content": "New message"
         }
     )
-    
+
     # Check for notification
     notification = await client.wait_for_notification(timeout=5)
     assert notification is not None
@@ -611,12 +611,12 @@ import aiosqlitepool
 @asynccontextmanager
 async def lifespan(app):
     """FastMCP server lifespan management."""
-    
+
     global db_pool
-    
+
     # Startup
     print("Initializing Shared Context MCP Server...")
-    
+
     # Initialize database pool
     db_pool = await aiosqlitepool.create_pool(
         "sqlite:///./chat_history.db",
@@ -624,25 +624,25 @@ async def lifespan(app):
         max_size=20,
         check_same_thread=False
     )
-    
+
     # Initialize database schema
     async with db_pool.acquire() as conn:
         await initialize_schema(conn)
         await configure_sqlite_performance(conn)
         await create_indexes(conn)
-    
+
     # Initialize caches
     global cache
     cache = LayeredCache()
-    
+
     # Start background tasks
     asyncio.create_task(cleanup_expired_memory())
     asyncio.create_task(monitor_performance())
-    
+
     print("Server ready!")
-    
+
     yield
-    
+
     # Shutdown
     print("Shutting down...")
     await db_pool.close()
@@ -652,15 +652,15 @@ async def initialize_schema(conn):
     """Create database schema if not exists."""
     # Import schema from core architecture module
     from shared_context_server.schema import get_database_schema
-    
+
     schema_sql = get_database_schema()
     await conn.executescript(schema_sql)
-    
+
     # Note: Complete schema definition available in Core Architecture Guide
 
 async def configure_sqlite_performance(conn):
     """Configure SQLite for optimal performance."""
-    
+
     await conn.execute("PRAGMA journal_mode = WAL")
     await conn.execute("PRAGMA synchronous = NORMAL")
     await conn.execute("PRAGMA cache_size = -8000")
@@ -673,20 +673,20 @@ async def create_indexes(conn):
     """Create performance indexes."""
     # Import indexes from core architecture module
     from shared_context_server.schema import get_performance_indexes
-    
+
     indexes = get_performance_indexes()
     for index in indexes:
         await conn.execute(index)
-    
+
     # Note: Complete index definitions available in Core Architecture Guide
 
 # Run the server
 if __name__ == "__main__":
     import uvicorn
-    
+
     # Create FastMCP app with lifespan
     app = mcp.create_app(lifespan=lifespan)
-    
+
     # Run with uvicorn
     uvicorn.run(
         app,

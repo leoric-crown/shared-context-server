@@ -254,9 +254,9 @@ class TestPhase1EndToEnd:
         def _verify_tool_accessible(tool_name: str) -> None:
             try:
                 tool = mcp.tool(tool_name)
-                assert (
-                    tool is not None
-                ), f"Tool {tool_name} not found in registered tools"
+                assert tool is not None, (
+                    f"Tool {tool_name} not found in registered tools"
+                )
             except Exception as e:
                 raise AssertionError(f"Tool {tool_name} not accessible: {e}") from e
 

@@ -6,7 +6,7 @@ Initiates a collaborative, multi-phase process to define, research, and plan any
 
 **Planning Types Supported:**
 - **Product Planning**: User stories, personas, Jobs-to-be-Done (JTBD)
-- **Technical Planning**: Architecture, integration points, technical specifications  
+- **Technical Planning**: Architecture, integration points, technical specifications
 - **Enhancement Planning**: Existing feature improvements, refactoring needs
 - **Investigation Planning**: Research tasks, proof of concepts, exploration
 - **Bug Fix Planning**: Issue analysis, root cause investigation, solution design

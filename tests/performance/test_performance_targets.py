@@ -95,19 +95,19 @@ class TestPerformanceTargets:
         stats = await self.measure_operation_time(connection_op, iterations=100)
 
         # Assert performance targets for database operations
-        assert (
-            stats["p95_ms"] < 50
-        ), f"Database operation P95 {stats['p95_ms']:.1f}ms exceeds 50ms target"
-        assert (
-            stats["avg_ms"] < 25
-        ), f"Database operation average {stats['avg_ms']:.1f}ms exceeds 25ms target"
+        assert stats["p95_ms"] < 50, (
+            f"Database operation P95 {stats['p95_ms']:.1f}ms exceeds 50ms target"
+        )
+        assert stats["avg_ms"] < 25, (
+            f"Database operation average {stats['avg_ms']:.1f}ms exceeds 25ms target"
+        )
 
         # Check pool utilization
         pool_stats = initialized_pool.get_performance_stats()
         utilization = pool_stats["pool_stats"]["pool_utilization"]
-        assert (
-            utilization < 0.8
-        ), f"Pool utilization {utilization:.1%} exceeds 80% target"
+        assert utilization < 0.8, (
+            f"Pool utilization {utilization:.1%} exceeds 80% target"
+        )
 
         print(
             f"✅ Connection pool performance: {stats['avg_ms']:.1f}ms avg, {stats['p95_ms']:.1f}ms P95"
@@ -131,12 +131,12 @@ class TestPerformanceTargets:
         get_stats = await self.measure_operation_time(cache_get_op, iterations=100)
 
         # Assert performance targets for caching (should be very fast)
-        assert (
-            set_stats["p95_ms"] < 5
-        ), f"Cache set P95 {set_stats['p95_ms']:.1f}ms exceeds 5ms target"
-        assert (
-            get_stats["p95_ms"] < 1
-        ), f"Cache get P95 {get_stats['p95_ms']:.1f}ms exceeds 1ms target"
+        assert set_stats["p95_ms"] < 5, (
+            f"Cache set P95 {set_stats['p95_ms']:.1f}ms exceeds 5ms target"
+        )
+        assert get_stats["p95_ms"] < 1, (
+            f"Cache get P95 {get_stats['p95_ms']:.1f}ms exceeds 1ms target"
+        )
 
         # Check cache hit ratio after repeated gets
         for _ in range(20):
@@ -189,12 +189,12 @@ class TestPerformanceTargets:
 
         # Assert performance requirements
         assert successful >= 20, f"Only {successful} operations succeeded, need 20+"
-        assert (
-            success_rate >= 0.95
-        ), f"Success rate {success_rate:.1%} below 95% threshold"
-        assert (
-            elapsed_time < 5
-        ), f"Concurrent operations took {elapsed_time:.1f}s, should be <5s"
+        assert success_rate >= 0.95, (
+            f"Success rate {success_rate:.1%} below 95% threshold"
+        )
+        assert elapsed_time < 5, (
+            f"Concurrent operations took {elapsed_time:.1f}s, should be <5s"
+        )
 
         # Check final pool utilization
         pool_stats = initialized_pool.get_performance_stats()
@@ -226,9 +226,9 @@ class TestPerformanceTargets:
         db_performance = metrics.get("database_performance", {})
         assert "connection_stats" in db_performance, "Should contain connection stats"
         assert "pool_stats" in db_performance, "Should contain pool stats"
-        assert (
-            "performance_indicators" in db_performance
-        ), "Should contain performance indicators"
+        assert "performance_indicators" in db_performance, (
+            "Should contain performance indicators"
+        )
 
         # Check performance indicators
         indicators = db_performance["performance_indicators"]
@@ -242,12 +242,12 @@ class TestPerformanceTargets:
         error_rate = indicators["error_rate"]
 
         # Verify performance is within acceptable ranges
-        assert (
-            avg_query_time < 100
-        ), f"Average query time {avg_query_time:.1f}ms too high"
-        assert (
-            pool_utilization < 1.0
-        ), f"Pool utilization {pool_utilization:.1%} at maximum"
+        assert avg_query_time < 100, (
+            f"Average query time {avg_query_time:.1f}ms too high"
+        )
+        assert pool_utilization < 1.0, (
+            f"Pool utilization {pool_utilization:.1%} at maximum"
+        )
         assert error_rate < 0.1, f"Error rate {error_rate:.1%} too high"
 
         print("✅ Performance metrics available:")

@@ -34,12 +34,12 @@ from uuid import uuid4
 
 class SessionModel(BaseModel):
     """Session model representing a shared context workspace."""
-    
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
         json_encoders={datetime: lambda v: v.isoformat()}
     )
-    
+
     id: str = Field(
         default_factory=lambda: str(uuid4()),
         description="Unique session identifier",
@@ -66,7 +66,7 @@ class SessionModel(BaseModel):
         default_factory=dict,
         description="Additional session metadata"
     )
-    
+
     @field_validator('purpose')
     @classmethod
     def sanitize_purpose(cls, v: Optional[str]) -> Optional[str]:
@@ -101,12 +101,12 @@ class MessageType(str, Enum):
 
 class MessageModel(BaseModel):
     """Message model for agent communications."""
-    
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
         use_enum_values=True
     )
-    
+
     id: Optional[int] = Field(
         None,
         description="Auto-generated message ID"
@@ -149,7 +149,7 @@ class MessageModel(BaseModel):
         None,
         description="Parent message for threading"
     )
-    
+
     @field_validator('content')
     @classmethod
     def sanitize_content(cls, v: str) -> str:
@@ -166,7 +166,7 @@ class MessageModel(BaseModel):
         clean = re.sub(r'<iframe.*?</iframe>', '', clean, flags=re.IGNORECASE)
         clean = re.sub(r'javascript:', '', clean, flags=re.IGNORECASE)
         return clean.strip()
-    
+
     @field_validator('metadata')
     @classmethod
     def validate_metadata(cls, v: Dict[str, Any]) -> Dict[str, Any]:
@@ -183,9 +183,9 @@ class MessageModel(BaseModel):
 ```python
 class AgentMemoryModel(BaseModel):
     """Private memory storage for individual agents."""
-    
+
     model_config = ConfigDict(str_strip_whitespace=True)
-    
+
     id: Optional[int] = Field(None)
     agent_id: str = Field(
         ...,
@@ -220,7 +220,7 @@ class AgentMemoryModel(BaseModel):
         None,
         description="Optional expiration timestamp"
     )
-    
+
     @field_validator('value')
     @classmethod
     def validate_json_serializable(cls, v: str) -> str:
@@ -232,7 +232,7 @@ class AgentMemoryModel(BaseModel):
         except json.JSONDecodeError:
             # If not JSON, wrap as string
             return json.dumps(v)
-    
+
     @property
     def is_expired(self) -> bool:
         """Check if memory has expired."""
@@ -246,12 +246,12 @@ class AgentMemoryModel(BaseModel):
 ```python
 class MCPToolRequest(BaseModel):
     """Request model for MCP tool invocations."""
-    
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
         extra='forbid'  # Reject unknown fields
     )
-    
+
     name: str = Field(
         ...,
         pattern=r'^[a-zA-Z][a-zA-Z0-9_-]*$',
@@ -266,7 +266,7 @@ class MCPToolRequest(BaseModel):
         pattern=r'^[a-zA-Z0-9-_]{8,64}$',
         description="Session context"
     )
-    
+
     @field_validator('name')
     @classmethod
     def validate_tool_exists(cls, v: str) -> str:
@@ -283,9 +283,9 @@ class MCPToolRequest(BaseModel):
 
 class MCPToolResponse(BaseModel):
     """Response model for MCP tool invocations."""
-    
+
     model_config = ConfigDict(str_strip_whitespace=True)
-    
+
     success: bool = Field(..., description="Whether tool execution succeeded")
     result: Optional[Any] = Field(None, description="Tool execution result")
     error: Optional[str] = Field(None, description="Error message if failed")
@@ -293,7 +293,7 @@ class MCPToolResponse(BaseModel):
         None,
         description="Execution time in milliseconds"
     )
-    
+
     @model_validator(mode='after')
     def validate_response(self):
         """Ensure either result or error is present."""
@@ -311,21 +311,21 @@ from typing import Set
 
 class AgentIdentity(BaseModel):
     """Agent identity extracted from JWT token."""
-    
+
     model_config = ConfigDict(frozen=True)  # Immutable
-    
+
     id: str = Field(..., pattern=r'^[a-zA-Z0-9-_.]+$')
     type: str = Field(default="unknown")
     permissions: Set[str] = Field(default_factory=set)
     session_scope: Optional[str] = Field(None)
-    
+
     def has_permission(self, permission: str) -> bool:
         """Check if agent has specific permission."""
         return permission in self.permissions
 
 class JWTPayload(BaseModel):
     """JWT token payload for authentication."""
-    
+
     agent_id: str = Field(..., description="Agent identifier")
     agent_type: Optional[str] = Field(None, description="Agent type")
     permissions: list[str] = Field(
@@ -336,7 +336,7 @@ class JWTPayload(BaseModel):
     iat: int = Field(..., description="Issued at timestamp")
     aud: str = Field(..., description="Audience (must be 'mcp-shared-context-server')")
     iss: str = Field(..., description="Issuer")
-    
+
     @field_validator('aud')
     @classmethod
     def validate_audience(cls, v: str) -> str:
@@ -344,7 +344,7 @@ class JWTPayload(BaseModel):
         if v != 'mcp-shared-context-server':
             raise ValueError(f"Invalid audience: {v}")
         return v
-    
+
     @property
     def is_expired(self) -> bool:
         """Check if token has expired."""
@@ -356,9 +356,9 @@ class JWTPayload(BaseModel):
 ```python
 class SearchRequest(BaseModel):
     """Request model for fuzzy search operations."""
-    
+
     model_config = ConfigDict(str_min_length=1)
-    
+
     session_id: str = Field(..., pattern=r'^[a-zA-Z0-9-_]{8,64}$')
     query: str = Field(..., min_length=1, max_length=500)
     fuzzy_threshold: float = Field(
@@ -380,7 +380,7 @@ class SearchRequest(BaseModel):
 
 class SearchResult(BaseModel):
     """Search result with similarity scoring."""
-    
+
     message: MessageModel
     similarity_score: float = Field(ge=0.0, le=1.0)
     match_locations: list[str] = Field(
@@ -540,7 +540,7 @@ class SecureModel(BaseModel):
             SecretStr: lambda v: "***"
         }
     )
-    
+
     api_key: SecretStr  # Won't be logged
 ```
 
@@ -567,7 +567,7 @@ def test_message_model_validation():
         content="Test message"
     )
     assert msg.visibility == MessageVisibility.PUBLIC
-    
+
     # Invalid session_id pattern
     with pytest.raises(ValidationError) as exc:
         MessageModel(

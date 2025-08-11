@@ -4,7 +4,7 @@ Transform planning output into comprehensive, implementation-ready PRPs that pre
 
 ## Planning File: $ARGUMENTS
 
-Input: Planning documents from `PRPs/1-planning/`  
+Input: Planning documents from `PRPs/1-planning/`
 Output: Implementation-ready PRPs in `PRPs/2-prps/[NUMBER]_feature-name.md`
 
 ## 🎯 Comprehensive PRP Generation Philosophy
@@ -42,7 +42,7 @@ All PRPs are generated with the Shared Context MCP Server's foundational archite
 - **Note constraints and dependencies** identified during planning
 ```
 
-#### 2. MCP Research Integration  
+#### 2. MCP Research Integration
 ```markdown
 - **Crawl4AI**: Integrate relevant framework documentation research
 - **Octocode**: Include proven implementation patterns from similar features
@@ -63,7 +63,7 @@ All PRPs are generated with the Shared Context MCP Server's foundational archite
 #### Intelligent Complexity Detection
 ```markdown
 **File Count Impact**: Number of files likely to be modified
-**Integration Complexity**: Cross-component coordination requirements  
+**Integration Complexity**: Cross-component coordination requirements
 **Research Depth**: Amount of additional investigation needed
 **Risk Assessment**: Potential for architectural changes or breaking changes
 **Time Estimation**: Realistic implementation timeline
@@ -92,7 +92,7 @@ Use template structure adapted for project context:
 
 ## Implementation Specification
 **Core Requirements**: [What MCP tools/resources must be built]
-**Integration Points**: [How this connects with existing MCP server architecture]  
+**Integration Points**: [How this connects with existing MCP server architecture]
 **Database Changes**: [Any schema modifications or aiosqlite operations needed]
 **API Requirements**: [MCP server endpoints and agent coordination patterns]
 
@@ -146,7 +146,7 @@ Each PRP includes intelligent coordination recommendations:
 ### Research Context Integration
 PRPs preserve and enhance planning research:
 - **MCP Research Findings**: Integrated framework documentation and proven patterns
-- **Architectural Analysis**: Deep integration requirements analysis  
+- **Architectural Analysis**: Deep integration requirements analysis
 - **Pattern Recognition**: Connection to established project patterns
 - **Risk Analysis**: Potential challenges and mitigation strategies
 
@@ -170,7 +170,7 @@ PRPs provide rich implementation context:
 A PRP is complete when:
 1. All planning context has been analyzed and integrated
 2. Comprehensive research context is included
-3. Architectural integration requirements are clearly specified  
+3. Architectural integration requirements are clearly specified
 4. Agent coordination strategy is recommended based on complexity analysis
 5. Success criteria are measurable and validation approaches are defined
 6. The PRP is saved to `PRPs/2-prps/` with proper naming and metadata

@@ -55,9 +55,9 @@ class TestUATSecurityReproduction:
             )
 
             print(f"Agent 1 store result: {result_store}")
-            assert (
-                result_store["success"] is True
-            ), "Agent 1 should be able to store their own memory"
+            assert result_store["success"] is True, (
+                "Agent 1 should be able to store their own memory"
+            )
 
             # Step 2: Agent 2 attempts to access Agent 1's private memory
             print("\nStep 2: Agent 2 attempting to access Agent 1's memory...")
@@ -97,9 +97,9 @@ class TestUATSecurityReproduction:
             )
 
             print(f"Agent 1 self-access result: {verify_agent_1}")
-            assert (
-                verify_agent_1["success"] is True
-            ), "Agent 1 should access their own memory"
+            assert verify_agent_1["success"] is True, (
+                "Agent 1 should access their own memory"
+            )
             assert (
                 verify_agent_1["value"]["secret"] == "this should be private to agent1"
             )

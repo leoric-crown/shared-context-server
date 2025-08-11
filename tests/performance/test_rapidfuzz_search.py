@@ -171,9 +171,9 @@ async def test_rapidfuzz_search_performance(mock_database_with_messages):
             assert "search_time_ms" in result, "Search time not reported"
 
             # Verify performance requirement: <100ms for search operation
-            assert (
-                search_time < 100
-            ), f"Search took {search_time:.2f}ms, expected <100ms"
+            assert search_time < 100, (
+                f"Search took {search_time:.2f}ms, expected <100ms"
+            )
 
             # Verify reported time is reasonable
             reported_time = result["search_time_ms"]
@@ -244,9 +244,9 @@ async def test_search_accuracy_vs_threshold(mock_database_with_messages):
 
             # Verify all returned results meet the threshold
             for match in result["results"]:
-                assert (
-                    match["score"] >= threshold
-                ), f"Result score {match['score']} below threshold {threshold}"
+                assert match["score"] >= threshold, (
+                    f"Result score {match['score']} below threshold {threshold}"
+                )
 
             # Verify relevance categorization
             for match in result["results"]:
@@ -254,17 +254,17 @@ async def test_search_accuracy_vs_threshold(mock_database_with_messages):
                 relevance = match["relevance"]
 
                 if score >= 80:
-                    assert (
-                        relevance == "high"
-                    ), f"Score {score} should be high relevance, got {relevance}"
+                    assert relevance == "high", (
+                        f"Score {score} should be high relevance, got {relevance}"
+                    )
                 elif score >= 60:
-                    assert (
-                        relevance == "medium"
-                    ), f"Score {score} should be medium relevance, got {relevance}"
+                    assert relevance == "medium", (
+                        f"Score {score} should be medium relevance, got {relevance}"
+                    )
                 else:
-                    assert (
-                        relevance == "low"
-                    ), f"Score {score} should be low relevance, got {relevance}"
+                    assert relevance == "low", (
+                        f"Score {score} should be low relevance, got {relevance}"
+                    )
 
         print("✅ Search accuracy vs threshold test completed successfully")
 
@@ -318,12 +318,12 @@ async def test_search_with_metadata_performance(mock_database_with_messages):
         time_without_metadata = (time.time() - start_time) * 1000
 
         # Both should complete quickly
-        assert (
-            time_with_metadata < 100
-        ), f"Search with metadata took {time_with_metadata:.2f}ms"
-        assert (
-            time_without_metadata < 100
-        ), f"Search without metadata took {time_without_metadata:.2f}ms"
+        assert time_with_metadata < 100, (
+            f"Search with metadata took {time_with_metadata:.2f}ms"
+        )
+        assert time_without_metadata < 100, (
+            f"Search without metadata took {time_without_metadata:.2f}ms"
+        )
 
         # Both should be successful
         assert result_with_metadata["success"] is True
@@ -387,9 +387,9 @@ async def test_concurrent_search_performance(mock_database_with_messages):
             assert result["success"] is True, f"Concurrent search {i} failed"
 
         # Performance should still be reasonable under concurrent load
-        assert (
-            avg_time_per_search < 150
-        ), f"Average concurrent search time {avg_time_per_search:.2f}ms too high"
+        assert avg_time_per_search < 150, (
+            f"Average concurrent search time {avg_time_per_search:.2f}ms too high"
+        )
 
         print("\nConcurrent Search Performance:")
         print(f"  - Concurrent searches: {concurrent_searches}")

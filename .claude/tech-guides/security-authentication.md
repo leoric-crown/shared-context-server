@@ -42,7 +42,7 @@ security = HTTPBearer()
 
 class TokenGenerator:
     """Secure JWT token generation with MCP-specific claims."""
-    
+
     @staticmethod
     def create_agent_token(
         agent_id: str,
@@ -50,13 +50,13 @@ class TokenGenerator:
         permissions: list[str] = None
     ) -> str:
         """Generate JWT token for agent authentication."""
-        
+
         if not SECRET_KEY:
             raise ValueError("JWT_SECRET_KEY not configured")
-        
+
         now = datetime.now(timezone.utc)
         expires = now + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
-        
+
         payload = {
             "agent_id": agent_id,
             "agent_type": agent_type,
@@ -67,16 +67,16 @@ class TokenGenerator:
             "aud": AUDIENCE,  # CRITICAL: Prevents token reuse
             "jti": str(uuid4()),  # Unique token ID for revocation
         }
-        
+
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 async def verify_token(
     credentials: HTTPAuthorizationCredentials = Security(security)
 ) -> Dict[str, Any]:
     """Verify JWT token with comprehensive validation."""
-    
+
     token = credentials.credentials
-    
+
     try:
         # Decode with audience validation (CRITICAL)
         payload = jwt.decode(
@@ -93,17 +93,17 @@ async def verify_token(
                 "require": ["exp", "iat", "aud", "iss", "agent_id"]
             }
         )
-        
+
         # Additional validation
         if datetime.fromtimestamp(payload["exp"], tz=timezone.utc) < datetime.now(timezone.utc):
             raise HTTPException(status_code=401, detail="Token expired")
-        
+
         # Check if token is blacklisted (for revocation)
         if await is_token_blacklisted(payload.get("jti")):
             raise HTTPException(status_code=401, detail="Token revoked")
-        
+
         return payload
-        
+
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidAudienceError:
@@ -160,22 +160,22 @@ ROLE_PERMISSIONS = {
 
 class AgentIdentity:
     """Secure agent identity with permission checking."""
-    
+
     def __init__(self, payload: Dict[str, Any]):
         self.id = payload["agent_id"]
         self.type = payload.get("agent_type", "unknown")
         self.permissions = set(payload.get("permissions", []))
         self.session_scope = payload.get("session_scope")
-        
+
         # Add role-based permissions
         role = payload.get("role")
         if role and role in ROLE_PERMISSIONS:
             self.permissions.update(ROLE_PERMISSIONS[role])
-    
+
     def has_permission(self, permission: Permission) -> bool:
         """Check if agent has specific permission."""
         return permission in self.permissions or Permission.ADMIN in self.permissions
-    
+
     def can_access_session(self, session_id: str) -> bool:
         """Check if agent can access specific session."""
         if self.session_scope and self.session_scope != session_id:
@@ -198,10 +198,10 @@ async def add_message(
     # Check permissions
     if not agent.has_permission(Permission.WRITE_SESSION):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    
+
     if not agent.can_access_session(session_id):
         raise HTTPException(status_code=403, detail="Cannot access this session")
-    
+
     # Proceed with operation
     return await db.add_message(session_id, message, agent.id)
 ```
@@ -216,11 +216,11 @@ import bleach
 
 class InputSanitizer:
     """Comprehensive input sanitization to prevent injection attacks."""
-    
+
     # Allowed HTML tags (if any)
     ALLOWED_TAGS = []
     ALLOWED_ATTRIBUTES = {}
-    
+
     # SQL injection patterns
     SQL_PATTERNS = [
         r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|CREATE|ALTER)\b)",
@@ -228,16 +228,16 @@ class InputSanitizer:
         r"(\bOR\b\s*\d+\s*=\s*\d+)",
         r"(\bAND\b\s*\d+\s*=\s*\d+)",
     ]
-    
+
     @classmethod
     def sanitize_text(cls, text: str) -> str:
         """Sanitize text input to prevent XSS and injection."""
         if not text:
             return text
-        
+
         # HTML escape
         text = html.escape(text)
-        
+
         # Remove any remaining HTML tags
         text = bleach.clean(
             text,
@@ -245,15 +245,15 @@ class InputSanitizer:
             attributes=cls.ALLOWED_ATTRIBUTES,
             strip=True
         )
-        
+
         # Remove zero-width characters
         text = re.sub(r'[\u200b\u200c\u200d\ufeff]', '', text)
-        
+
         # Normalize whitespace
         text = ' '.join(text.split())
-        
+
         return text.strip()
-    
+
     @classmethod
     def sanitize_json(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Recursively sanitize JSON data."""
@@ -265,7 +265,7 @@ class InputSanitizer:
             return cls.sanitize_text(data)
         else:
             return data
-    
+
     @classmethod
     def detect_sql_injection(cls, text: str) -> bool:
         """Detect potential SQL injection attempts."""
@@ -274,7 +274,7 @@ class InputSanitizer:
             if re.search(pattern, text_upper, re.IGNORECASE):
                 return True
         return False
-    
+
     @classmethod
     def validate_session_id(cls, session_id: str) -> str:
         """Validate and sanitize session ID."""
@@ -282,7 +282,7 @@ class InputSanitizer:
         if not re.match(r'^[a-zA-Z0-9-_]{8,64}$', session_id):
             raise ValueError(f"Invalid session ID format: {session_id}")
         return session_id
-    
+
     @classmethod
     def validate_agent_id(cls, agent_id: str) -> str:
         """Validate and sanitize agent ID."""
@@ -297,7 +297,7 @@ from fastapi.responses import JSONResponse
 @app.middleware("http")
 async def sanitize_inputs(request: Request, call_next):
     """Middleware to sanitize all incoming data."""
-    
+
     # Sanitize path parameters
     if request.path_params:
         for key, value in request.path_params.items():
@@ -307,7 +307,7 @@ async def sanitize_inputs(request: Request, call_next):
                         status_code=400,
                         content={"error": "Potential injection detected"}
                     )
-    
+
     response = await call_next(request)
     return response
 ```
@@ -359,12 +359,12 @@ async def create_session(
 # Per-agent rate limiting
 class AgentRateLimiter:
     """Rate limiter that tracks per-agent usage."""
-    
+
     def __init__(self, times: int = 100, seconds: int = 60):
         self.times = times
         self.seconds = seconds
         self.cache = {}  # In production, use Redis
-    
+
     async def __call__(
         self,
         agent: AgentIdentity = Depends(get_current_agent)
@@ -385,7 +385,7 @@ import json
 
 class AuditLogger:
     """Comprehensive audit logging for security events."""
-    
+
     def __init__(self):
         self.logger = logging.getLogger("audit")
         handler = logging.FileHandler("audit.log")
@@ -396,7 +396,7 @@ class AuditLogger:
         )
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)
-    
+
     def log_event(
         self,
         event_type: str,
@@ -408,7 +408,7 @@ class AuditLogger:
         metadata: Optional[Dict] = None
     ):
         """Log security-relevant event."""
-        
+
         event = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type,
@@ -419,9 +419,9 @@ class AuditLogger:
             "result": result,
             "metadata": metadata or {}
         }
-        
+
         self.logger.info(json.dumps(event))
-    
+
     def log_authentication(
         self,
         agent_id: str,
@@ -435,7 +435,7 @@ class AuditLogger:
             result="success" if success else "failure",
             metadata={"reason": reason} if reason else None
         )
-    
+
     def log_authorization(
         self,
         agent_id: str,
@@ -451,7 +451,7 @@ class AuditLogger:
             action=action,
             result="granted" if granted else "denied"
         )
-    
+
     def log_data_access(
         self,
         agent_id: str,
@@ -484,7 +484,7 @@ async def add_message(
         session_id=session_id,
         operation="add_message"
     )
-    
+
     try:
         result = await db.add_message(session_id, message, agent.id)
         audit.log_event(
@@ -513,26 +513,26 @@ from typing import List, Optional
 
 class SecureDatabase:
     """Database operations with security best practices."""
-    
+
     def __init__(self, db_path: str):
         self.db_path = db_path
-    
+
     async def execute_query(
         self,
         query: str,
         parameters: tuple = ()
     ) -> List[Dict]:
         """Execute query with parameterized inputs (prevents SQL injection)."""
-        
+
         # NEVER use string formatting for queries
         # ALWAYS use parameterized queries
-        
+
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(query, parameters)
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
-    
+
     async def get_session_messages(
         self,
         session_id: str,
@@ -540,17 +540,17 @@ class SecureDatabase:
         include_private: bool = False
     ) -> List[Dict]:
         """Retrieve messages with visibility controls."""
-        
+
         # Validate inputs
         session_id = InputSanitizer.validate_session_id(session_id)
         agent_id = InputSanitizer.validate_agent_id(agent_id)
-        
+
         if include_private:
             # Include private messages only for the requesting agent
             query = """
-                SELECT * FROM messages 
-                WHERE session_id = ? 
-                AND (visibility = 'public' OR 
+                SELECT * FROM messages
+                WHERE session_id = ?
+                AND (visibility = 'public' OR
                      (visibility = 'private' AND sender = ?))
                 ORDER BY timestamp ASC
             """
@@ -558,14 +558,14 @@ class SecureDatabase:
         else:
             # Only public messages
             query = """
-                SELECT * FROM messages 
+                SELECT * FROM messages
                 WHERE session_id = ? AND visibility = 'public'
                 ORDER BY timestamp ASC
             """
             params = (session_id,)
-        
+
         return await self.execute_query(query, params)
-    
+
     async def add_message(
         self,
         session_id: str,
@@ -575,21 +575,21 @@ class SecureDatabase:
         metadata: Optional[Dict] = None
     ) -> int:
         """Add message with sanitization."""
-        
+
         # Sanitize all inputs
         session_id = InputSanitizer.validate_session_id(session_id)
         sender = InputSanitizer.validate_agent_id(sender)
         content = InputSanitizer.sanitize_text(content)
-        
+
         if metadata:
             metadata = InputSanitizer.sanitize_json(metadata)
-        
+
         query = """
-            INSERT INTO messages 
+            INSERT INTO messages
             (session_id, sender, content, visibility, metadata, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
         """
-        
+
         params = (
             session_id,
             sender,
@@ -598,7 +598,7 @@ class SecureDatabase:
             json.dumps(metadata) if metadata else '{}',
             datetime.now(timezone.utc).isoformat()
         )
-        
+
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(query, params)
             await db.commit()
@@ -661,13 +661,13 @@ app.add_middleware(
 ```python
 class TokenRefresher:
     """Secure token refresh mechanism."""
-    
+
     @staticmethod
     async def refresh_token(
         refresh_token: str
     ) -> Dict[str, str]:
         """Generate new access token from refresh token."""
-        
+
         try:
             # Verify refresh token (longer expiry)
             payload = jwt.decode(
@@ -676,23 +676,23 @@ class TokenRefresher:
                 algorithms=[ALGORITHM],
                 audience=f"{AUDIENCE}:refresh"
             )
-            
+
             # Check if refresh token is blacklisted
             if await is_token_blacklisted(payload.get("jti")):
                 raise ValueError("Refresh token revoked")
-            
+
             # Generate new access token
             new_access_token = TokenGenerator.create_agent_token(
                 agent_id=payload["agent_id"],
                 agent_type=payload.get("agent_type"),
                 permissions=payload.get("permissions")
             )
-            
+
             return {
                 "access_token": new_access_token,
                 "token_type": "bearer"
             }
-            
+
         except jwt.InvalidTokenError as e:
             raise HTTPException(status_code=401, detail="Invalid refresh token")
 ```
@@ -782,7 +782,7 @@ async def test_jwt_audience_validation():
         SECRET_KEY,
         algorithm=ALGORITHM
     )
-    
+
     with pytest.raises(HTTPException) as exc:
         await verify_token(token)
     assert exc.value.status_code == 401
@@ -791,7 +791,7 @@ async def test_jwt_audience_validation():
 async def test_sql_injection_prevention():
     """Test that SQL injection attempts are blocked."""
     malicious_input = "'; DROP TABLE messages; --"
-    
+
     with pytest.raises(ValueError) as exc:
         InputSanitizer.validate_session_id(malicious_input)
     assert "Invalid session ID" in str(exc.value)
@@ -801,7 +801,7 @@ async def test_rate_limiting():
     # Make requests exceeding limit
     for i in range(6):
         response = await client.post("/auth/token", json={})
-    
+
     # 6th request should be rate limited
     assert response.status_code == 429
 ```

@@ -365,18 +365,18 @@ class TestMemoryOperationsEdgeCases:
             )
 
             assert get_result["success"] is True
-            assert (
-                get_result["value"] == value
-            ), f"Value mismatch for {key}: expected {value}, got {get_result['value']}"
+            assert get_result["value"] == value, (
+                f"Value mismatch for {key}: expected {value}, got {get_result['value']}"
+            )
 
         # Test edge case that should fail due to database constraint
         # Empty string values are not allowed
         result = await call_fastmcp_tool(
             server_with_db.set_memory, ctx, key="empty_string", value=""
         )
-        assert (
-            result["success"] is False
-        ), "Empty string value should be rejected by database constraint"
+        assert result["success"] is False, (
+            "Empty string value should be rejected by database constraint"
+        )
         assert (
             "constraint" in result["error"].lower()
             or "empty" in result["error"].lower()
@@ -420,9 +420,9 @@ class TestMemoryOperationsEdgeCases:
                 server_with_db.set_memory, ctx, key=key, value={"trimmed_key": key}
             )
 
-            assert (
-                result["success"] is True
-            ), f"Key should be trimmed and accepted: {key}"
+            assert result["success"] is True, (
+                f"Key should be trimmed and accepted: {key}"
+            )
 
         # Test invalid key edge cases
         invalid_keys = [

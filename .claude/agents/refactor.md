@@ -232,7 +232,7 @@ Provide comprehensive refactoring status that preserves architectural context an
 
 ### Escalation Triggers - STOP and Escalate When:
 - **Test Regressions**: Any refactoring that breaks existing tests
-- **Complex Architecture**: Files requiring major architectural changes beyond simple refactoring  
+- **Complex Architecture**: Files requiring major architectural changes beyond simple refactoring
 - **Dependency Issues**: Refactoring reveals deeper architectural dependencies
 - **Multiple File Dependencies**: Refactoring requires changes across many interconnected files
 - **Performance Degradation**: Refactoring causes performance issues

@@ -239,9 +239,9 @@ class TestServerErrorHandling:
 
         # All should succeed or fail gracefully (no exceptions)
         for i, result in enumerate(results):
-            assert not isinstance(
-                result, Exception
-            ), f"Task {i} raised exception: {result}"
+            assert not isinstance(result, Exception), (
+                f"Task {i} raised exception: {result}"
+            )
             assert isinstance(result, dict)
             assert "success" in result
 

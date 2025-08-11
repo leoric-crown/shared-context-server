@@ -285,12 +285,12 @@ async def test_memory_ttl_workflow(test_db_manager):
         assert len(ttl_entries) == 1, "Should have exactly one TTL entry"
         assert len(perm_entries) == 1, "Should have exactly one permanent entry"
 
-        assert (
-            ttl_entries[0]["expires_at"] is not None
-        ), "TTL entry should have expiration"
-        assert (
-            perm_entries[0]["expires_at"] is None
-        ), "Permanent entry should not expire"
+        assert ttl_entries[0]["expires_at"] is not None, (
+            "TTL entry should have expiration"
+        )
+        assert perm_entries[0]["expires_at"] is None, (
+            "Permanent entry should not expire"
+        )
 
         # Test that we can retrieve the TTL entry (it should still be valid)
         get_result = await call_fastmcp_tool(

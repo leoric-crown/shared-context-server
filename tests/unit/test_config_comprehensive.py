@@ -112,9 +112,9 @@ class TestSharedContextServerConfig:
                 clear=True,
             ):
                 config = load_config()
-                assert (
-                    config.operational.enable_performance_monitoring == expected
-                ), f"Failed for '{env_value}'"
+                assert config.operational.enable_performance_monitoring == expected, (
+                    f"Failed for '{env_value}'"
+                )
 
     def test_config_integer_parsing_valid(self):
         """Test integer parsing for JWT expiration."""

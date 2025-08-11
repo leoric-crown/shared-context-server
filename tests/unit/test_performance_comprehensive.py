@@ -229,9 +229,9 @@ class TestConnectionPoolManager:
                 raise AssertionError("Expected timeout/exhaustion error")
         except (RuntimeError, asyncio.TimeoutError):
             elapsed = time.time() - start_time
-            assert (
-                elapsed < 0.5
-            ), f"Timeout took too long: {elapsed}s"  # Should timeout very quickly
+            assert elapsed < 0.5, (
+                f"Timeout took too long: {elapsed}s"
+            )  # Should timeout very quickly
 
         # Clean up
         for ctx, _conn in conn_contexts:
@@ -440,9 +440,9 @@ class TestPerformanceMonitoring:
 
         # Verify pool utilization calculation
         utilization = stats["performance_indicators"]["pool_utilization"]
-        assert (
-            0 <= utilization <= 1
-        ), f"Pool utilization should be 0-1, got {utilization}"
+        assert 0 <= utilization <= 1, (
+            f"Pool utilization should be 0-1, got {utilization}"
+        )
 
         await pool_manager.shutdown_pool()
 
@@ -720,9 +720,9 @@ class TestPerformanceEdgeCases:
         exceptions = sum(1 for result in results if isinstance(result, Exception))
 
         # Should have some failures due to pool exhaustion
-        assert (
-            failed + exceptions > 0
-        ), f"Expected some failures, got {failed} failed, {exceptions} exceptions"
+        assert failed + exceptions > 0, (
+            f"Expected some failures, got {failed} failed, {exceptions} exceptions"
+        )
         assert pool_manager.connection_stats["pool_exhaustion_count"] > 0
         assert successful > 0, "Should have some successful requests"
 
