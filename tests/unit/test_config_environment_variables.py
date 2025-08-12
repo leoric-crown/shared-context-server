@@ -341,22 +341,24 @@ class TestDefaultValueApplication:
 
     def test_operational_config_defaults(self):
         """Test operational configuration default values."""
-        config = OperationalConfig()
+        with patch.dict(os.environ, {}, clear=True):
+            config = OperationalConfig()
 
-        assert config.log_level == "INFO"
-        assert (
-            config.log_format == "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        assert config.database_log_level == "INFO"
-        assert config.enable_performance_monitoring is True
-        assert config.performance_log_interval == 300
-        assert config.max_memory_entries_per_agent == 1000
-        assert config.max_memory_size_mb == 100
-        assert config.max_message_length == 100000
-        assert config.max_messages_per_session == 10000
-        assert config.max_metadata_size_kb == 10
-        assert config.enable_automatic_cleanup is True
-        assert config.cleanup_interval == 3600
+            assert config.log_level == "INFO"
+            assert (
+                config.log_format
+                == "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            assert config.database_log_level == "INFO"
+            assert config.enable_performance_monitoring is True
+            assert config.performance_log_interval == 300
+            assert config.max_memory_entries_per_agent == 1000
+            assert config.max_memory_size_mb == 100
+            assert config.max_message_length == 100000
+            assert config.max_messages_per_session == 10000
+            assert config.max_metadata_size_kb == 10
+            assert config.enable_automatic_cleanup is True
+            assert config.cleanup_interval == 3600
 
     def test_development_config_defaults(self):
         """Test development configuration default values."""

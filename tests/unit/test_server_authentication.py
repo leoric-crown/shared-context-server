@@ -26,8 +26,9 @@ class TestAuthenticateAgentTool:
             yield server
 
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
-        """Test successful agent authentication with valid API key."""
+        """Test successful agent authentication with valid API key header."""
         ctx = MockContext(session_id="test_session", agent_id="test_agent")
+        ctx.headers = {"X-API-Key": "valid_test_key"}  # Add API key header
 
         with patch.dict(os.environ, {"API_KEY": "valid_test_key"}):
             result = await call_fastmcp_tool(
@@ -35,7 +36,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="test_claude",
                 agent_type="claude",
-                api_key="valid_test_key",
                 requested_permissions=["read", "write"],
             )
 
@@ -56,6 +56,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication failure with invalid API key."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "invalid_key"}  # Invalid API key header
 
         with patch.dict(os.environ, {"API_KEY": "correct_key"}):
             result = await call_fastmcp_tool(
@@ -63,7 +64,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="test_agent",
                 agent_type="claude",
-                api_key="invalid_key",
                 requested_permissions=["read"],
             )
 
@@ -78,6 +78,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication failure with empty API key."""
         ctx = MockContext()
+        # No API key header provided (empty case)
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             result = await call_fastmcp_tool(
@@ -85,7 +86,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="test_agent",
                 agent_type="claude",
-                api_key="",
                 requested_permissions=["read"],
             )
 
@@ -98,6 +98,9 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication when no API key is configured in environment."""
         ctx = MockContext()
+        ctx.headers = {
+            "X-API-Key": "any_key"
+        }  # API key provided but env not configured
 
         with patch.dict(os.environ, {}, clear=True):
             result = await call_fastmcp_tool(
@@ -105,7 +108,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="test_agent",
                 agent_type="claude",
-                api_key="any_key",
                 requested_permissions=["read"],
             )
 
@@ -118,6 +120,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication with different agent types."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
         agent_types = ["claude", "gemini", "custom", "test", "system"]
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
@@ -127,7 +130,6 @@ class TestAuthenticateAgentTool:
                     ctx,
                     agent_id=f"test_{agent_type}",
                     agent_type=agent_type,
-                    api_key="valid_key",
                     requested_permissions=["read", "write"],
                 )
 
@@ -140,6 +142,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication with different permission requests."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
         permission_sets = [
             [],  # Empty permissions
             ["read"],  # Single permission
@@ -157,7 +160,6 @@ class TestAuthenticateAgentTool:
                     ctx,
                     agent_id="test_agent",
                     agent_type="claude",
-                    api_key="valid_key",
                     requested_permissions=permissions,
                 )
 
@@ -170,6 +172,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test that successful authentication is properly audit logged."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             result = await call_fastmcp_tool(
@@ -177,7 +180,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="audit_test_agent",
                 agent_type="claude",
-                api_key="valid_key",
                 requested_permissions=["read", "write"],
             )
 
@@ -186,13 +188,13 @@ class TestAuthenticateAgentTool:
         # Verify audit log entry was created
         async with test_db_manager.get_connection() as conn:
             cursor = await conn.execute(
-                "SELECT * FROM audit_log WHERE event_type = 'agent_authenticated' AND agent_id = ?",
+                "SELECT * FROM audit_log WHERE event_type = 'jwt_token_generated' AND agent_id = ?",
                 ("audit_test_agent",),
             )
             audit_entry = await cursor.fetchone()
 
         assert audit_entry is not None
-        assert audit_entry[2] == "agent_authenticated"  # event_type (index 2)
+        assert audit_entry[2] == "jwt_token_generated"  # event_type (index 2)
         assert audit_entry[3] == "audit_test_agent"  # agent_id (index 3)
 
     async def test_authenticate_agent_audit_logging_failure(
@@ -200,6 +202,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test that authentication failures are properly audit logged."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "invalid_key"}  # Invalid API key to trigger failure
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             result = await call_fastmcp_tool(
@@ -207,7 +210,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="audit_fail_agent",
                 agent_type="claude",
-                api_key="invalid_key",
                 requested_permissions=["read"],
             )
 
@@ -230,6 +232,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test that token expiry timestamps are properly formatted."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             result = await call_fastmcp_tool(
@@ -237,7 +240,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="expiry_test",
                 agent_type="claude",
-                api_key="valid_key",
                 requested_permissions=["read"],
             )
 
@@ -263,6 +265,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication with database error during audit logging."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         # Mock audit_log_auth_event to raise exception
         with (
@@ -276,7 +279,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="db_error_test",
                 agent_type="claude",
-                api_key="valid_key",
                 requested_permissions=["read"],
             )
 
@@ -291,6 +293,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication when auth manager raises exception."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         with (
             patch.dict(os.environ, {"API_KEY": "valid_key"}),
@@ -305,7 +308,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="auth_error_test",
                 agent_type="claude",
-                api_key="valid_key",
                 requested_permissions=["read"],
             )
 
@@ -324,6 +326,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication with edge case inputs."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         edge_cases = [
             # Very long agent_id (but within limits)
@@ -353,7 +356,6 @@ class TestAuthenticateAgentTool:
                     ctx,
                     agent_id=case["agent_id"],
                     agent_type=case["agent_type"],
-                    api_key="valid_key",
                     requested_permissions=["read"],
                 )
 
@@ -370,6 +372,7 @@ class TestAuthenticateAgentTool:
         import asyncio
 
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         async def authenticate_agent(agent_id: str) -> dict:
             with patch.dict(os.environ, {"API_KEY": "valid_key"}):
@@ -378,7 +381,6 @@ class TestAuthenticateAgentTool:
                     ctx,
                     agent_id=agent_id,
                     agent_type="claude",
-                    api_key="valid_key",
                     requested_permissions=["read", "write"],
                 )
 
@@ -397,6 +399,7 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication when no permissions are explicitly requested."""
         ctx = MockContext()
+        ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             # Test with default permissions (should be ["read", "write"])
@@ -405,7 +408,6 @@ class TestAuthenticateAgentTool:
                 ctx,
                 agent_id="default_perms",
                 agent_type="claude",
-                api_key="valid_key",
                 # requested_permissions parameter omitted - should use default
             )
 

@@ -198,66 +198,54 @@ async def audit_log(
 
 @mcp.tool()
 async def authenticate_agent(
-    _ctx: Context,
+    ctx: Context,
     agent_id: str = Field(description="Agent identifier", min_length=1, max_length=100),
     agent_type: str = Field(
         description="Agent type (claude, gemini, custom)", max_length=50
     ),
-    api_key: str = Field(description="Agent API key for initial authentication"),
     requested_permissions: list[str] = Field(
         default=["read", "write"], description="Requested permissions for the agent"
     ),
 ) -> dict[str, Any]:
     """
-    Authenticate agent and return JWT token with appropriate permissions.
+    Generate JWT token for agent authentication.
 
-    This tool exchanges an API key for a JWT token with role-based permissions.
-    The JWT token can then be used for all subsequent authenticated requests.
+    This tool validates the MCP client's API key (via headers) and generates
+    a JWT token for the specified agent with appropriate permissions.
+    The JWT token can then be used for subsequent authenticated requests.
     """
     try:
-        # Validate API key against environment or database
-        valid_api_key = os.getenv("API_KEY", "")
-        if not api_key or api_key != valid_api_key:
+        # Validate MCP client authentication via API key header
+        from .auth import generate_agent_jwt_token, validate_api_key_header
+
+        api_key_valid = validate_api_key_header(ctx)
+        if not api_key_valid:
             await audit_log_auth_event(
                 "authentication_failed",
                 agent_id,
                 None,
                 {
                     "agent_type": agent_type,
-                    "error": "invalid_api_key",
+                    "error": "invalid_api_key_header",
                     "requested_permissions": requested_permissions,
                 },
             )
-
             return ERROR_MESSAGE_PATTERNS["invalid_api_key"](agent_id)  # type: ignore[no-any-return,operator]
 
-        # Determine granted permissions based on agent type and request
+        # Generate JWT token using the new utility function
+        token = await generate_agent_jwt_token(
+            agent_id, agent_type, requested_permissions
+        )
+
+        # Get granted permissions for response
         granted_permissions = auth_manager.determine_permissions(
             agent_type, requested_permissions
         )
 
-        # Generate JWT token
-        token = auth_manager.generate_token(agent_id, agent_type, granted_permissions)
-
-        # Log successful authentication
+        # Calculate expiration
         expires_at = datetime.now(timezone.utc) + timedelta(
             seconds=auth_manager.token_expiry
         )
-        try:
-            await audit_log_auth_event(
-                "agent_authenticated",
-                agent_id,
-                None,
-                {
-                    "agent_type": agent_type,
-                    "permissions_granted": granted_permissions,
-                    "permissions_requested": requested_permissions,
-                    "token_expires_at": expires_at.isoformat(),
-                    "auth_method": "jwt",
-                },
-            )
-        except Exception as audit_error:
-            logger.warning(f"Failed to audit successful authentication: {audit_error}")
 
         return {
             "success": True,
@@ -279,8 +267,8 @@ async def authenticate_agent(
                 None,
                 {"error": str(e), "agent_type": agent_type},
             )
-        except Exception as audit_error:
-            logger.warning(f"Failed to audit authentication error: {audit_error}")
+        except Exception:
+            logger.warning("Failed to audit authentication error")
 
         return create_system_error(
             "authenticate_agent", "authentication_service", temporary=True
@@ -417,7 +405,7 @@ async def add_message(
     content: str = Field(description="Message content"),
     visibility: str = Field(
         default="public",
-        description="Message visibility: public, private, or agent_only",
+        description="Message visibility: public, private, agent_only, or admin_only",
     ),
     metadata: Any = Field(
         default=None,
@@ -426,6 +414,10 @@ async def add_message(
     ),
     parent_message_id: int | None = Field(
         default=None, description="ID of parent message for threading"
+    ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
 ) -> dict[str, Any]:
     """
@@ -438,8 +430,8 @@ async def add_message(
     """
 
     try:
-        # Extract enhanced agent context (includes JWT authentication if available)
-        agent_context = extract_agent_context(ctx)
+        # Extract enhanced agent context (includes JWT authentication via parameter)
+        agent_context = await extract_agent_context(ctx, auth_token)
         agent_id = agent_context["agent_id"]
         agent_type = agent_context["agent_type"]
 
@@ -585,7 +577,7 @@ async def get_messages(
             params: list[Any] = [session_id]
 
             # Agent-specific visibility filtering
-            agent_context = extract_agent_context(ctx)
+            agent_context = await extract_agent_context(ctx)
             has_admin_permission = "admin" in agent_context.get("permissions", [])
 
             if visibility_filter:
@@ -1389,6 +1381,9 @@ async def list_memory(
 @mcp.tool()
 async def get_performance_metrics(
     ctx: Context,
+    auth_token: str | None = Field(
+        default=None, description="Optional JWT token for admin access"
+    ),
 ) -> dict[str, Any]:
     """
     Get comprehensive performance metrics for monitoring.
@@ -1396,8 +1391,8 @@ async def get_performance_metrics(
     """
 
     try:
-        # Extract enhanced agent context (includes JWT authentication if available)
-        agent_context = extract_agent_context(ctx)
+        # Extract enhanced agent context (includes JWT authentication via parameter)
+        agent_context = await extract_agent_context(ctx, auth_token)
         agent_id = agent_context["agent_id"]
 
         # Check permission for admin access
@@ -1878,11 +1873,17 @@ async def lifespan() -> Any:
 
 
 # ============================================================================
-# AUTHENTICATION MIDDLEWARE (PLACEHOLDER FOR PHASE 3)
+# JWT AUTHENTICATION INTEGRATION
 # ============================================================================
 
-# Note: Full authentication middleware will be implemented in Phase 3
-# For Phase 1, we use basic context extraction through mcp.context
+# JWT authentication is now integrated directly into extract_agent_context()
+# in auth.py. This ensures every MCP tool call automatically:
+# 1. Extracts Authorization header from context
+# 2. Validates JWT tokens using enhance_context_with_auth()
+# 3. Sets proper permissions for admin access and role-based authorization
+# 4. Falls back to API key authentication if JWT validation fails
+#
+# This approach is more robust than middleware and works with all FastMCP versions.
 
 # ============================================================================
 # SERVER INSTANCE & EXPORT

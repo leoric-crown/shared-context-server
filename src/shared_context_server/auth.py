@@ -1,13 +1,14 @@
 """
-Phase 3 - JWT Authentication System for Shared Context MCP Server.
+JWT Authentication System for Shared Context MCP Server.
 
-Implements JWT token-based authentication with role-based access control (RBAC),
-secure key management, and comprehensive audit logging.
+Implements a clean two-tier authentication system:
+1. API Key (header-based): Static authentication for MCP client connection
+2. JWT Token (parameter-based): Dynamic per-request agent authentication
 
 Key Features:
-- JWT token generation and validation with secure key management
+- Header-based API key validation for MCP client authentication
+- Parameter-based JWT tokens for dynamic agent authentication
 - Role-based permission system (read, write, admin, debug)
-- Token expiration and clock skew handling
 - Comprehensive audit logging for security events
 - Permission decorators for tool access control
 """
@@ -33,12 +34,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AuthInfo:
-    """
-    Authentication information container for FastMCP Context.
-
-    This dataclass encapsulates all authentication-related information
-    to avoid dynamic attribute assignment on Context objects.
-    """
+    """Authentication information container for FastMCP Context."""
 
     jwt_validated: bool = False
     agent_id: str = "unknown"
@@ -51,62 +47,35 @@ class AuthInfo:
 
 
 def get_auth_info(ctx: Context) -> AuthInfo:
-    """
-    Retrieve AuthInfo from FastMCP Context.
-
-    Args:
-        ctx: FastMCP context object
-
-    Returns:
-        AuthInfo object, either stored or default
-    """
+    """Retrieve AuthInfo from FastMCP Context."""
     return getattr(ctx, "_auth_info", AuthInfo())
 
 
 def set_auth_info(ctx: Context, auth_info: AuthInfo) -> None:
-    """
-    Store AuthInfo in FastMCP Context.
-
-    Args:
-        ctx: FastMCP context object
-        auth_info: AuthInfo object to store
-    """
+    """Store AuthInfo in FastMCP Context."""
     ctx._auth_info = auth_info  # type: ignore[attr-defined]
 
 
 class JWTAuthenticationManager:
-    """
-    JWT Authentication Manager with secure key management and RBAC.
-
-    Handles token generation, validation, and permission management for
-    multi-agent authentication and authorization.
-    """
+    """JWT Authentication Manager with secure key management and RBAC."""
 
     def __init__(self) -> None:
         """Initialize JWT authentication manager with secure configuration."""
-        # CRITICAL: Persistent secret key required, no random fallbacks in production
         secret_key = os.getenv("JWT_SECRET_KEY")
         if not secret_key:
             if os.getenv("ENVIRONMENT", "development") == "production":
                 raise ValueError(
                     "JWT_SECRET_KEY environment variable must be set for production"
                 )
-            # Development fallback - generate a temporary key
             secret_key = "dev-secret-key-not-for-production-use"
             logger.warning(
                 "Using development JWT secret key - not suitable for production!"
             )
 
-        # Ensure secret_key is always str type for JWT library
         self.secret_key: str = secret_key
-
         self.algorithm = "HS256"
-        self.token_expiry = int(
-            os.getenv("JWT_TOKEN_EXPIRY", "86400")
-        )  # 24 hours default
-        self.clock_skew_leeway = 300  # 5 minutes clock skew tolerance
-
-        # Available permissions in the system
+        self.token_expiry = int(os.getenv("JWT_TOKEN_EXPIRY", "86400"))  # 24 hours
+        self.clock_skew_leeway = 300  # 5 minutes
         self.available_permissions = ["read", "write", "admin", "debug"]
 
         logger.info("JWT Authentication Manager initialized")
@@ -114,17 +83,7 @@ class JWTAuthenticationManager:
     def generate_token(
         self, agent_id: str, agent_type: str, permissions: list[str]
     ) -> str:
-        """
-        Generate JWT token for agent authentication.
-
-        Args:
-            agent_id: Unique identifier for the agent
-            agent_type: Type of agent (claude, gemini, custom, etc.)
-            permissions: List of permissions to grant
-
-        Returns:
-            JWT token string
-        """
+        """Generate JWT token for agent authentication."""
         now = datetime.now(timezone.utc)
 
         payload = {
@@ -135,26 +94,17 @@ class JWTAuthenticationManager:
             "exp": now + timedelta(seconds=self.token_expiry),
             "iss": "shared-context-server",
             "aud": "mcp-agents",
-            "jti": f"{agent_id}_{int(now.timestamp())}",  # Unique token ID for revocation
+            "jti": f"{agent_id}_{int(now.timestamp())}",
         }
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
         logger.info(
             f"Generated JWT token for agent {agent_id} with permissions: {permissions}"
         )
-
         return token
 
     def validate_token(self, token: str) -> dict[str, Any]:
-        """
-        Validate JWT token and extract claims.
-
-        Args:
-            token: JWT token to validate
-
-        Returns:
-            Dictionary with validation result and extracted claims
-        """
+        """Validate JWT token and extract claims."""
         try:
             payload = jwt.decode(
                 token,
@@ -162,10 +112,9 @@ class JWTAuthenticationManager:
                 algorithms=[self.algorithm],
                 audience="mcp-agents",
                 issuer="shared-context-server",
-                leeway=self.clock_skew_leeway,  # Handle clock skew between servers
+                leeway=self.clock_skew_leeway,
             )
 
-            # Additional validation
             agent_id = payload.get("agent_id")
             agent_type = payload.get("agent_type")
             permissions = payload.get("permissions", [])
@@ -193,42 +142,27 @@ class JWTAuthenticationManager:
             }
 
         except jwt.ExpiredSignatureError:
-            logger.warning("JWT token expired")
             return {"valid": False, "error": "Token expired"}
         except jwt.InvalidTokenError as e:
-            logger.warning(f"Invalid JWT token: {e}")
             return {"valid": False, "error": f"Invalid token: {e}"}
         except Exception as e:
-            logger.exception("Token validation failed")
             return {"valid": False, "error": f"Token validation failed: {e}"}
 
     def determine_permissions(
         self, agent_type: str, requested_permissions: list[str]
     ) -> list[str]:
-        """
-        Determine granted permissions based on agent type and request.
-
-        Args:
-            agent_type: Type of agent requesting permissions
-            requested_permissions: List of requested permissions
-
-        Returns:
-            List of granted permissions
-        """
-        # Base permission mappings by agent type
+        """Determine granted permissions based on agent type and request."""
         type_permissions = {
             "claude": ["read", "write"],
             "gemini": ["read", "write"],
             "admin": ["read", "write", "admin", "debug"],
             "system": ["read", "write", "admin", "debug"],
-            "test": ["read", "write", "debug"],  # For testing
+            "test": ["read", "write", "debug"],
             "generic": ["read"],
         }
 
-        # Get base permissions for agent type
         base_permissions = type_permissions.get(agent_type.lower(), ["read"])
 
-        # Grant intersection of requested and allowed permissions
         granted_permissions = [
             permission
             for permission in requested_permissions
@@ -238,7 +172,6 @@ class JWTAuthenticationManager:
             )
         ]
 
-        # Ensure minimum read permission
         if not granted_permissions:
             granted_permissions = ["read"]
 
@@ -251,23 +184,13 @@ auth_manager = JWTAuthenticationManager()
 
 
 def require_permission(permission: str) -> Callable[[Callable], Callable]:
-    """
-    Decorator to require specific permission for tool access.
-
-    Args:
-        permission: Required permission name
-
-    Returns:
-        Decorated function that checks permissions
-    """
+    """Decorator to require specific permission for tool access."""
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # Extract context - look for any object with auth info
             ctx = None
             for arg in args:
-                # Check if this argument has auth info (either FastMCP Context or MockContext)
                 if hasattr(arg, "_auth_info") or isinstance(arg, Context):
                     ctx = arg
                     break
@@ -277,7 +200,6 @@ def require_permission(permission: str) -> Callable[[Callable], Callable]:
                     error="No context available for permission check", code="NO_CONTEXT"
                 )
 
-            # Get agent permissions from context (set by authentication middleware)
             auth_info = get_auth_info(ctx)
             agent_permissions = auth_info.permissions
             agent_id = auth_info.agent_id
@@ -303,20 +225,94 @@ def require_permission(permission: str) -> Callable[[Callable], Callable]:
     return decorator
 
 
-def extract_agent_context(ctx: Context) -> dict[str, Any]:
+async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any] | None:
     """
-    Extract comprehensive agent context from FastMCP context.
+    Validate JWT token passed as tool parameter for dynamic agent authentication.
 
-    Args:
-        ctx: FastMCP context object
-
-    Returns:
-        Dictionary with agent identity and authentication info
+    This enables per-request agent identification while the MCP connection
+    uses static API key authentication.
     """
-    # Get authentication info from context
+    if not auth_token:
+        return None
+
+    try:
+        jwt_result = auth_manager.validate_token(auth_token)
+        if jwt_result["valid"]:
+            logger.info(f"JWT token validated for agent {jwt_result['agent_id']}")
+            return {
+                "agent_id": jwt_result["agent_id"],
+                "agent_type": jwt_result["agent_type"],
+                "authenticated": True,
+                "auth_method": "jwt",
+                "permissions": jwt_result["permissions"],
+                "token_id": jwt_result.get("token_id"),
+            }
+        logger.warning(f"Invalid JWT token provided: {jwt_result.get('error')}")
+        return None
+    except Exception:
+        logger.exception("Error validating JWT token parameter")
+        return None
+
+
+def validate_api_key_header(ctx: Context) -> bool:
+    """
+    Validate API key from MCP headers for connection-level authentication.
+
+    This should be called by middleware to validate the MCP client connection.
+    """
+    try:
+        # Try various header extraction methods for MCP context
+        api_key = None
+
+        if hasattr(ctx, "get_http_request"):
+            try:
+                http_request = ctx.get_http_request()
+                if http_request and hasattr(http_request, "headers"):
+                    headers = http_request.headers
+                    api_key = headers.get("x-api-key") or headers.get("X-API-Key")
+            except Exception:
+                pass
+
+        if not api_key and hasattr(ctx, "headers"):
+            ctx_headers = getattr(ctx, "headers", {})
+            api_key = ctx_headers.get("x-api-key") or ctx_headers.get("X-API-Key")
+
+        if not api_key and hasattr(ctx, "meta") and isinstance(ctx.meta, dict):
+            api_key = ctx.meta.get("x-api-key") or ctx.meta.get("X-API-Key")
+
+        valid_api_key = os.getenv("API_KEY", "")
+        if valid_api_key and api_key:
+            return api_key == valid_api_key
+        return False
+
+    except Exception:
+        logger.exception("Error validating API key header")
+        return False
+
+
+async def extract_agent_context(
+    ctx: Context, auth_token: str | None = None
+) -> dict[str, Any]:
+    """
+    Extract agent context with two-tier authentication:
+    1. Validate MCP client via API key header (connection-level)
+    2. Identify agent via JWT token parameter (request-level)
+    """
+    # Check MCP client authentication via API key header
+    api_key_valid = validate_api_key_header(ctx)
+
+    # Primary: JWT token parameter for agent identification
+    if auth_token:
+        jwt_context = await validate_jwt_token_parameter(auth_token)
+        if jwt_context:
+            # Enhanced context with API key validation status
+            jwt_context["api_key_authenticated"] = api_key_valid
+            return jwt_context
+
+    # Get existing auth info from context
     auth_info = get_auth_info(ctx)
 
-    # Check for JWT authentication first (Phase 3)
+    # Check for pre-validated JWT authentication
     if auth_info.jwt_validated:
         return {
             "agent_id": auth_info.agent_id,
@@ -325,26 +321,22 @@ def extract_agent_context(ctx: Context) -> dict[str, Any]:
             "auth_method": "jwt",
             "permissions": auth_info.permissions,
             "token_id": auth_info.token_id,
+            "api_key_authenticated": api_key_valid,
         }
 
-    # Fallback to basic authentication (Phase 1/2)
-    # Use session_id fallback if agent_id is still "unknown"
+    # Fallback: Basic session-based identification
     agent_id = auth_info.agent_id
     if agent_id == "unknown" and hasattr(ctx, "session_id"):
         agent_id = f"agent_{ctx.session_id[:8]}"
 
-    agent_type = auth_info.agent_type
-
-    # Basic API key check
-    authenticated = auth_info.authenticated
-
     return {
         "agent_id": agent_id,
-        "agent_type": agent_type,
-        "authenticated": authenticated,
+        "agent_type": auth_info.agent_type,
+        "authenticated": api_key_valid,  # Basic auth based on API key
         "auth_method": "api_key",
-        "permissions": ["read", "write"] if authenticated else ["read"],
+        "permissions": ["read", "write"] if api_key_valid else ["read"],
         "token_id": None,
+        "api_key_authenticated": api_key_valid,
     }
 
 
@@ -354,15 +346,7 @@ async def audit_log_auth_event(
     session_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    """
-    Log authentication and authorization events for security monitoring.
-
-    Args:
-        event_type: Type of authentication event
-        agent_id: ID of the agent involved
-        session_id: Optional session ID
-        metadata: Additional event metadata
-    """
+    """Log authentication and authorization events for security monitoring."""
     try:
         async with get_db_connection() as conn:
             await conn.execute(
@@ -384,139 +368,33 @@ async def audit_log_auth_event(
         logger.exception("Failed to log auth event")
 
 
-# Authentication middleware context enhancer
-async def enhance_context_with_auth(
-    ctx: Context, authorization_header: str | None = None
-) -> None:
+async def generate_agent_jwt_token(
+    agent_id: str, agent_type: str, requested_permissions: list[str] | None = None
+) -> str:
     """
-    Enhance FastMCP context with authentication information.
+    Generate JWT token for an agent (utility function for external use).
 
-    This function should be called by middleware to enrich the context
-    with authentication and authorization information.
-
-    Args:
-        ctx: FastMCP context to enhance
-        authorization_header: Authorization header value
+    This can be used by external systems to generate JWT tokens for agents
+    after validating their identity through other means.
     """
-    try:
-        jwt_attempted = False
-        jwt_validation_result = None
+    if requested_permissions is None:
+        requested_permissions = ["read", "write"]
 
-        if authorization_header and authorization_header.startswith("Bearer "):
-            # Try JWT authentication first
-            token = authorization_header[7:]  # Remove "Bearer " prefix
-            jwt_attempted = True
+    granted_permissions = auth_manager.determine_permissions(
+        agent_type, requested_permissions
+    )
 
-            try:
-                jwt_validation_result = auth_manager.validate_token(token)
+    token = auth_manager.generate_token(agent_id, agent_type, granted_permissions)
 
-                if jwt_validation_result["valid"]:
-                    # Create JWT authentication context
-                    auth_info = AuthInfo(
-                        jwt_validated=True,
-                        agent_id=jwt_validation_result["agent_id"],
-                        agent_type=jwt_validation_result["agent_type"],
-                        permissions=jwt_validation_result["permissions"],
-                        authenticated=True,
-                        auth_method="jwt",
-                        token_id=jwt_validation_result.get("token_id"),
-                    )
-                    set_auth_info(ctx, auth_info)
+    await audit_log_auth_event(
+        "jwt_token_generated",
+        agent_id,
+        None,
+        {
+            "agent_type": agent_type,
+            "permissions": granted_permissions,
+            "requested_permissions": requested_permissions,
+        },
+    )
 
-                    # Log successful authentication
-                    await audit_log_auth_event(
-                        "jwt_authentication_success",
-                        auth_info.agent_id,
-                        None,
-                        {
-                            "agent_type": auth_info.agent_type,
-                            "permissions": auth_info.permissions,
-                            "token_id": auth_info.token_id,
-                        },
-                    )
-                    return  # Success, exit early
-                # Failed JWT authentication - check if it's a real JWT failure or API key
-                if token.count(".") >= 2:
-                    # Real JWT token that failed validation - don't fall back to API key
-                    auth_info = AuthInfo(
-                        jwt_validated=False,
-                        authenticated=False,
-                        auth_error=jwt_validation_result["error"],
-                    )
-                    set_auth_info(ctx, auth_info)
-
-                    # Log authentication failure
-                    await audit_log_auth_event(
-                        "jwt_authentication_failed",
-                        "unknown",
-                        None,
-                        {"error": jwt_validation_result["error"]},
-                    )
-                    return  # Exit early, don't try API key
-                    # else: looks like API key, fall through to API key authentication
-
-            except Exception:
-                # JWT validation threw exception - if it looks like a JWT, don't fall back
-                if token.count(".") >= 2:
-                    # This looks like a real JWT that failed, bubble up the error
-                    raise
-
-        # API key authentication (either no Bearer header, or JWT validation failed/skipped)
-        should_try_api_key = True
-        if (
-            jwt_attempted
-            and jwt_validation_result
-            and jwt_validation_result.get("valid", False)
-        ):
-            should_try_api_key = False
-
-        if should_try_api_key:
-            api_key = (
-                authorization_header.replace("Bearer ", "")
-                if authorization_header
-                else ""
-            )
-            valid_api_key = os.getenv("API_KEY", "")
-
-            authenticated = api_key == valid_api_key if valid_api_key else False
-
-            # Get existing agent_id from context if available
-            existing_auth = get_auth_info(ctx)
-            agent_id = (
-                existing_auth.agent_id
-                if existing_auth.agent_id != "unknown"
-                else "unknown"
-            )
-
-            # Set basic authentication context
-            auth_info = AuthInfo(
-                jwt_validated=False,
-                agent_id=agent_id,
-                agent_type="generic",
-                permissions=["read", "write"] if authenticated else ["read"],
-                authenticated=authenticated,
-                auth_method="api_key",
-            )
-            set_auth_info(ctx, auth_info)
-
-            if authenticated:
-                await audit_log_auth_event(
-                    "api_key_authentication_success",
-                    auth_info.agent_id,
-                    None,
-                    {"auth_method": "api_key"},
-                )
-
-    except Exception as e:
-        logger.exception("Authentication context enhancement failed")
-
-        # Set minimal context on error
-        auth_info = AuthInfo(
-            jwt_validated=False,
-            agent_id="unknown",
-            agent_type="generic",
-            permissions=["read"],
-            authenticated=False,
-            auth_error=str(e),
-        )
-        set_auth_info(ctx, auth_info)
+    return token

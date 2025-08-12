@@ -1132,8 +1132,15 @@ class TestDatabaseOperationErrorHandling:
 
         # Test slow query logging
         with patch("time.time") as mock_time:
-            # Simulate slow query (>100ms)
-            mock_time.side_effect = [100.0, 100.15, 100.15]  # 150ms query
+            # Simulate slow query (>100ms) - provide more values for additional calls
+            mock_time.side_effect = [
+                100.0,
+                100.15,
+                100.15,
+                100.15,
+                100.15,
+                100.15,
+            ]  # 150ms query
 
             async with pool_manager.get_connection("slow_query_test") as conn:
                 await conn.execute("SELECT 1")

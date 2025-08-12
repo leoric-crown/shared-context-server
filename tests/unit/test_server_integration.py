@@ -32,6 +32,7 @@ class TestMultiComponentIntegration:
         """Test complete agent workflow: authenticate -> create session -> add messages -> search -> memory."""
         # Step 1: Authenticate agent
         auth_ctx = MockContext(session_id="auth_session", agent_id="workflow_agent")
+        auth_ctx.headers = {"X-API-Key": "workflow_test_key"}  # Add API key header
 
         with patch.dict("os.environ", {"API_KEY": "workflow_test_key"}):
             auth_result = await call_fastmcp_tool(
@@ -39,7 +40,6 @@ class TestMultiComponentIntegration:
                 auth_ctx,
                 agent_id="workflow_agent",
                 agent_type="claude",
-                api_key="workflow_test_key",
                 requested_permissions=["read", "write", "admin"],
             )
 

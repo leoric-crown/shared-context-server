@@ -125,6 +125,7 @@ ignore = [
     "B008",   # Do not perform function calls in argument defaults
     "C901",   # Function is too complex
     "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY300", # Consider moving this statement to an `else` block
     "ARG002", # Unused method argument
     "PTH123", # Path.open should be used instead of built-in open
     "SIM108", # Use ternary operator instead of if-else-block
@@ -214,6 +215,7 @@ addopts = [
     "-q",                         # Quiet output
     "--color=yes",                # Force color output
     "--show-capture=no",          # Don't show captured stdout/stderr by default
+    "--durations=5",
 ]
 testpaths = ["tests"]
 asyncio_mode = "auto"

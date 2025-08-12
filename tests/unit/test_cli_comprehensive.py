@@ -655,6 +655,250 @@ class TestRealWorldScenarios:
             mock_run_loop.assert_called_once()
 
 
+class TestClientConfigGeneration:
+    """Test client configuration generation functions."""
+
+    def test_generate_client_config_claude(self, capsys):
+        """Test Claude client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        generate_client_config("claude", "localhost", 8000)
+
+        captured = capsys.readouterr()
+        assert "=== CLAUDE MCP Client Configuration ===" in captured.out
+        assert "http://localhost:8000/mcp/" in captured.out
+        assert "claude mcp add-json" in captured.out
+
+    def test_generate_client_config_cursor(self, capsys):
+        """Test Cursor client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        generate_client_config("cursor", "example.com", 9000)
+
+        captured = capsys.readouterr()
+        assert "=== CURSOR MCP Client Configuration ===" in captured.out
+        assert "http://example.com:9000/mcp/" in captured.out
+        assert "settings.json" in captured.out
+
+    def test_generate_client_config_windsurf(self, capsys):
+        """Test Windsurf client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        generate_client_config("windsurf", "192.168.1.100", 7777)
+
+        captured = capsys.readouterr()
+        assert "=== WINDSURF MCP Client Configuration ===" in captured.out
+        assert "http://192.168.1.100:7777/mcp/" in captured.out
+
+    def test_generate_client_config_vscode(self, capsys):
+        """Test VS Code client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        generate_client_config("vscode", "127.0.0.1", 3000)
+
+        captured = capsys.readouterr()
+        assert "=== VSCODE MCP Client Configuration ===" in captured.out
+        assert "http://127.0.0.1:3000/mcp/" in captured.out
+        assert "VS Code settings.json" in captured.out
+
+    def test_generate_client_config_generic(self, capsys):
+        """Test generic client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        generate_client_config("generic", "test.server", 5555)
+
+        captured = capsys.readouterr()
+        assert "=== GENERIC MCP Client Configuration ===" in captured.out
+        assert "http://test.server:5555/mcp/" in captured.out
+        assert "Type: http" in captured.out
+
+
+class TestImportErrorHandling:
+    """Test import error handling and availability flags."""
+
+    def test_uvloop_available_flag(self):
+        """Test UVLOOP_AVAILABLE flag is set correctly."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import UVLOOP_AVAILABLE
+
+        # The flag should be a boolean
+        assert isinstance(UVLOOP_AVAILABLE, bool)
+
+    def test_server_available_flag(self):
+        """Test SERVER_AVAILABLE flag is set correctly."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import SERVER_AVAILABLE
+
+        # The flag should be a boolean
+        assert isinstance(SERVER_AVAILABLE, bool)
+
+
+class TestProductionServerClass:
+    """Test ProductionServer class initialization and basic methods."""
+
+    def test_production_server_init(self):
+        """Test ProductionServer initialization."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import ProductionServer
+
+        server = ProductionServer()
+        assert server.config is None
+        assert server.server is None
+
+    @pytest.mark.asyncio
+    async def test_stdio_server_no_server_available(self):
+        """Test STDIO server when server components not available."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import ProductionServer
+
+        server = ProductionServer()
+
+        # Mock SERVER_AVAILABLE to False
+        with (
+            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            pytest.raises(SystemExit),
+        ):
+            await server.start_stdio_server()
+
+    @pytest.mark.asyncio
+    async def test_http_server_no_server_available(self):
+        """Test HTTP server when server components not available."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import ProductionServer
+
+        server = ProductionServer()
+
+        # Mock SERVER_AVAILABLE to False
+        with (
+            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            pytest.raises(SystemExit),
+        ):
+            await server.start_http_server("localhost", 8000)
+
+
+class TestSignalHandlers:
+    """Test signal handler setup."""
+
+    def test_setup_signal_handlers(self):
+        """Test signal handler setup function."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import setup_signal_handlers
+
+        # Mock signal.signal to avoid actually setting up handlers
+        with patch("signal.signal") as mock_signal:
+            setup_signal_handlers()
+
+            # Should have been called for SIGTERM and SIGINT at minimum
+            assert mock_signal.call_count >= 2
+
+
+class TestConfigLoadingFallbacks:
+    """Test configuration loading fallback scenarios."""
+
+    def test_parse_arguments_config_fallback(self):
+        """Test argument parsing with config loading fallback."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        # Mock get_config to raise an exception, triggering fallback
+        with (
+            patch(
+                "shared_context_server.scripts.cli.get_config",
+                side_effect=Exception("Config error"),
+            ),
+            patch("sys.argv", ["cli.py", "--help"]),
+        ):
+            import contextlib
+
+            from shared_context_server.scripts.cli import parse_arguments
+
+            # Should catch the exception but still try to parse arguments
+            # This will trigger the fallback paths around lines 151-154 and 200-205
+            with contextlib.suppress(SystemExit):
+                parse_arguments()
+                # Won't reach here due to --help, but that's fine
+
+
+class TestMainFunctionPaths:
+    """Test main function execution paths."""
+
+    def test_main_with_client_config_command(self):
+        """Test main function with client-config subcommand."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import main
+
+        # Test the client-config command path
+        with (
+            patch("sys.argv", ["cli.py", "client-config", "claude"]),
+            patch(
+                "shared_context_server.scripts.cli.generate_client_config"
+            ) as mock_generate,
+        ):
+            main()
+            mock_generate.assert_called_once()
+
+    def test_main_with_status_command(self):
+        """Test main function with status subcommand."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import main
+
+        # Test the status command path
+        with (
+            patch("sys.argv", ["cli.py", "status"]),
+            patch("shared_context_server.scripts.cli.show_status") as mock_status,
+        ):
+            main()
+            mock_status.assert_called_once()
+
+    def test_main_config_loading_exception(self):
+        """Test main function when config loading fails."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import main
+
+        with (
+            patch("sys.argv", ["cli.py"]),
+            patch(
+                "shared_context_server.scripts.cli.get_config",
+                side_effect=Exception("Config error"),
+            ),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+
 # Additional integration test for the CLI entry point
 if CLI_AVAILABLE and __name__ == "__main__":
     # Test that the CLI can be run directly
