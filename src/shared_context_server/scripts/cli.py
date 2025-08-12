@@ -27,14 +27,16 @@ except ImportError:
 # Configure logging - use environment LOG_LEVEL if available
 import os
 
+from .. import __version__
 from ..config import get_config, load_config
 
-# Check if we're running client-config command to suppress logging
+# Check if we're running client-config command or version to suppress logging
 client_config_mode = len(sys.argv) >= 2 and sys.argv[1] == "client-config"
+version_mode = "--version" in sys.argv
 
 log_level = (
     logging.CRITICAL
-    if client_config_mode
+    if client_config_mode or version_mode
     else getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 )
 
@@ -174,7 +176,7 @@ Claude Desktop Integration:
         help="Logging level (default: INFO)",
     )
     parser.add_argument(
-        "--version", action="version", version="shared-context-server 1.0.0"
+        "--version", action="version", version=f"shared-context-server {__version__}"
     )
 
     # Add subcommands for Docker workflow
