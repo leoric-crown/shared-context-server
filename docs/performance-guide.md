@@ -1217,8 +1217,8 @@ volumes:
 ```nginx
 # nginx-load-balancer.conf
 upstream shared_context_servers {
-    server shared-context-server-1:8000 weight=1;
-    server shared-context-server-2:8000 weight=1;
+    server shared-context-server-1:23456 weight=1;
+    server shared-context-server-2:23456 weight=1;
 
     keepalive 32;
 }

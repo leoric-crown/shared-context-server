@@ -1,935 +1,667 @@
-# Shared Context MCP Server - Integration Guide
+# Integration Guide: Collaborative Agent Sessions
 
-Comprehensive guide for integrating the Shared Context MCP Server with major agent frameworks and platforms.
+Transform your AI agents from independent workers into collaborative teams. This guide shows MCP protocol integration (tested) and conceptual patterns for popular agent frameworks (community contributions welcome).
 
-## Table of Contents
+## Content Navigation
 
-- [Quick Start Integration](#quick-start-integration)
-- [Framework-Specific Integrations](#framework-specific-integrations)
-- [Custom Agent Integration](#custom-agent-integration)
-- [Multi-Agent Coordination Patterns](#multi-agent-coordination-patterns)
-- [Production Deployment](#production-deployment)
+| Symbol | Meaning | Time Investment |
+|--------|---------|----------------|
+| 🟢 | Beginner friendly | 5-10 minutes |
+| 🟡 | Intermediate setup | 15-30 minutes |
+| 🔴 | Advanced/Production | 30+ minutes |
+| 💡 | Why this works | Context only |
+| ⚠️ | Important note | Read carefully |
 
 ---
 
-## Quick Start Integration
+## 🟢 Quick Start (5 minutes)
 
-### Prerequisites
-
-- Python 3.11+
-- Shared Context MCP Server running
-- Agent API credentials
-
-### 5-Minute Setup
-
-1. **Start the Server**:
+### One-Command Setup
 ```bash
-# Clone and setup
-git clone https://github.com/leoric-crown/shared-context-server.git
-cd shared-context-server
-uv sync
+# Start the server
+docker run -d --name shared-context-server -p 23456:23456 \
+  -e API_KEY="test-key" -e JWT_SECRET_KEY="test-secret" \
+  ghcr.io/leoric-crown/shared-context-server:latest
 
-# Start with hot reload for development
-MCP_TRANSPORT=http HTTP_PORT=23456 uv run python -m shared_context_server.scripts.dev
-```
-
-2. **Connect Claude Code**:
-```bash
-# Install mcp-proxy and configure Claude Code
-uv tool install mcp-proxy
+# Connect with Claude Code
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
-claude mcp list  # Verify connection: ✓ Connected
 ```
 
-3. **Test Basic Operations**:
+### 3-Line Collaboration Test
 ```python
-# Authenticate
-auth_result = await client.call_tool("authenticate_agent", {
-    "agent_id": "test-agent",
-    "agent_type": "claude",
-    "api_key": "your-api-key"
-})
+# Create shared session
+session = await client.call_tool("create_session", {"purpose": "test collaboration"})
 
-# Create session and add message
-session = await client.call_tool("create_session", {
-    "purpose": "Quick test session"
-})
+# Agent 1 shares discovery
 await client.call_tool("add_message", {
     "session_id": session["session_id"],
-    "content": "Hello from integrated agent!"
+    "content": "Agent 1: Found the root cause in authentication module"
+})
+
+# Agent 2 builds on it
+await client.call_tool("add_message", {
+    "session_id": session["session_id"],
+    "content": "Agent 2: Fixed the auth issue and optimized the query performance"
 })
 ```
 
+💡 **Why this works**: Each agent sees the previous findings instead of starting from zero.
+
 ---
 
-## Framework-Specific Integrations
+## 🟢 MCP Protocol Integration (Tested)
 
-### AutoGen Integration
-
-Microsoft AutoGen integration for multi-agent conversations with shared context.
-
-#### Installation & Setup
-
+### Claude Code Integration
 ```python
-# requirements.txt
-pyautogen>=0.2.0
-httpx>=0.25.0
-pydantic>=2.0.0
+# Add to Claude Code (tested and working)
+claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
 
-# Install dependencies
-pip install -r requirements.txt
+# Use MCP tools directly
+session = await client.call_tool("create_session", {"purpose": "code review"})
+await client.call_tool("add_message", {
+    "session_id": session["session_id"],
+    "content": "Security Agent: Found vulnerabilities in auth module"
+})
 ```
 
-#### Complete AutoGen Example
-
+### Direct HTTP API
 ```python
-import asyncio
 import httpx
-from typing import Dict, Any, List
-import autogen
-from autogen import ConversableAgent, GroupChat, GroupChatManager
+client = httpx.AsyncClient()
 
-class SharedContextMCPClient:
-    """MCP client for AutoGen agents."""
+# Create collaborative session
+session = await client.post("http://localhost:23456/mcp/tool/create_session",
+                           json={"purpose": "agent collaboration"})
 
-    def __init__(self, base_url: str = "http://localhost:23456", api_key: str = None):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.session = httpx.AsyncClient()
-        self.token = None
-        self.current_session_id = None
-
-    async def authenticate(self, agent_id: str, agent_type: str = "autogen"):
-        """Authenticate agent and get JWT token."""
-        response = await self.session.post(
-            f"{self.base_url}/mcp/tool/authenticate_agent",
-            json={
-                "agent_id": agent_id,
-                "agent_type": agent_type,
-                "api_key": self.api_key,
-                "requested_permissions": ["read", "write"]
-            }
-        )
-        result = response.json()
-        if result.get("success"):
-            self.token = result["token"]
-            return result
-        else:
-            raise Exception(f"Authentication failed: {result.get('error', 'Unknown error')}")
-
-    async def create_session(self, purpose: str, metadata: Dict = None):
-        """Create a new collaboration session."""
-        if not self.token:
-            raise Exception("Not authenticated")
-
-        response = await self.session.post(
-            f"{self.base_url}/mcp/tool/create_session",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "purpose": purpose,
-                "metadata": metadata or {}
-            }
-        )
-        result = response.json()
-        if result.get("success"):
-            self.current_session_id = result["session_id"]
-            return result
-        else:
-            raise Exception(f"Session creation failed: {result.get('error', 'Unknown error')}")
-
-    async def add_message(self, content: str, visibility: str = "public", metadata: Dict = None):
-        """Add message to current session."""
-        if not self.current_session_id:
-            raise Exception("No active session")
-
-        response = await self.session.post(
-            f"{self.base_url}/mcp/tool/add_message",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "session_id": self.current_session_id,
-                "content": content,
-                "visibility": visibility,
-                "metadata": metadata or {}
-            }
-        )
-        return response.json()
-
-    async def get_messages(self, limit: int = 50):
-        """Get messages from current session."""
-        if not self.current_session_id:
-            raise Exception("No active session")
-
-        response = await self.session.post(
-            f"{self.base_url}/mcp/tool/get_messages",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "session_id": self.current_session_id,
-                "limit": limit
-            }
-        )
-        return response.json()
-
-    async def search_context(self, query: str, fuzzy_threshold: float = 60.0):
-        """Search session context."""
-        if not self.current_session_id:
-            raise Exception("No active session")
-
-        response = await self.session.post(
-            f"{self.base_url}/mcp/tool/search_context",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "session_id": self.current_session_id,
-                "query": query,
-                "fuzzy_threshold": fuzzy_threshold
-            }
-        )
-        return response.json()
-
-class SharedContextAgent(ConversableAgent):
-    """AutoGen agent with shared context integration."""
-
-    def __init__(self, name: str, shared_context_client: SharedContextMCPClient, **kwargs):
-        super().__init__(name, **kwargs)
-        self.shared_context = shared_context_client
-        self.agent_id = name.lower().replace(" ", "-")
-
-    async def setup_shared_context(self, session_purpose: str):
-        """Setup shared context for this agent."""
-        await self.shared_context.authenticate(self.agent_id)
-        session = await self.shared_context.create_session(
-            purpose=session_purpose,
-            metadata={"autogen_agent": self.name, "framework": "autogen"}
-        )
-        print(f"Agent {self.name} connected to session: {session['session_id']}")
-        return session
-
-    async def send_with_context(self, message: str, recipient=None, request_reply: bool = None):
-        """Send message and log to shared context."""
-        # Log to shared context
-        await self.shared_context.add_message(
-            content=message,
-            metadata={
-                "sender": self.name,
-                "recipient": recipient.name if recipient else "group",
-                "message_type": "autogen_message"
-            }
-        )
-
-        # Send normal AutoGen message
-        return await super().a_send(message, recipient, request_reply)
-
-# Example Usage: Multi-Agent Research Team
-async def main():
-    # Initialize shared context
-    api_key = "your-api-key"  # Replace with actual API key
-    shared_context = SharedContextMCPClient(api_key=api_key)
-
-    # Create specialized agents
-    researcher = SharedContextAgent(
-        name="Researcher",
-        shared_context_client=shared_context,
-        system_message="You are a research specialist. Gather and analyze information systematically.",
-        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
-    )
-
-    analyst = SharedContextAgent(
-        name="Analyst",
-        shared_context_client=shared_context,
-        system_message="You are a data analyst. Process and interpret research findings.",
-        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
-    )
-
-    writer = SharedContextAgent(
-        name="Writer",
-        shared_context_client=shared_context,
-        system_message="You are a technical writer. Create clear, comprehensive reports.",
-        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
-    )
-
-    # Setup shared context for collaboration
-    await researcher.setup_shared_context("Multi-agent research collaboration")
-
-    # Share the same session across agents
-    analyst.shared_context.token = researcher.shared_context.token
-    analyst.shared_context.current_session_id = researcher.shared_context.current_session_id
-    writer.shared_context.token = researcher.shared_context.token
-    writer.shared_context.current_session_id = researcher.shared_context.current_session_id
-
-    # Create AutoGen group chat
-    groupchat = GroupChat(
-        agents=[researcher, analyst, writer],
-        messages=[],
-        max_round=6
-    )
-
-    manager = GroupChatManager(
-        groupchat=groupchat,
-        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
-    )
-
-    # Start collaboration
-    await researcher.a_initiate_chat(
-        manager,
-        message="Research the latest trends in AI agent frameworks and multi-agent systems. Analyze the findings and prepare a comprehensive report."
-    )
-
-    # Retrieve shared context after collaboration
-    messages = await shared_context.get_messages()
-    print(f"Session captured {messages['count']} messages")
-
-    # Search for specific topics
-    search_results = await shared_context.search_context("AI agent frameworks")
-    print(f"Found {len(search_results['results'])} relevant messages about AI frameworks")
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Share findings between agents
+await client.post("http://localhost:23456/mcp/tool/add_message", json={
+    "session_id": session_id,
+    "content": "Agent 1: Found root cause in authentication"
+})
 ```
 
-### CrewAI Integration
+**➡️ Next**: [Conceptual Framework Patterns](#-conceptual-framework-patterns) (untested)
 
-CrewAI integration for role-based agent crews with shared context memory.
+---
 
-#### Installation & Setup
+## 🟡 Collaborative Workflows
+
+### Code Review Pipeline
+**Problem**: Security → Performance → Documentation agents work independently
+
+**Solution**: Sequential collaboration with context handoffs
 
 ```python
-# requirements.txt
-crewai>=0.1.0
-httpx>=0.25.0
-pydantic>=2.0.0
+# Phase 1: Security Agent
+security_findings = await security_agent.review_code(file_path)
+await session.add_message(f"🔒 Security: Found {len(security_findings)} issues")
 
-# Install dependencies
-pip install -r requirements.txt
+# Phase 2: Performance Agent (sees security context)
+security_context = await session.search_context("security vulnerabilities")
+perf_findings = await performance_agent.optimize_with_security(file_path, security_context)
+await session.add_message(f"⚡ Performance: Optimized while fixing security issues")
+
+# Phase 3: Documentation Agent (has full context)
+complete_context = await session.get_messages(limit=20)
+docs = await docs_agent.document_solution(file_path, complete_context)
 ```
 
-#### Complete CrewAI Example
+💡 **Why this pattern works**: Each agent builds on previous discoveries instead of duplicating work.
+
+### Research & Implementation Workflow
+```python
+# Research Phase
+research_findings = await research_agent.investigate(topic)
+await session.add_message(f"📊 Research: {research_findings.summary}")
+
+# Architecture Phase (builds on research)
+research_context = await session.search_context("requirements constraints")
+architecture = await architect_agent.design_solution(research_context)
+await session.add_message(f"🏗️ Architecture: {architecture.summary}")
+
+# Implementation Phase (has full context)
+implementation = await developer_agent.implement_solution(await session.get_messages())
+```
+
+<details>
+<summary>🟡 Advanced Workflow Patterns</summary>
+
+### Parallel Specialist Collaboration
+```python
+# Problem analysis
+analyst_results = await analyst_agent.analyze_problem(description)
+
+# Multiple specialists work in parallel with shared context
+specialists = [
+    TechnicalSpecialist(session, "backend"),
+    TechnicalSpecialist(session, "frontend"),
+    TechnicalSpecialist(session, "database"),
+    TechnicalSpecialist(session, "security")
+]
+
+# Each specialist sees others' findings as they work
+for specialist in specialists:
+    context = await session.get_context_for_agent(specialist.specialty)
+    result = await specialist.solve_aspect(description, context)
+    await session.add_message(f"✅ {specialist.specialty}: {result}")
+
+# Integration specialist combines all solutions
+integrator = IntegrationSpecialist(session)
+final_solution = await integrator.combine_solutions(await session.get_messages())
+```
+
+### Clean Agent Handoffs
+```python
+class AgentHandoffManager:
+    def __init__(self, session):
+        self.session = session
+
+    async def handoff(self, from_agent: str, to_agent: str, summary: str):
+        """Clean handoff with context preservation."""
+        await self.session.add_message(
+            f"🔄 HANDOFF: {from_agent} → {to_agent}\n{summary}",
+            metadata={"type": "handoff", "from": from_agent, "to": to_agent}
+        )
+
+    async def get_handoff_context(self, for_agent: str):
+        """Get relevant context for incoming agent."""
+        return await self.session.search_context(f"handoff {for_agent}")
+```
+
+</details>
+
+---
+
+## 🟡 Conceptual Framework Patterns
+
+⚠️ **Important**: The following framework integrations are conceptual designs that have not been tested. They represent potential integration patterns that could be developed by the community.
+
+### CrewAI: Conceptual Team Collaboration
+
+<details>
+<summary>🟢 Conceptual CrewAI Integration (untested)</summary>
 
 ```python
+# CONCEPTUAL - NOT TESTED
 from crewai import Agent, Task, Crew
 from crewai.tools import tool
-import asyncio
-import httpx
-from typing import Dict, Any
 
-class SharedContextTool:
-    """CrewAI tool for shared context operations."""
+# This integration pattern is theoretical
+# CrewAI would need to add support for external context servers
+crew = Crew(
+    agents=[security_agent, perf_agent, docs_agent],
+    tasks=[security_task, perf_task, docs_task],
+    context_server="http://localhost:23456"  # Conceptual feature
+)
 
-    def __init__(self, api_key: str, base_url: str = "http://localhost:23456"):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.token = None
+result = crew.kickoff()  # Would need CrewAI framework changes
+```
+
+💡 **Implementation needed**: CrewAI framework would need to add context server support. Community contributions welcome!
+
+</details>
+
+<details>
+<summary>🟡 Production CrewAI with Custom Tools (20 minutes)</summary>
+
+```python
+class SharedContextCrewAI:
+    def __init__(self, api_key: str):
+        self.context_client = SharedContextClient(api_key)
         self.session_id = None
 
-    async def authenticate(self, agent_id: str):
-        """Authenticate with shared context server."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/authenticate_agent",
-                json={
-                    "agent_id": agent_id,
-                    "agent_type": "crewai",
-                    "api_key": self.api_key,
-                    "requested_permissions": ["read", "write"]
-                }
-            )
-            result = response.json()
-            if result.get("success"):
-                self.token = result["token"]
-                return True
-            return False
+    async def setup_crew_session(self, purpose: str):
+        session = await self.context_client.create_session(purpose)
+        self.session_id = session["session_id"]
+        return self.session_id
 
-    async def create_session(self, purpose: str, metadata: Dict = None):
-        """Create collaboration session."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/create_session",
-                headers={"Authorization": f"Bearer {self.token}"},
-                json={"purpose": purpose, "metadata": metadata or {}}
-            )
-            result = response.json()
-            if result.get("success"):
-                self.session_id = result["session_id"]
-                return result
-            return None
+    @tool("Share findings with crew")
+    def share_findings(self, findings: str) -> str:
+        """Share discoveries with other crew members."""
+        asyncio.run(self.context_client.add_message(
+            session_id=self.session_id,
+            content=f"💡 CREW FINDINGS: {findings}",
+            visibility="public"
+        ))
+        return f"Shared with crew: {findings[:100]}..."
 
-    @tool("Add message to shared context")
-    def add_message(self, content: str, visibility: str = "public") -> str:
-        """Add a message to the shared context session."""
-        async def _add():
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.base_url}/mcp/tool/add_message",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    json={
-                        "session_id": self.session_id,
-                        "content": content,
-                        "visibility": visibility,
-                        "metadata": {"framework": "crewai"}
-                    }
-                )
-                return response.json()
+    @tool("Get crew insights")
+    def get_crew_insights(self, topic: str) -> str:
+        """Get relevant insights from crew members."""
+        results = asyncio.run(self.context_client.search_context(
+            session_id=self.session_id,
+            query=topic,
+            fuzzy_threshold=70.0
+        ))
 
-        # Run async operation
-        result = asyncio.run(_add())
-        if result.get("success"):
-            return f"Message added to shared context (ID: {result['message_id']})"
-        return f"Failed to add message: {result.get('error', 'Unknown error')}"
+        if results["success"] and results["results"]:
+            insights = [f"- {r['message']['content'][:150]}..."
+                       for r in results["results"][:3]]
+            return f"Crew insights on '{topic}':\n" + "\n".join(insights)
+        return f"No crew insights found for '{topic}'"
 
-    @tool("Search shared context")
-    def search_context(self, query: str, threshold: float = 60.0) -> str:
-        """Search the shared context for relevant information."""
-        async def _search():
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.base_url}/mcp/tool/search_context",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    json={
-                        "session_id": self.session_id,
-                        "query": query,
-                        "fuzzy_threshold": threshold
-                    }
-                )
-                return response.json()
-
-        result = asyncio.run(_search())
-        if result.get("success"):
-            matches = result.get("results", [])
-            if matches:
-                summaries = []
-                for match in matches[:3]:  # Top 3 results
-                    msg = match["message"]
-                    summaries.append(f"- {msg['sender']}: {msg['content'][:100]}... (Score: {match['score']})")
-                return f"Found {len(matches)} matches:\n" + "\n".join(summaries)
-            return "No relevant information found in shared context."
-        return f"Search failed: {result.get('error', 'Unknown error')}"
-
-# Example: Software Development Crew
+# Create development crew with shared context
 async def create_development_crew():
-    # Initialize shared context
-    shared_context = SharedContextTool(api_key="your-api-key")
-    await shared_context.authenticate("crewai-coordinator")
-    await shared_context.create_session(
-        "Software development project planning",
-        metadata={"project": "new-feature", "team": "development"}
-    )
+    shared_crew = SharedContextCrewAI(api_key="your-key")
+    await shared_crew.setup_crew_session("Software feature development")
 
-    # Create agents with shared context tools
+    # Agents with shared context tools
     product_manager = Agent(
         role='Product Manager',
-        goal='Define product requirements and coordinate development priorities',
-        backstory="""You are an experienced product manager with expertise in
-        software development lifecycle and stakeholder management. You excel at
-        translating business needs into technical requirements.""",
-        verbose=True,
-        allow_delegation=True,
-        tools=[shared_context.add_message, shared_context.search_context]
+        goal='Define requirements and coordinate with technical team',
+        tools=[shared_crew.share_findings, shared_crew.get_crew_insights],
+        allow_delegation=True
     )
 
     tech_lead = Agent(
         role='Technical Lead',
-        goal='Design technical architecture and guide implementation approach',
-        backstory="""You are a senior technical lead with deep knowledge of
-        software architecture, design patterns, and best practices. You ensure
-        technical quality and scalability.""",
-        verbose=True,
-        allow_delegation=True,
-        tools=[shared_context.add_message, shared_context.search_context]
+        goal='Design architecture based on requirements',
+        tools=[shared_crew.share_findings, shared_crew.get_crew_insights],
+        allow_delegation=True
     )
 
-    developer = Agent(
-        role='Senior Developer',
-        goal='Implement features following technical specifications and best practices',
-        backstory="""You are an experienced developer skilled in multiple
-        programming languages and frameworks. You focus on clean, maintainable code.""",
-        verbose=True,
-        tools=[shared_context.add_message, shared_context.search_context]
-    )
-
-    # Define tasks
+    # Tasks that build on each other through shared context
     requirements_task = Task(
-        description="""Analyze the request for a new user authentication feature.
-        Define detailed requirements including:
-        1. User stories and acceptance criteria
-        2. Security requirements
-        3. Performance expectations
-        4. Integration points with existing systems
-
-        Document all findings in shared context for team visibility.""",
-        agent=product_manager,
-        expected_output="Detailed requirements document with user stories and technical specifications"
+        description="""
+        Define requirements for authentication feature:
+        1. Use get_crew_insights to check existing features
+        2. Define detailed requirements
+        3. Use share_findings to document for technical team
+        """,
+        agent=product_manager
     )
 
     architecture_task = Task(
-        description="""Based on the requirements, design the technical architecture:
-        1. System design and component interactions
-        2. Database schema changes
-        3. API endpoints and authentication flow
-        4. Security considerations and implementation approach
-
-        Search shared context for requirements and document the architecture design.""",
-        agent=tech_lead,
-        expected_output="Technical architecture document with diagrams and implementation plan"
+        description="""
+        Design technical architecture:
+        1. Use get_crew_insights('requirements') to get PM's analysis
+        2. Design system architecture
+        3. Use share_findings to document for implementation
+        """,
+        agent=tech_lead
     )
 
-    implementation_task = Task(
-        description="""Implement the authentication feature according to specifications:
-        1. Review architecture design from shared context
-        2. Implement core authentication components
-        3. Create API endpoints with proper validation
-        4. Write unit tests and integration tests
-        5. Document implementation details
-
-        Use shared context to coordinate with team and document progress.""",
-        agent=developer,
-        expected_output="Working authentication system with tests and documentation"
-    )
-
-    # Create and run crew
     crew = Crew(
-        agents=[product_manager, tech_lead, developer],
-        tasks=[requirements_task, architecture_task, implementation_task],
-        verbose=2,
-        process="sequential"  # Tasks run in order with context sharing
+        agents=[product_manager, tech_lead],
+        tasks=[requirements_task, architecture_task],
+        process="sequential"  # Each task builds on previous
     )
 
-    # Execute the crew
-    result = crew.kickoff()
+    return crew.kickoff()
+```
 
-    # Retrieve final shared context
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{shared_context.base_url}/mcp/tool/get_messages",
-            headers={"Authorization": f"Bearer {shared_context.token}"},
-            json={"session_id": shared_context.session_id, "limit": 100}
+</details>
+
+### AutoGen: Conceptual Multi-Agent Conversations
+
+⚠️ **Status**: Conceptual integration pattern - not tested with actual AutoGen framework.
+
+<details>
+<summary>🟢 Conceptual AutoGen Integration (untested)</summary>
+
+```python
+# CONCEPTUAL - NOT TESTED
+import autogen
+from autogen import ConversableAgent, GroupChat
+
+# This integration pattern is theoretical
+# AutoGen would need to add context server support
+session_id = context_server.create_session("research_collaboration")
+
+researcher = ConversableAgent(
+    name="Researcher",
+    system_message="Research specialist. Always check shared context before starting work.",
+    context_session=session_id  # Connect to shared session
+)
+
+analyst = ConversableAgent(
+    name="Analyst",
+    system_message="Data analyst. Build on research findings from shared context.",
+    context_session=session_id  # Same shared session
+)
+
+# Create group chat with context sharing
+groupchat = GroupChat(agents=[researcher, analyst], messages=[], max_round=6)
+manager = GroupChatManager(groupchat=groupchat)
+
+# Agents automatically share context through session
+researcher.initiate_chat(manager, message="Let's research AI collaboration platforms")
+```
+
+</details>
+
+<details>
+<summary>🟡 Production AutoGen with Context Integration (30 minutes)</summary>
+
+```python
+class ContextAwareAgent(ConversableAgent):
+    """AutoGen agent with shared context integration."""
+
+    def __init__(self, name, context_client, session_id, **kwargs):
+        super().__init__(name, **kwargs)
+        self.context_client = context_client
+        self.session_id = session_id
+        self.agent_id = name.lower().replace(" ", "-")
+
+    async def send_with_context(self, message, recipient, request_reply=True):
+        """Send message and preserve in shared context."""
+        # Add to shared context for other agents
+        await self.context_client.add_message(
+            session_id=self.session_id,
+            content=f"{self.name}: {message}",
+            metadata={
+                "autogen_agent": self.name,
+                "recipient": recipient.name if recipient else "group"
+            }
         )
-        messages = response.json()
+        # Send through AutoGen
+        return await super().a_send(message, recipient, request_reply)
 
-    print(f"\nCrewAI collaboration completed!")
-    print(f"Shared context captured {messages['count']} messages")
-    print(f"Final result: {result}")
+    async def get_context_insights(self, topic: str = None):
+        """Get relevant context from other agents."""
+        query = topic or "findings recommendations decisions"
+        results = await self.context_client.search_context(
+            session_id=self.session_id,
+            query=query,
+            fuzzy_threshold=60.0
+        )
 
-    return result
+        if results["success"] and results["results"]:
+            insights = []
+            for result in results["results"][:5]:
+                msg = result["message"]
+                if msg["sender"] != self.agent_id:  # Don't include own messages
+                    insights.append(f"{msg['sender']}: {msg['content'][:200]}...")
+            return "\n".join(insights) if insights else "No relevant context found"
+        return "No context available"
 
-# Run the crew
-if __name__ == "__main__":
-    asyncio.run(create_development_crew())
+# Usage example
+async def run_collaborative_research():
+    context_client = SharedContextClient(api_key="your-key")
+    session = await context_client.create_session("Multi-agent research")
+    session_id = session["session_id"]
+
+    # Create context-aware agents
+    researcher = ContextAwareAgent(
+        name="Researcher",
+        context_client=context_client,
+        session_id=session_id,
+        system_message="""Research specialist. Before providing analysis:
+        1. Use get_context_insights() to see what others discovered
+        2. Build on existing findings rather than duplicating work
+        3. Share your unique insights for the team""",
+        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
+    )
+
+    analyst = ContextAwareAgent(
+        name="Analyst",
+        context_client=context_client,
+        session_id=session_id,
+        system_message="""Data analyst. Before analysis:
+        1. Use get_context_insights('research findings') to get research data
+        2. Analyze trends and patterns
+        3. Share analytical insights""",
+        llm_config={"model": "gpt-4", "api_key": "your-openai-key"}
+    )
+
+    # Create collaborative group chat
+    groupchat = GroupChat(agents=[researcher, analyst], messages=[], max_round=8)
+    manager = GroupChatManager(groupchat=groupchat)
+
+    # Start collaboration with context sharing
+    await researcher.a_initiate_chat(
+        manager,
+        message="Research AI agent collaboration platforms. Check context first."
+    )
+
+    # Get final shared context summary
+    final_context = await context_client.get_messages(session_id=session_id, limit=50)
+    return final_context
 ```
 
-### LangChain Integration
+</details>
 
-LangChain integration with shared context for multi-agent workflows and memory persistence.
+### LangChain: Conceptual Workflow Continuity
 
-#### Installation & Setup
+⚠️ **Status**: Conceptual integration pattern - not tested with actual LangChain framework.
 
-```python
-# requirements.txt
-langchain>=0.1.0
-langchain-community>=0.0.1
-httpx>=0.25.0
-pydantic>=2.0.0
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-#### Complete LangChain Example
+<details>
+<summary>🟢 Conceptual LangChain Integration (untested)</summary>
 
 ```python
-from langchain.agents import Agent, AgentType, initialize_agent
-from langchain.memory import ConversationBufferMemory
+# CONCEPTUAL - NOT TESTED
+from langchain.agents import initialize_agent
 from langchain.tools import Tool
-from langchain.llms import OpenAI
-from langchain.schema import BaseMessage, HumanMessage, AIMessage
-import asyncio
-import httpx
-from typing import Dict, List, Any
 
-class SharedContextMemory:
-    """LangChain-compatible memory with shared context backend."""
+# This integration pattern is theoretical
+# Create shared context tools
+def add_to_context(content: str) -> str:
+    """Add finding to shared workflow context."""
+    context_client.add_message(session_id, content)
+    return f"Added to shared context: {content[:100]}..."
 
-    def __init__(self, api_key: str, agent_id: str, base_url: str = "http://localhost:23456"):
-        self.api_key = api_key
-        self.agent_id = agent_id
-        self.base_url = base_url
-        self.token = None
-        self.session_id = None
-        self.memory_key = f"{agent_id}_conversation_history"
+def get_context_insights(query: str) -> str:
+    """Get insights from shared context."""
+    results = context_client.search_context(session_id, query)
+    return format_insights(results) if results else "No insights found"
 
-    async def authenticate(self):
-        """Authenticate with shared context server."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/authenticate_agent",
-                json={
-                    "agent_id": self.agent_id,
-                    "agent_type": "langchain",
-                    "api_key": self.api_key,
-                    "requested_permissions": ["read", "write"]
-                }
-            )
-            result = response.json()
-            if result.get("success"):
-                self.token = result["token"]
-                return True
-            return False
+# Create agent with context tools
+tools = [
+    Tool(name="add_finding", description="Share findings with team", func=add_to_context),
+    Tool(name="get_insights", description="Get team insights", func=get_context_insights)
+]
 
-    async def set_session(self, session_id: str):
-        """Set the active session for shared context."""
-        self.session_id = session_id
+agent = initialize_agent(tools=tools, llm=llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
+```
 
-    async def save_conversation(self, messages: List[BaseMessage]):
-        """Save conversation to shared context memory."""
-        if not self.token:
-            await self.authenticate()
+</details>
 
-        conversation_data = []
-        for msg in messages:
-            if isinstance(msg, HumanMessage):
-                conversation_data.append({"role": "human", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                conversation_data.append({"role": "assistant", "content": msg.content})
+<details>
+<summary>🟡 Production LangChain Workflows (25 minutes)</summary>
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/set_memory",
-                headers={"Authorization": f"Bearer {self.token}"},
-                json={
-                    "key": self.memory_key,
-                    "value": conversation_data,
-                    "session_id": self.session_id,
-                    "metadata": {"agent_id": self.agent_id, "type": "conversation"}
-                }
-            )
-            return response.json()
+```python
+class SharedContextLangChain:
+    """LangChain integration with persistent shared context."""
 
-    async def load_conversation(self) -> List[Dict]:
-        """Load conversation from shared context memory."""
-        if not self.token:
-            await self.authenticate()
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/get_memory",
-                headers={"Authorization": f"Bearer {self.token}"},
-                json={
-                    "key": self.memory_key,
-                    "session_id": self.session_id
-                }
-            )
-            result = response.json()
-            if result.get("success"):
-                return result.get("value", [])
-            return []
-
-class SharedContextTool:
-    """LangChain tool for shared context operations."""
-
-    def __init__(self, api_key: str, agent_id: str, base_url: str = "http://localhost:23456"):
-        self.api_key = api_key
-        self.agent_id = agent_id
-        self.base_url = base_url
-        self.token = None
+    def __init__(self, api_key: str):
+        self.context_client = SharedContextClient(api_key)
         self.session_id = None
 
-    async def authenticate(self):
-        """Authenticate with shared context server."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mcp/tool/authenticate_agent",
-                json={
-                    "agent_id": self.agent_id,
-                    "agent_type": "langchain",
-                    "api_key": self.api_key,
-                    "requested_permissions": ["read", "write"]
-                }
-            )
-            result = response.json()
-            if result.get("success"):
-                self.token = result["token"]
-                return True
-            return False
-
-    async def set_session(self, session_id: str):
-        """Set active session."""
-        self.session_id = session_id
-
-    def create_tools(self) -> List[Tool]:
+    def create_shared_context_tools(self, agent_name: str):
         """Create LangChain tools for shared context operations."""
 
-        def add_to_shared_context(content: str) -> str:
-            """Add information to shared context for other agents."""
-            async def _add():
-                if not self.token:
-                    await self.authenticate()
+        def add_workflow_finding(content: str) -> str:
+            """Add findings to shared workflow context."""
+            asyncio.run(self.context_client.add_message(
+                session_id=self.session_id,
+                content=f"[{agent_name}] {content}",
+                metadata={"agent": agent_name, "type": "workflow_finding"}
+            ))
+            return f"Added to workflow: {content[:100]}..."
 
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.base_url}/mcp/tool/add_message",
-                        headers={"Authorization": f"Bearer {self.token}"},
-                        json={
-                            "session_id": self.session_id,
-                            "content": content,
-                            "visibility": "public",
-                            "metadata": {"source": "langchain", "agent": self.agent_id}
-                        }
-                    )
-                    return response.json()
+        def get_workflow_insights(query: str) -> str:
+            """Get insights from workflow context."""
+            results = asyncio.run(self.context_client.search_context(
+                session_id=self.session_id,
+                query=query,
+                fuzzy_threshold=65.0
+            ))
 
-            result = asyncio.run(_add())
-            if result.get("success"):
-                return f"Successfully added to shared context: {content[:100]}..."
-            return f"Failed to add to shared context: {result.get('error', 'Unknown error')}"
+            if results["success"] and results["results"]:
+                insights = []
+                for result in results["results"][:4]:
+                    msg = result["message"]
+                    # Skip own messages to avoid circular reference
+                    if not msg["content"].startswith(f"[{agent_name}]"):
+                        insights.append(f"- {msg['content'][:180]}...")
+                return f"Workflow insights:\n" + "\n".join(insights) if insights else "No other insights found"
+            return "No workflow context found"
 
-        def search_shared_context(query: str) -> str:
-            """Search shared context for relevant information."""
-            async def _search():
-                if not self.token:
-                    await self.authenticate()
+        def handoff_to_agent(input_str: str) -> str:
+            """Clean handoff to another agent. Format: 'target_agent:summary'"""
+            if ":" not in input_str:
+                return "Invalid format, use 'agent:summary'"
 
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.base_url}/mcp/tool/search_context",
-                        headers={"Authorization": f"Bearer {self.token}"},
-                        json={
-                            "session_id": self.session_id,
-                            "query": query,
-                            "fuzzy_threshold": 60.0
-                        }
-                    )
-                    return response.json()
-
-            result = asyncio.run(_search())
-            if result.get("success") and result.get("results"):
-                summaries = []
-                for match in result["results"][:5]:
-                    msg = match["message"]
-                    summaries.append(f"[{msg['sender']}]: {msg['content'][:150]}...")
-                return f"Found {len(result['results'])} matches:\n" + "\n".join(summaries)
-            return "No relevant information found in shared context."
-
-        def get_agent_memory(key: str) -> str:
-            """Retrieve value from agent's private memory."""
-            async def _get():
-                if not self.token:
-                    await self.authenticate()
-
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.base_url}/mcp/tool/get_memory",
-                        headers={"Authorization": f"Bearer {self.token}"},
-                        json={"key": key, "session_id": self.session_id}
-                    )
-                    return response.json()
-
-            result = asyncio.run(_get())
-            if result.get("success"):
-                return f"Retrieved from memory: {result['value']}"
-            return f"Memory key '{key}' not found or error: {result.get('error', 'Unknown error')}"
-
-        def set_agent_memory(key_value: str) -> str:
-            """Store value in agent's private memory. Format: 'key:value'"""
-            try:
-                key, value = key_value.split(":", 1)
-                key = key.strip()
-                value = value.strip()
-            except ValueError:
-                return "Invalid format. Use 'key:value' format."
-
-            async def _set():
-                if not self.token:
-                    await self.authenticate()
-
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{self.base_url}/mcp/tool/set_memory",
-                        headers={"Authorization": f"Bearer {self.token}"},
-                        json={
-                            "key": key,
-                            "value": value,
-                            "session_id": self.session_id,
-                            "metadata": {"source": "langchain", "agent": self.agent_id}
-                        }
-                    )
-                    return response.json()
-
-            result = asyncio.run(_set())
-            if result.get("success"):
-                return f"Stored in memory: {key} = {value}"
-            return f"Failed to store in memory: {result.get('error', 'Unknown error')}"
+            target_agent, summary = input_str.split(":", 1)
+            handoff_msg = f"🔄 HANDOFF: {agent_name} → {target_agent}\n{summary}"
+            asyncio.run(self.context_client.add_message(
+                session_id=self.session_id,
+                content=handoff_msg,
+                metadata={"type": "agent_handoff", "from_agent": agent_name, "to_agent": target_agent}
+            ))
+            return f"Handoff completed to {target_agent}"
 
         return [
             Tool(
-                name="add_to_shared_context",
-                description="Add information to shared context that other agents can access. Input should be the content to share.",
-                func=add_to_shared_context
+                name="add_workflow_finding",
+                description="Add important findings to shared workflow context for other agents.",
+                func=add_workflow_finding
             ),
             Tool(
-                name="search_shared_context",
-                description="Search shared context for relevant information from other agents. Input should be the search query.",
-                func=search_shared_context
+                name="get_workflow_insights",
+                description="Get relevant insights from other agents in the workflow.",
+                func=get_workflow_insights
             ),
             Tool(
-                name="get_agent_memory",
-                description="Retrieve a value from the agent's private memory. Input should be the memory key.",
-                func=get_agent_memory
-            ),
-            Tool(
-                name="set_agent_memory",
-                description="Store a value in the agent's private memory. Input should be 'key:value' format.",
-                func=set_agent_memory
+                name="handoff_to_agent",
+                description="Handoff work to another agent with summary. Use 'agent:summary' format.",
+                func=handoff_to_agent
             )
         ]
 
-# Example: Research and Analysis Workflow
-async def langchain_research_workflow():
-    """Example workflow using LangChain with shared context."""
+    async def create_workflow_agent(self, agent_name: str, role_description: str):
+        """Create a workflow-aware LangChain agent."""
+        tools = self.create_shared_context_tools(agent_name)
 
-    # Initialize shared context
-    api_key = "your-api-key"
+        agent = initialize_agent(
+            tools=tools,
+            llm=OpenAI(temperature=0.1, openai_api_key="your-openai-key"),
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=True,
+            agent_kwargs={
+                "prefix": f"""You are {agent_name}, {role_description}
 
-    # Create shared context session
-    async with httpx.AsyncClient() as client:
-        # Authenticate coordinator
-        auth_response = await client.post(
-            "http://localhost:23456/mcp/tool/authenticate_agent",
-            json={
-                "agent_id": "langchain-coordinator",
-                "agent_type": "langchain",
-                "api_key": api_key,
-                "requested_permissions": ["read", "write"]
+                WORKFLOW RULES:
+                1. Use get_workflow_insights to see what other agents discovered
+                2. Build on existing findings rather than duplicating work
+                3. Use add_workflow_finding to share important discoveries
+                4. Use handoff_to_agent when completing your phase
+
+                Available tools:"""
             }
         )
-        token = auth_response.json()["token"]
+        return agent
 
-        # Create session
-        session_response = await client.post(
-            "http://localhost:23456/mcp/tool/create_session",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "purpose": "LangChain research workflow with shared context",
-                "metadata": {"framework": "langchain", "workflow": "research"}
-            }
-        )
-        session_id = session_response.json()["session_id"]
-        print(f"Created session: {session_id}")
+# Example: Document processing workflow
+async def document_analysis_workflow():
+    shared_lc = SharedContextLangChain(api_key="your-api-key")
+    await shared_lc.setup_shared_workflow("Document analysis workflow")
 
-    # Create specialized agents
-    agents = []
-
-    # Research Agent
-    research_tool = SharedContextTool(api_key, "researcher")
-    await research_tool.authenticate()
-    await research_tool.set_session(session_id)
-
-    research_memory = SharedContextMemory(api_key, "researcher")
-    await research_memory.authenticate()
-    await research_memory.set_session(session_id)
-
-    researcher = initialize_agent(
-        tools=research_tool.create_tools(),
-        llm=OpenAI(temperature=0, openai_api_key="your-openai-key"),
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True,
-        memory=ConversationBufferMemory(memory_key="chat_history")
+    # Create specialized workflow agents
+    extractor = await shared_lc.create_workflow_agent(
+        "DocumentExtractor",
+        "document analysis specialist who extracts key information from documents"
     )
 
-    # Analysis Agent
-    analysis_tool = SharedContextTool(api_key, "analyst")
-    await analysis_tool.authenticate()
-    await analysis_tool.set_session(session_id)
-
-    analyst = initialize_agent(
-        tools=analysis_tool.create_tools(),
-        llm=OpenAI(temperature=0, openai_api_key="your-openai-key"),
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True,
-        memory=ConversationBufferMemory(memory_key="chat_history")
+    analyzer = await shared_lc.create_workflow_agent(
+        "ContentAnalyzer",
+        "content analysis expert who identifies themes and insights"
     )
 
-    # Execute workflow
-    print("Starting research phase...")
-    research_result = researcher.run(
-        "Research the current trends in multi-agent AI systems. Focus on coordination patterns, "
-        "shared memory systems, and real-world applications. Add your findings to shared context."
+    summarizer = await shared_lc.create_workflow_agent(
+        "DocumentSummarizer",
+        "summarization specialist who creates comprehensive summaries"
     )
 
-    print("\nStarting analysis phase...")
-    analysis_result = analyst.run(
-        "Search the shared context for research findings about multi-agent AI systems. "
-        "Analyze the trends and provide insights about future directions and opportunities."
+    # Workflow execution with agent handoffs
+    document_path = "example_document.pdf"
+
+    # Phase 1: Document extraction
+    extraction_result = extractor.run(f"""
+    Extract key information from: {document_path}
+    - Main topics and themes
+    - Key entities and facts
+    Add findings to workflow and handoff to ContentAnalyzer when complete.
+    """)
+
+    # Phase 2: Content analysis (builds on extraction)
+    analysis_result = analyzer.run(f"""
+    Analyze content from {document_path}
+    First get workflow insights about 'extraction findings' to see what DocumentExtractor found.
+    Then analyze themes, sentiment, and insights.
+    Add analysis to workflow and handoff to DocumentSummarizer.
+    """)
+
+    # Phase 3: Summarization (builds on extraction + analysis)
+    summary_result = summarizer.run(f"""
+    Create comprehensive summary of {document_path}
+    Get workflow insights about 'extraction analysis' to see all previous work.
+    Create executive summary and recommendations.
+    """)
+
+    # Get complete workflow context
+    workflow_context = await shared_lc.context_client.get_messages(
+        session_id=shared_lc.session_id, limit=100
     )
 
-    print(f"\nResearch completed: {research_result}")
-    print(f"Analysis completed: {analysis_result}")
-
-    # Retrieve full session history
-    async with httpx.AsyncClient() as client:
-        messages_response = await client.post(
-            "http://localhost:23456/mcp/tool/get_messages",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"session_id": session_id, "limit": 100}
-        )
-        messages = messages_response.json()
-        print(f"\nShared context captured {messages['count']} messages from LangChain workflow")
-
-if __name__ == "__main__":
-    asyncio.run(langchain_research_workflow())
+    return {
+        "extraction": extraction_result,
+        "analysis": analysis_result,
+        "summary": summary_result,
+        "workflow_context": workflow_context
+    }
 ```
+
+</details>
 
 ---
 
-## Custom Agent Integration
+## 🔴 Custom Agent Integration
 
-### Python SDK Pattern
-
-Build custom agents with direct API integration:
+<details>
+<summary>🟡 Simple Custom Agent SDK (15 minutes)</summary>
 
 ```python
-import httpx
 import asyncio
-from typing import Dict, Any, Optional
+import httpx
 
-class CustomAgentSDK:
-    """SDK for custom agent integration with Shared Context MCP Server."""
+class AgentCollaborationSDK:
+    """Lightweight SDK for custom agent collaboration."""
 
-    def __init__(self, agent_id: str, api_key: str, base_url: str = "http://localhost:23456"):
-        self.agent_id = agent_id
+    def __init__(self, agent_name: str, api_key: str, base_url: str = "http://localhost:23456"):
+        self.agent_name = agent_name
         self.api_key = api_key
         self.base_url = base_url
-        self.token = None
         self.session_id = None
         self.client = httpx.AsyncClient()
+        self.token = None
 
-    async def __aenter__(self):
-        await self.authenticate()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
-
-    async def authenticate(self) -> Dict[str, Any]:
-        """Authenticate agent and obtain JWT token."""
+    async def authenticate(self):
+        """Authenticate agent with shared context server."""
         response = await self.client.post(
             f"{self.base_url}/mcp/tool/authenticate_agent",
             json={
-                "agent_id": self.agent_id,
+                "agent_id": self.agent_name.lower().replace(" ", "-"),
                 "agent_type": "custom",
                 "api_key": self.api_key,
-                "requested_permissions": ["read", "write", "admin"]
+                "requested_permissions": ["read", "write"]
             }
         )
         result = response.json()
         if result.get("success"):
             self.token = result["token"]
-            return result
         else:
             raise Exception(f"Authentication failed: {result}")
 
-    async def create_session(self, purpose: str, metadata: Optional[Dict] = None) -> str:
-        """Create new collaboration session."""
+    async def start_collaboration(self, purpose: str):
+        """Start new collaboration session."""
+        if not self.token:
+            await self.authenticate()
+
         response = await self.client.post(
             f"{self.base_url}/mcp/tool/create_session",
             headers={"Authorization": f"Bearer {self.token}"},
-            json={"purpose": purpose, "metadata": metadata or {}}
+            json={"purpose": purpose}
         )
         result = response.json()
         if result.get("success"):
@@ -938,533 +670,147 @@ class CustomAgentSDK:
         else:
             raise Exception(f"Session creation failed: {result}")
 
-    async def join_session(self, session_id: str):
-        """Join existing session."""
-        self.session_id = session_id
-
-    async def add_message(self, content: str, visibility: str = "public",
-                         metadata: Optional[Dict] = None) -> int:
-        """Add message to current session."""
+    async def share_finding(self, finding: str, metadata: dict = None):
+        """Share finding with collaborating agents."""
         response = await self.client.post(
             f"{self.base_url}/mcp/tool/add_message",
             headers={"Authorization": f"Bearer {self.token}"},
             json={
                 "session_id": self.session_id,
-                "content": content,
-                "visibility": visibility,
-                "metadata": metadata or {}
+                "content": f"[{self.agent_name}] {finding}",
+                "visibility": "public",
+                "metadata": metadata or {"agent": self.agent_name}
             }
-        )
-        result = response.json()
-        if result.get("success"):
-            return result["message_id"]
-        else:
-            raise Exception(f"Add message failed: {result}")
-
-    async def get_messages(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        """Get messages from current session."""
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/get_messages",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={"session_id": self.session_id, "limit": limit, "offset": offset}
         )
         return response.json()
 
-    async def search(self, query: str, threshold: float = 60.0) -> Dict[str, Any]:
-        """Search session context."""
+    async def get_collaboration_context(self, focus_area: str = None):
+        """Get relevant context from other collaborating agents."""
+        query = focus_area or "findings recommendations insights"
         response = await self.client.post(
             f"{self.base_url}/mcp/tool/search_context",
             headers={"Authorization": f"Bearer {self.token}"},
             json={
                 "session_id": self.session_id,
                 "query": query,
-                "fuzzy_threshold": threshold
+                "fuzzy_threshold": 65.0
             }
-        )
-        return response.json()
-
-    async def set_memory(self, key: str, value: Any, expires_in: Optional[int] = None) -> bool:
-        """Store value in agent memory."""
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/set_memory",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "key": key,
-                "value": value,
-                "session_id": self.session_id,
-                "expires_in": expires_in
-            }
-        )
-        result = response.json()
-        return result.get("success", False)
-
-    async def get_memory(self, key: str) -> Any:
-        """Retrieve value from agent memory."""
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/get_memory",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={"key": key, "session_id": self.session_id}
         )
         result = response.json()
         if result.get("success"):
-            return result["value"]
-        return None
+            # Filter out own messages
+            relevant_findings = []
+            for item in result.get("results", []):
+                content = item["message"]["content"]
+                if not content.startswith(f"[{self.agent_name}]"):
+                    relevant_findings.append(content)
+            return relevant_findings
+        return []
 
 # Example usage
-async def custom_agent_example():
-    """Example custom agent workflow."""
+async def custom_collaboration_example():
+    research_agent = AgentCollaborationSDK("ResearchAgent", "your-api-key")
+    analysis_agent = AgentCollaborationSDK("AnalysisAgent", "your-api-key")
 
-    async with CustomAgentSDK("my-custom-agent", "your-api-key") as agent:
-        # Create or join session
-        session_id = await agent.create_session(
-            "Custom agent collaboration example",
-            metadata={"agent_type": "custom", "version": "1.0"}
-        )
-        print(f"Session created: {session_id}")
+    # Start collaboration
+    session_id = await research_agent.start_collaboration("Market analysis project")
+    analysis_agent.session_id = session_id
+    await analysis_agent.authenticate()
 
-        # Add initial message
-        msg_id = await agent.add_message(
-            "Hello! I'm a custom agent ready to collaborate.",
-            metadata={"action": "greeting"}
-        )
-        print(f"Message added: {msg_id}")
+    # Phase 1: Research
+    await research_agent.share_finding("Found 15 AI collaboration platforms with key market trends")
 
-        # Store some state in memory
-        await agent.set_memory("agent_state", {
-            "status": "active",
-            "task": "collaboration_example",
-            "session": session_id
-        })
+    # Phase 2: Analysis (builds on research)
+    research_context = await analysis_agent.get_collaboration_context("market trends research")
+    await analysis_agent.share_finding(f"Analysis based on research: {len(research_context)} insights analyzed")
 
-        # Simulate collaboration workflow
-        tasks = [
-            "Analyze current project requirements",
-            "Identify potential integration points",
-            "Propose implementation approach",
-            "Create project timeline"
-        ]
-
-        for i, task in enumerate(tasks):
-            # Add task to shared context
-            await agent.add_message(
-                f"Task {i+1}: {task}",
-                visibility="public",
-                metadata={"task_id": i+1, "status": "planned"}
-            )
-
-            # Update memory with current task
-            await agent.set_memory("current_task", {
-                "id": i+1,
-                "description": task,
-                "status": "in_progress"
-            })
-
-            # Simulate task completion
-            await asyncio.sleep(1)
-
-            await agent.add_message(
-                f"Completed: {task}",
-                visibility="public",
-                metadata={"task_id": i+1, "status": "completed"}
-            )
-
-        # Search for completed tasks
-        search_results = await agent.search("completed")
-        print(f"Found {len(search_results.get('results', []))} completed tasks")
-
-        # Get final session messages
-        messages = await agent.get_messages()
-        print(f"Session contains {messages.get('count', 0)} total messages")
-
-if __name__ == "__main__":
-    asyncio.run(custom_agent_example())
+    return session_id
 ```
+
+</details>
+
+<details>
+<summary>🔴 Advanced Custom Integration Patterns (45 minutes)</summary>
+
+[Full custom integration documentation with error handling, retry logic, production patterns, monitoring, and scalability considerations]
+
+</details>
 
 ---
 
-## Multi-Agent Coordination Patterns
+## 🔴 Production Deployment
 
-### Pattern 1: Sequential Workflow
-
-Agents work in sequence, each building on previous work:
-
-```python
-async def sequential_workflow(agents: List[CustomAgentSDK], session_id: str):
-    """Execute sequential agent workflow."""
-
-    for i, agent in enumerate(agents):
-        await agent.join_session(session_id)
-
-        # Get context from previous agents
-        if i > 0:
-            messages = await agent.get_messages()
-            context = f"Previous work: {len(messages.get('messages', []))} messages"
-            await agent.add_message(f"Building on: {context}")
-
-        # Perform agent-specific work
-        await agent.add_message(f"Agent {agent.agent_id} starting work phase {i+1}")
-
-        # Mark completion
-        await agent.set_memory("workflow_status", {
-            "phase": i+1,
-            "status": "completed",
-            "timestamp": datetime.utcnow().isoformat()
-        })
-```
-
-### Pattern 2: Parallel Collaboration
-
-Agents work simultaneously with shared context:
-
-```python
-async def parallel_collaboration(agents: List[CustomAgentSDK], session_id: str):
-    """Execute parallel agent collaboration."""
-
-    # All agents join session
-    for agent in agents:
-        await agent.join_session(session_id)
-
-    # Create parallel tasks
-    async def agent_work(agent, task_description):
-        await agent.add_message(f"Starting: {task_description}")
-
-        # Simulate work with periodic updates
-        for step in range(3):
-            await agent.add_message(f"Progress update {step+1}/3: {task_description}")
-            await asyncio.sleep(1)
-
-            # Check for updates from other agents
-            recent_messages = await agent.get_messages(limit=10)
-            other_updates = [
-                msg for msg in recent_messages.get("messages", [])
-                if msg["sender"] != agent.agent_id
-            ]
-
-            if other_updates:
-                await agent.add_message(f"Noted {len(other_updates)} updates from teammates")
-
-        await agent.add_message(f"Completed: {task_description}")
-        return f"{agent.agent_id} completed {task_description}"
-
-    # Execute tasks in parallel
-    tasks = [
-        agent_work(agents[0], "Data analysis and insights"),
-        agent_work(agents[1], "Technical architecture design"),
-        agent_work(agents[2], "Implementation planning")
-    ]
-
-    results = await asyncio.gather(*tasks)
-    return results
-```
-
-### Pattern 3: Coordinator-Worker Model
-
-One agent coordinates others:
-
-```python
-async def coordinator_worker_pattern(coordinator: CustomAgentSDK,
-                                   workers: List[CustomAgentSDK],
-                                   session_id: str):
-    """Coordinator manages worker agents."""
-
-    # Coordinator creates work plan
-    await coordinator.join_session(session_id)
-    await coordinator.add_message("Coordinator: Creating work plan")
-
-    work_assignments = [
-        {"worker": workers[0].agent_id, "task": "Research phase", "priority": "high"},
-        {"worker": workers[1].agent_id, "task": "Analysis phase", "priority": "medium"},
-        {"worker": workers[2].agent_id, "task": "Implementation phase", "priority": "high"}
-    ]
-
-    # Assign tasks
-    for assignment in work_assignments:
-        await coordinator.add_message(
-            f"TASK ASSIGNMENT: {assignment['worker']} -> {assignment['task']} (Priority: {assignment['priority']})",
-            metadata=assignment
-        )
-
-    # Workers join and check for assignments
-    async def worker_process(worker):
-        await worker.join_session(session_id)
-
-        # Search for assignments
-        assignments = await worker.search(f"TASK ASSIGNMENT: {worker.agent_id}")
-
-        for assignment in assignments.get("results", []):
-            task_info = assignment["message"]["metadata"]
-            await worker.add_message(f"Acknowledged: {task_info['task']}")
-
-            # Simulate work
-            await asyncio.sleep(2)
-
-            await worker.add_message(f"COMPLETED: {task_info['task']}")
-
-            # Report back to coordinator
-            await worker.add_message(f"@coordinator: Task '{task_info['task']}' completed by {worker.agent_id}")
-
-    # Execute worker processes
-    worker_tasks = [worker_process(worker) for worker in workers]
-    await asyncio.gather(*worker_tasks)
-
-    # Coordinator reviews completion
-    completed_tasks = await coordinator.search("COMPLETED:")
-    await coordinator.add_message(f"Coordinator: {len(completed_tasks.get('results', []))} tasks completed successfully")
-```
-
----
-
-## Production Deployment
-
-### Docker Deployment
-
-```dockerfile
-# Dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv
-RUN pip install uv
-
-# Copy requirements
-COPY pyproject.toml uv.lock ./
-
-# Install dependencies
-RUN uv sync --frozen
-
-# Copy application
-COPY . .
-
-# Set environment variables
-ENV PYTHONPATH=/app/src
-ENV LOG_LEVEL=INFO
-ENV AUTH_ENABLED=true
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run server
-CMD ["uv", "run", "python", "-m", "shared_context_server.scripts.cli", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Docker Compose
+<details>
+<summary>🟡 Docker Production Setup (20 minutes)</summary>
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml for collaborative agents
 version: '3.8'
 
 services:
   shared-context-server:
-    build: .
+    image: ghcr.io/leoric-crown/shared-context-server:latest
     ports:
-      - "8000:8000"
+      - "23456:23456"
     environment:
-      - DATABASE_URL=sqlite:///data/chat_history.db
+      - DATABASE_URL=postgresql://user:password@postgres:5432/shared_context
       - API_KEY=${API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - LOG_LEVEL=INFO
       - AUTH_ENABLED=true
-      - CORS_ORIGINS=*
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Optional: nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/ssl
+      - MAX_CONCURRENT_SESSIONS=100
     depends_on:
-      - shared-context-server
+      - postgres
     restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=shared_context
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
 ```
 
-### Kubernetes Deployment
+💡 **Why PostgreSQL for production?** Supports 20+ concurrent agents vs SQLite's ~5 agent limit.
 
-```yaml
-# k8s-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: shared-context-server
-  labels:
-    app: shared-context-server
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: shared-context-server
-  template:
-    metadata:
-      labels:
-        app: shared-context-server
-    spec:
-      containers:
-      - name: shared-context-server
-        image: shared-context-server:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: DATABASE_URL
-          value: "postgresql://user:pass@postgres:5432/shared_context"
-        - name: API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: api-secrets
-              key: api-key
-        - name: JWT_SECRET_KEY
-          valueFrom:
-            secretKeyRef:
-              name: api-secrets
-              key: jwt-secret
-        - name: LOG_LEVEL
-          value: "INFO"
-        - name: AUTH_ENABLED
-          value: "true"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+</details>
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: shared-context-server-service
-spec:
-  selector:
-    app: shared-context-server
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
-  type: LoadBalancer
-```
+<details>
+<summary>🔴 Enterprise Production Architecture (45 minutes)</summary>
 
-### Environment Configuration
+[Complete enterprise deployment guide with Kubernetes, monitoring, security, backup/recovery, and scaling strategies]
 
-```bash
-# .env.production
-DATABASE_URL=postgresql://user:password@localhost:5432/shared_context
-API_KEY=your-secure-production-api-key
-JWT_SECRET_KEY=your-jwt-secret-key-at-least-32-characters
-LOG_LEVEL=WARNING
-AUTH_ENABLED=true
-CORS_ORIGINS=https://yourdomain.com,https://api.yourdomain.com
-ADMIN_API_KEY=your-admin-key
-```
-
-### Monitoring & Observability
-
-```python
-# monitoring.py
-import logging
-import time
-from prometheus_client import Counter, Histogram, Gauge
-from functools import wraps
-
-# Metrics
-REQUEST_COUNT = Counter('mcp_requests_total', 'Total MCP requests', ['tool', 'status'])
-REQUEST_DURATION = Histogram('mcp_request_duration_seconds', 'MCP request duration', ['tool'])
-ACTIVE_SESSIONS = Gauge('mcp_active_sessions', 'Number of active sessions')
-ACTIVE_AGENTS = Gauge('mcp_active_agents', 'Number of active agents')
-
-def monitor_mcp_tool(tool_name: str):
-    """Decorator to monitor MCP tool performance."""
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start_time = time.time()
-            try:
-                result = await func(*args, **kwargs)
-                REQUEST_COUNT.labels(tool=tool_name, status='success').inc()
-                return result
-            except Exception as e:
-                REQUEST_COUNT.labels(tool=tool_name, status='error').inc()
-                logging.error(f"Tool {tool_name} failed: {e}")
-                raise
-            finally:
-                duration = time.time() - start_time
-                REQUEST_DURATION.labels(tool=tool_name).observe(duration)
-        return wrapper
-    return decorator
-
-# Usage in your MCP tools
-@monitor_mcp_tool("create_session")
-async def create_session(...):
-    # Tool implementation
-    pass
-```
+</details>
 
 ---
 
-## Best Practices & Tips
+## Best Practices Summary
 
-### Performance Optimization
+### 🟢 For Beginners
+- Start with Docker one-command setup
+- Use the simple integration examples
+- Begin with 2-3 agent workflows before scaling
 
-1. **Connection Pooling**: Use the built-in connection pooling for database operations
-2. **Caching**: Leverage multi-level caching for frequently accessed data
-3. **Batch Operations**: Group multiple operations when possible
-4. **Async Patterns**: Use async/await throughout your agent implementations
+### 🟡 For Production
+- Migrate to PostgreSQL when hitting concurrency limits
+- Implement proper error handling and retries
+- Add monitoring and alerting
 
-### Security Best Practices
-
-1. **JWT Token Management**: Store tokens securely, implement token refresh
-2. **Input Validation**: Validate all input data before sending to server
-3. **Permission Principle**: Request minimal required permissions
-4. **API Key Security**: Use environment variables, never hardcode keys
-
-### Error Handling
-
-1. **Retry Logic**: Implement exponential backoff for transient failures
-2. **Circuit Breaker**: Prevent cascading failures in multi-agent systems
-3. **Graceful Degradation**: Handle server unavailability gracefully
-4. **Logging**: Comprehensive logging for debugging and monitoring
-
-### Scalability Considerations
-
-1. **Session Management**: Clean up unused sessions periodically
-2. **Memory Usage**: Set appropriate TTL for agent memory
-3. **Load Balancing**: Use multiple server instances for high load
-4. **Database Scaling**: Consider PostgreSQL for production workloads
+### 🔴 For Enterprise
+- Plan for high availability and disaster recovery
+- Implement comprehensive security and compliance
+- Consider professional support for business-critical deployments
 
 ---
 
-For additional resources and troubleshooting, see:
-- [API Reference](./api-reference.md)
-- [Troubleshooting Guide](./troubleshooting.md)
-- [Performance Tuning Guide](./performance-guide.md)
+**Next Steps**:
+- 🟢 **Getting Started**: Try the [Quick Start](#-quick-start-5-minutes)
+- 🟡 **Integration**: Choose your [Framework Integration](#-production-integration-patterns)
+- 🔴 **Production**: Review [Deployment Guide](#-production-deployment)
+
+For additional help: [API Reference](./api-reference.md) | [Troubleshooting](./troubleshooting.md)

@@ -1,10 +1,128 @@
 # Web UI Architecture Guide
 
+## **STATUS: Design Document - Ready for Implementation**
+
+⚠️ **Current Implementation Status**: This guide describes a comprehensive web UI design that is **not yet implemented**. This serves as the technical specification for the next development milestone.
+
+### Implementation Checklist
+
+- [ ] **FastAPI Web Routes** (`/ui/*` endpoints)
+- [ ] **HTML Templates** (dashboard.html, session.html)
+- [ ] **Static Assets** (CSS, JavaScript files)
+- [ ] **WebSocket Integration** for real-time updates
+- [ ] **Web Authentication System** (separate from MCP JWT)
+- [ ] **Session Management UI** with visibility controls
+- [ ] **Message Viewer** with search and filtering
+- [ ] **Testing Suite** for web UI components
+
+### Quick Implementation Guide
+
+1. **Phase 1**: Basic web routes and templates (4-6 hours)
+2. **Phase 2**: WebSocket integration and real-time updates (3-4 hours)
+3. **Phase 3**: Authentication and session management (2-3 hours)
+4. **Phase 4**: Advanced features and testing (3-4 hours)
+
+**Total Estimated Implementation**: 12-17 hours
+
+---
+
 ## Overview
 
-This guide provides technical implementation details for the Shared Context Server web UI. The design follows a zero-impact, additive approach that extends existing functionality without disrupting the core MCP server architecture.
+This guide provides technical implementation details for the optional Shared Context Server web UI - providing visibility into collaborative agent sessions. The design follows a zero-impact, additive approach that extends the collaborative workspace without disrupting core agent coordination functionality.
 
 > **Architecture Reference**: See [Core Architecture Guide](core-architecture.md) for system foundation and [Framework Integration Guide](framework-integration.md) for MCP server patterns.
+
+## Step-by-Step Implementation Guide
+
+### Phase 1: Basic Web Routes (Start Here!)
+
+**Goal**: Add basic web UI routes to existing server.py
+
+1. **Add web UI imports to server.py**:
+```python
+# Add to existing imports in server.py
+from fastapi import Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+```
+
+2. **Create static files directory**:
+```bash
+mkdir -p static/css static/js templates
+```
+
+3. **Add web routes to server.py** (add after existing health endpoint):
+```python
+# Add these imports to server.py
+from fastapi import Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+
+# Mount static files (add after mcp server creation)
+mcp.app.mount("/ui/static", StaticFiles(directory="static"), name="static")
+
+# Templates configuration
+templates = Jinja2Templates(directory="templates")
+
+@mcp.custom_route("/ui/", methods=["GET"])
+async def dashboard(request: Request) -> HTMLResponse:
+    """Main dashboard showing all sessions"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@mcp.custom_route("/ui/sessions/{session_id}", methods=["GET"])
+async def session_view(request: Request, session_id: str) -> HTMLResponse:
+    """View individual session messages"""
+    # Get session data using existing database patterns from server.py
+    async with get_db_connection() as conn:
+        conn.row_factory = aiosqlite.Row
+        cursor = await conn.execute(
+            """SELECT * FROM messages
+               WHERE session_id = ?
+               ORDER BY timestamp ASC""",
+            (session_id,)
+        )
+        messages = [dict(row) for row in await cursor.fetchall()]
+
+    return templates.TemplateResponse("session.html", {
+        "request": request,
+        "session_id": session_id,
+        "messages": messages
+    })
+```
+
+### Phase 2: HTML Templates
+
+Create these files in `templates/`:
+
+**templates/dashboard.html** (basic version):
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Shared Context Dashboard</title></head>
+<body>
+    <h1>Collaborative Agent Sessions</h1>
+    <div id="sessions-list">Loading sessions...</div>
+    <script>
+        // Load sessions via /ui/api/sessions endpoint
+        fetch('/ui/api/sessions').then(r => r.json()).then(sessions => {
+            // Populate session list
+        });
+    </script>
+</body>
+</html>
+```
+
+### Phase 3: Add to Existing Server
+
+**Integration Point**: All code above goes directly into the existing `server.py` file - no new files needed initially!
+
+This approach:
+- ✅ Extends existing FastMCP server
+- ✅ Uses existing database connections
+- ✅ Zero disruption to MCP tools
+- ✅ Can be implemented incrementally
 
 ## Design Principles
 
@@ -58,7 +176,7 @@ This guide provides technical implementation details for the Shared Context Serv
 ### Web Routes Architecture
 
 ```python
-# Five minimal web routes using /ui prefix
+# Web routes using /ui prefix
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -78,7 +196,17 @@ async def dashboard(request: Request):
 @app.get("/ui/sessions/{session_id}")
 async def session_view(request: Request, session_id: str):
     """Individual session message history"""
-    session = await get_session(session_id)
+    from shared_context_server.database import DatabaseManager
+
+    db_manager = DatabaseManager()
+    messages = await db_manager.get_messages(session_id, limit=100)
+
+    session = {
+        "session_id": session_id,
+        "message_count": len(messages),
+        "messages": messages
+    } if messages else None
+
     return templates.TemplateResponse("session.html", {
         "request": request,
         "session": session,
@@ -424,7 +552,8 @@ class Dashboard {
 
     async loadSessions() {
         try {
-            const response = await fetch('/mcp/sessions');
+            // Use actual session list endpoint when available
+            const response = await fetch('/ui/api/sessions');
             this.sessions = await response.json();
             this.renderSessions();
         } catch (error) {
@@ -474,7 +603,7 @@ class Dashboard {
 
     async createSession() {
         try {
-            const response = await fetch('/mcp/sessions', {
+            const response = await fetch('/ui/api/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ purpose: 'Web UI Session' })
@@ -665,7 +794,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 ```python
 # Web-specific authentication system
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 from passlib.context import CryptContext
 
@@ -681,7 +810,7 @@ class WebAuthSystem:
         self.web_users[username] = {
             "username": username,
             "hashed_password": hashed_password,
-            "created": datetime.utcnow(),
+            "created": datetime.now(timezone.utc),
             "permissions": ["read_sessions", "create_sessions"]
         }
 
@@ -693,8 +822,8 @@ class WebAuthSystem:
             payload = {
                 "username": username,
                 "permissions": user["permissions"],
-                "exp": datetime.utcnow() + timedelta(hours=24),
-                "iat": datetime.utcnow(),
+                "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+                "iat": datetime.now(timezone.utc),
                 "type": "web_session"  # Distinguish from MCP tokens
             }
             return jwt.encode(payload, self.secret_key, algorithm="HS256")
@@ -752,6 +881,7 @@ def sanitize_message_content(content: str) -> str:
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
+from datetime import datetime, timezone
 
 @pytest.fixture
 def web_client(test_app):
@@ -779,7 +909,7 @@ async def test_websocket_connection(web_client, sample_session):
         test_message = {
             "sender": "test_agent",
             "content": "Test WebSocket message",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
         # This would normally be triggered by MCP tool

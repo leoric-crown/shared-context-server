@@ -172,7 +172,7 @@ Core RESTful endpoints for agent integration:
 uv run python -m shared_context_server.scripts.dev
 
 # 2. Configure Claude Code (in another terminal)
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]}'
+claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
 
 # 3. Verify connection
 claude mcp list  # Should show: ✓ Connected
@@ -188,8 +188,7 @@ claude mcp list  # Should show: ✓ Connected
 - **🛡️ Transport Bridge**: `mcp-proxy` bridges HTTP ↔ STDIO for client compatibility
 
 ### Documentation
-- **Quick Start**: `docs/dev-quick-start.md` - 30-second setup guide
-- **Full Guide**: `docs/development-setup.md` - Comprehensive development documentation
+- **Complete Guide**: `docs/development.md` - Complete development environment setup and workflows
 - **Troubleshooting**: Common issues and solutions included
 
 ## CLI Commands Available

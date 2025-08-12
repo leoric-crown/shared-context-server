@@ -9,6 +9,9 @@ help: ## Show this help message
 install: ## Install dependencies
 	uv sync --dev
 
+validate: ## Validate development environment
+	uv run python -m shared_context_server.scripts.dev --validate
+
 dev: ## Start development server with hot reload
 	@echo "Starting development server with hot reload..."
 	uv run python -m shared_context_server.scripts.dev

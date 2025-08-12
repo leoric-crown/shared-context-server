@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide defines all Pydantic v2 models for the Shared Context MCP Server, providing comprehensive data validation, serialization, and type safety for all API interactions and database operations.
+This guide defines Pydantic v2 data validation patterns for the Shared Context MCP Server, providing comprehensive validation, serialization, and type safety that integrates with the established DatabaseManager and error handling architecture.
 
 ## Core Concepts
 
@@ -16,377 +16,362 @@ This guide defines all Pydantic v2 models for the Shared Context MCP Server, pro
 
 ### Pydantic v2 Key Features
 
-- **Performance**: 5-50x faster than v1
-- **Better Errors**: Detailed validation error messages
-- **Strict Mode**: Optional strict type checking
-- **Custom Validators**: Field and model-level validation
-- **JSON Schema**: Automatic OpenAPI schema generation
+- **Performance**: Significantly faster validation and serialization
+- **Better Errors**: Detailed validation error messages with field-level granularity
+- **Strict Mode**: Optional strict type checking for enhanced validation
+- **Custom Validators**: Field and model-level validation with business logic
+- **JSON Schema**: Automatic schema generation for API documentation
 
 ## Implementation Patterns
 
 ### Pattern 1: Core Session Model
 
 ```python
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer
+from typing import Any
 from datetime import datetime, timezone
-from uuid import uuid4
+from shared_context_server.models import (
+    validate_session_id, validate_agent_id, sanitize_text_input,
+    MAX_PURPOSE_LENGTH, MAX_AGENT_ID_LENGTH
+)
 
 class SessionModel(BaseModel):
     """Session model representing a shared context workspace."""
 
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        json_encoders={datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict()
+
+    id: str = Field(..., description="Unique session identifier")
+    purpose: str = Field(
+        ..., min_length=1, max_length=MAX_PURPOSE_LENGTH,
+        description="Session purpose"
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = Field(default=True, description="Whether session is active")
+    created_by: str = Field(
+        ..., min_length=1, max_length=MAX_AGENT_ID_LENGTH,
+        description="Agent who created session"
+    )
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Session metadata"
     )
 
-    id: str = Field(
-        default_factory=lambda: str(uuid4()),
-        description="Unique session identifier",
-        pattern=r'^[a-zA-Z0-9-_]{8,64}$'
-    )
-    purpose: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Purpose or description of the session"
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Session creation timestamp (UTC)"
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Last update timestamp (UTC)"
-    )
-    is_active: bool = Field(
-        default=True,
-        description="Whether the session is currently active"
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional session metadata"
-    )
-
-    @field_validator('purpose')
+    @field_validator("id")
     @classmethod
-    def sanitize_purpose(cls, v: Optional[str]) -> Optional[str]:
-        """Sanitize purpose field to prevent injection."""
-        if v is None:
-            return v
-        # Remove potential script tags and dangerous characters
-        import re
-        clean = re.sub(r'<[^>]*>', '', v)  # Remove HTML tags
-        clean = re.sub(r'[^\w\s\-.,!?]', '', clean)  # Keep only safe chars
-        return clean.strip() if clean else None
+    def validate_session_id_format(cls, v: str) -> str:
+        return validate_session_id(v)
+
+    @field_validator("created_by")
+    @classmethod
+    def validate_created_by_format(cls, v: str) -> str:
+        return validate_agent_id(v)
+
+    @field_validator("purpose")
+    @classmethod
+    def sanitize_purpose(cls, v: str) -> str:
+        v = sanitize_text_input(v)
+        if not v:
+            raise ValueError("Purpose cannot be empty after sanitization")
+        return v
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def ensure_utc_timezone(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
 ```
 
 ### Pattern 2: Message Model with Visibility
 
 ```python
-from enum import Enum
+from shared_context_server.models import (
+    MessageVisibility, MessageType, MessageModel,
+    validate_session_id, validate_agent_id, sanitize_text_input,
+    MAX_CONTENT_LENGTH, MAX_AGENT_ID_LENGTH
+)
 
-class MessageVisibility(str, Enum):
-    """Message visibility levels for tiered memory architecture."""
-    PUBLIC = "public"      # Visible to all agents (blackboard)
-    PRIVATE = "private"    # Visible only to creating agent
-    AGENT_ONLY = "agent_only"  # Visible to specific agent group
+# Use enum values from the actual codebase:
+# MessageVisibility.PUBLIC, MessageVisibility.PRIVATE,
+# MessageVisibility.AGENT_ONLY, MessageVisibility.ADMIN_ONLY
 
-class MessageType(str, Enum):
-    """Types of messages in the system."""
-    HUMAN_INPUT = "human_input"
-    AGENT_RESPONSE = "agent_response"
-    SYSTEM_STATUS = "system_status"
-    TOOL_OUTPUT = "tool_output"
-    PRIVATE_NOTE = "private_note"
+# MessageType.AGENT_RESPONSE, MessageType.HUMAN_INPUT,
+# MessageType.SYSTEM_STATUS, MessageType.TOOL_OUTPUT, MessageType.COORDINATION
 
 class MessageModel(BaseModel):
     """Message model for agent communications."""
 
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        use_enum_values=True
-    )
+    model_config = ConfigDict(use_enum_values=True)
 
-    id: Optional[int] = Field(
-        None,
-        description="Auto-generated message ID"
-    )
-    session_id: str = Field(
-        ...,
-        pattern=r'^[a-zA-Z0-9-_]{8,64}$',
-        description="Parent session ID"
-    )
+    id: int | None = Field(None, description="Auto-generated message ID")
+    session_id: str = Field(..., description="Session ID")
     sender: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        pattern=r'^[a-zA-Z0-9-_.]+$',
-        description="Agent or user identifier"
+        ..., min_length=1, max_length=MAX_AGENT_ID_LENGTH,
+        description="Message sender"
     )
     content: str = Field(
-        ...,
-        min_length=1,
-        max_length=50000,
+        ..., min_length=1, max_length=MAX_CONTENT_LENGTH,
         description="Message content"
     )
     visibility: MessageVisibility = Field(
-        default=MessageVisibility.PUBLIC,
-        description="Message visibility level"
+        default=MessageVisibility.PUBLIC, description="Message visibility"
     )
     message_type: MessageType = Field(
-        default=MessageType.AGENT_RESPONSE,
-        description="Type of message"
+        default=MessageType.AGENT_RESPONSE, description="Message type"
     )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Message metadata (files modified, test results, etc.)"
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Message metadata"
     )
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Message timestamp (UTC)"
-    )
-    parent_message_id: Optional[int] = Field(
-        None,
-        description="Parent message for threading"
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    parent_message_id: int | None = Field(
+        None, description="Parent message ID for threading"
     )
 
-    @field_validator('content')
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id_format(cls, v: str) -> str:
+        return validate_session_id(v)
+
+    @field_validator("sender")
+    @classmethod
+    def validate_sender_format(cls, v: str) -> str:
+        return validate_agent_id(v)
+
+    @field_validator("content")
     @classmethod
     def sanitize_content(cls, v: str) -> str:
-        """Sanitize content to prevent injection attacks."""
-        import re
-        # Remove script tags
-        clean = re.sub(
-            r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>',
-            '',
-            v,
-            flags=re.IGNORECASE
-        )
-        # Remove other potentially dangerous HTML
-        clean = re.sub(r'<iframe.*?</iframe>', '', clean, flags=re.IGNORECASE)
-        clean = re.sub(r'javascript:', '', clean, flags=re.IGNORECASE)
-        return clean.strip()
-
-    @field_validator('metadata')
-    @classmethod
-    def validate_metadata(cls, v: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure metadata doesn't contain sensitive information."""
-        sensitive_keys = {'password', 'secret', 'token', 'api_key'}
-        for key in list(v.keys()):
-            if any(sensitive in key.lower() for sensitive in sensitive_keys):
-                v[key] = "[REDACTED]"
+        v = sanitize_text_input(v)
+        if not v:
+            raise ValueError("Content cannot be empty after sanitization")
         return v
+
+    @field_validator("timestamp")
+    @classmethod
+    def ensure_utc_timezone(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v.astimezone(timezone.utc)
+
+    @field_serializer("timestamp", when_used="json")
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
 ```
 
 ### Pattern 3: Agent Memory Model
 
 ```python
+from shared_context_server.models import (
+    AgentMemoryModel, validate_agent_id, validate_session_id,
+    sanitize_text_input, MAX_AGENT_ID_LENGTH, MAX_MEMORY_KEY_LENGTH
+)
+
+# Use the actual AgentMemoryModel from codebase:
 class AgentMemoryModel(BaseModel):
-    """Private memory storage for individual agents."""
+    """Agent memory model with TTL and scope validation."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict()
 
-    id: Optional[int] = Field(None)
+    id: int | None = Field(None, description="Auto-generated memory ID")
     agent_id: str = Field(
-        ...,
-        pattern=r'^[a-zA-Z0-9-_.]+$',
-        description="Agent identifier"
+        ..., min_length=1, max_length=MAX_AGENT_ID_LENGTH,
+        description="Agent ID"
     )
-    session_id: Optional[str] = Field(
-        None,
-        pattern=r'^[a-zA-Z0-9-_]{8,64}$',
-        description="Optional session scope"
+    session_id: str | None = Field(
+        None, description="Session ID for scoped memory (null for global)"
     )
     key: str = Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        pattern=r'^[a-zA-Z0-9-_.]+$',
+        ..., min_length=1, max_length=MAX_MEMORY_KEY_LENGTH,
         description="Memory key"
     )
     value: str = Field(
-        ...,
-        max_length=100000,
-        description="Memory value (JSON-serializable)"
+        ..., min_length=1, description="Memory value (JSON string)"
     )
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Memory metadata"
     )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
-    expires_at: Optional[datetime] = Field(
-        None,
-        description="Optional expiration timestamp"
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime | None = Field(None, description="Expiration timestamp")
 
-    @field_validator('value')
+    @field_validator("agent_id")
     @classmethod
-    def validate_json_serializable(cls, v: str) -> str:
-        """Ensure value is JSON-serializable."""
-        try:
-            import json
-            json.loads(v)  # Validate it's valid JSON
-            return v
-        except json.JSONDecodeError:
-            # If not JSON, wrap as string
-            return json.dumps(v)
+    def validate_agent_id_format(cls, v: str) -> str:
+        return validate_agent_id(v)
 
-    @property
-    def is_expired(self) -> bool:
-        """Check if memory has expired."""
-        if self.expires_at is None:
-            return False
-        return datetime.now(timezone.utc) > self.expires_at
-```
-
-### Pattern 4: MCP Tool Request/Response Models
-
-```python
-class MCPToolRequest(BaseModel):
-    """Request model for MCP tool invocations."""
-
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        extra='forbid'  # Reject unknown fields
-    )
-
-    name: str = Field(
-        ...,
-        pattern=r'^[a-zA-Z][a-zA-Z0-9_-]*$',
-        description="Tool name"
-    )
-    arguments: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Tool arguments"
-    )
-    session_id: Optional[str] = Field(
-        None,
-        pattern=r'^[a-zA-Z0-9-_]{8,64}$',
-        description="Session context"
-    )
-
-    @field_validator('name')
+    @field_validator("session_id")
     @classmethod
-    def validate_tool_exists(cls, v: str) -> str:
-        """Validate tool name exists."""
-        valid_tools = {
-            'create_session', 'add_message', 'get_message',
-            'get_context', 'search_context', 'list_sessions',
-            'set_memory', 'get_memory', 'list_memory',
-            'delete_memory', 'add_private_note'
-        }
-        if v not in valid_tools:
-            raise ValueError(f"Unknown tool: {v}")
+    def validate_session_id_format(cls, v: str | None) -> str | None:
+        if v is not None:
+            return validate_session_id(v)
         return v
 
-class MCPToolResponse(BaseModel):
-    """Response model for MCP tool invocations."""
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    success: bool = Field(..., description="Whether tool execution succeeded")
-    result: Optional[Any] = Field(None, description="Tool execution result")
-    error: Optional[str] = Field(None, description="Error message if failed")
-    execution_time_ms: Optional[float] = Field(
-        None,
-        description="Execution time in milliseconds"
-    )
-
-    @model_validator(mode='after')
-    def validate_response(self):
-        """Ensure either result or error is present."""
-        if not self.success and not self.error:
-            raise ValueError("Failed response must include error message")
-        if self.success and self.error:
-            raise ValueError("Successful response should not include error")
-        return self
-```
-
-### Pattern 5: Authentication Models
-
-```python
-from typing import Set
-
-class AgentIdentity(BaseModel):
-    """Agent identity extracted from JWT token."""
-
-    model_config = ConfigDict(frozen=True)  # Immutable
-
-    id: str = Field(..., pattern=r'^[a-zA-Z0-9-_.]+$')
-    type: str = Field(default="unknown")
-    permissions: Set[str] = Field(default_factory=set)
-    session_scope: Optional[str] = Field(None)
-
-    def has_permission(self, permission: str) -> bool:
-        """Check if agent has specific permission."""
-        return permission in self.permissions
-
-class JWTPayload(BaseModel):
-    """JWT token payload for authentication."""
-
-    agent_id: str = Field(..., description="Agent identifier")
-    agent_type: Optional[str] = Field(None, description="Agent type")
-    permissions: list[str] = Field(
-        default_factory=list,
-        description="Agent permissions"
-    )
-    exp: int = Field(..., description="Expiration timestamp")
-    iat: int = Field(..., description="Issued at timestamp")
-    aud: str = Field(..., description="Audience (must be 'mcp-shared-context-server')")
-    iss: str = Field(..., description="Issuer")
-
-    @field_validator('aud')
+    @field_validator("key")
     @classmethod
-    def validate_audience(cls, v: str) -> str:
-        """Validate audience claim for MCP server."""
-        if v != 'mcp-shared-context-server':
-            raise ValueError(f"Invalid audience: {v}")
+    def validate_memory_key(cls, v: str) -> str:
+        v = sanitize_text_input(v)
+        if not v:
+            raise ValueError("Memory key cannot be empty after sanitization")
+
+        # Use actual validation pattern from codebase
+        import re
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", v):
+            raise ValueError("Memory key contains invalid characters")
+
         return v
 
-    @property
-    def is_expired(self) -> bool:
-        """Check if token has expired."""
-        return datetime.now(timezone.utc).timestamp() > self.exp
+    @field_serializer("created_at", "updated_at", "expires_at", when_used="json")
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.isoformat() if value else None
 ```
 
-### Pattern 6: Search and Query Models
+### Pattern 4: Request/Response Models with Database Operations
 
 ```python
-class SearchRequest(BaseModel):
-    """Request model for fuzzy search operations."""
+from shared_context_server.models import (
+    CreateSessionRequest, CreateSessionResponse, AddMessageRequest, AddMessageResponse,
+    SetMemoryRequest, GetMemoryRequest, SearchContextRequest, SearchResponse
+)
+from shared_context_server.database import get_db_connection, execute_insert, execute_query
 
-    model_config = ConfigDict(str_min_length=1)
+# Use actual request/response models from codebase:
 
-    session_id: str = Field(..., pattern=r'^[a-zA-Z0-9-_]{8,64}$')
+class CreateSessionRequest(BaseModel):
+    """Request model for creating a session."""
+
+    purpose: str = Field(..., min_length=1, max_length=MAX_PURPOSE_LENGTH)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("purpose")
+    @classmethod
+    def sanitize_purpose(cls, v: str) -> str:
+        v = sanitize_text_input(v)
+        if not v:
+            raise ValueError("Purpose cannot be empty")
+        return v
+
+class AddMessageRequest(BaseModel):
+    """Request model for adding a message."""
+
+    session_id: str
+    content: str = Field(..., min_length=1, max_length=MAX_CONTENT_LENGTH)
+    visibility: MessageVisibility = MessageVisibility.PUBLIC
+    metadata: dict[str, Any] | None = None
+    parent_message_id: int | None = None
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id_format(cls, v: str) -> str:
+        return validate_session_id(v)
+
+    @field_validator("content")
+    @classmethod
+    def sanitize_content(cls, v: str) -> str:
+        v = sanitize_text_input(v)
+        if not v:
+            raise ValueError("Content cannot be empty")
+        return v
+
+# Standard response format using actual patterns
+async def create_standard_response(success: bool, **kwargs: Any) -> dict[str, Any]:
+    """Create standard API response format with UTC timestamps."""
+    from shared_context_server.database import utc_timestamp
+    response = {"success": success, "timestamp": utc_timestamp()}
+    response.update(kwargs)
+    return response
+```
+
+### Pattern 5: Search and Resource Models
+
+```python
+from shared_context_server.models import (
+    SearchContextRequest, SearchResponse, ResourceModel,
+    sanitize_search_input, validate_session_id
+)
+
+class SearchContextRequest(BaseModel):
+    """Request model for context search."""
+
+    session_id: str
     query: str = Field(..., min_length=1, max_length=500)
-    fuzzy_threshold: float = Field(
-        default=0.6,
-        ge=0.0,
-        le=1.0,
-        description="Minimum similarity score (0.0-1.0)"
-    )
-    limit: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="Maximum results to return"
-    )
-    include_private: bool = Field(
-        default=False,
-        description="Include private messages in search"
-    )
+    fuzzy_threshold: float = Field(default=60.0, ge=0, le=100)
+    limit: int = Field(default=10, ge=1, le=100)
+    search_metadata: bool = True
+    search_scope: Literal["all", "public", "private"] = "all"
 
-class SearchResult(BaseModel):
-    """Search result with similarity scoring."""
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id_format(cls, v: str) -> str:
+        return validate_session_id(v)
 
-    message: MessageModel
-    similarity_score: float = Field(ge=0.0, le=1.0)
-    match_locations: list[str] = Field(
-        default_factory=list,
-        description="Where matches were found (content, sender, metadata)"
+    @field_validator("query")
+    @classmethod
+    def sanitize_query(cls, v: str) -> str:
+        return sanitize_search_input(v)
+
+class ResourceModel(BaseModel):
+    """Model for MCP resource data."""
+
+    uri: str = Field(..., description="Resource URI")
+    name: str = Field(..., description="Human-readable name")
+    description: str = Field(..., description="Resource description")
+    mime_type: str = Field(default="application/json", description="MIME type")
+    content: dict[str, Any] = Field(..., description="Resource content")
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    supports_subscriptions: bool = Field(default=True)
+
+    @field_validator("uri")
+    @classmethod
+    def validate_uri_format(cls, v: str) -> str:
+        """Validate resource URI format."""
+        if not v.startswith(("session://", "agent://")):
+            raise ValueError("URI must start with session:// or agent://")
+        return v
+
+    @field_serializer("last_updated", when_used="json")
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+```
+
+### Pattern 6: Validation Error Models
+
+```python
+from shared_context_server.models import (
+    ValidationErrorDetail, ValidationErrorResponse,
+    create_validation_error_response, extract_pydantic_validation_errors
+)
+
+class ValidationErrorDetail(BaseModel):
+    """Detailed validation error information."""
+
+    field: str = Field(..., description="Field name that failed validation")
+    message: str = Field(..., description="Validation error message")
+    invalid_value: str | None = Field(
+        None, description="The invalid value (if safe to expose)"
     )
+    expected_type: str | None = Field(None, description="Expected type or format")
+
+class ValidationErrorResponse(BaseModel):
+    """Comprehensive validation error response."""
+
+    success: bool = False
+    error: str = "Validation failed"
+    code: str = "VALIDATION_ERROR"
+    details: list[ValidationErrorDetail] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_serializer("timestamp", when_used="json")
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+
+# Utility function for handling validation errors
+def handle_validation_error(exc: Exception) -> ValidationErrorResponse:
+    """Create validation error response from exception."""
+    error_details = extract_pydantic_validation_errors(exc)
+    return create_validation_error_response(error_details)
 ```
 
 ## Best Practices
@@ -394,37 +379,71 @@ class SearchResult(BaseModel):
 ### 1. Always Use UTC Timestamps
 
 ```python
+from shared_context_server.database import utc_now, utc_timestamp, parse_utc_timestamp
 from datetime import datetime, timezone
 
-# Correct
+# Correct - Use DatabaseManager UTC utilities
+current_time = utc_now()  # Returns timezone-aware datetime
+current_timestamp = utc_timestamp()  # Returns ISO string
+
+# Correct - Manual UTC creation
 timestamp = datetime.now(timezone.utc)
 
-# Incorrect - uses local timezone
+# Incorrect - uses local timezone (avoid)
 timestamp = datetime.now()
+
+# Correct - Parsing timestamps
+parse_timestamp = parse_utc_timestamp("2025-01-15T10:30:00Z")
 ```
 
 ### 2. Validate at the Boundary
 
 ```python
-@app.post("/sessions/{session_id}/messages")
-async def add_message(
-    session_id: str,
-    message: MessageModel,  # Pydantic validates automatically
-    current_agent: AgentIdentity = Depends(get_current_agent)
-):
-    # Message is already validated by Pydantic
-    # No need for manual validation here
-    return await db.add_message(message)
+from shared_context_server.database import get_db_connection, execute_insert
+from shared_context_server.models import MessageModel, AddMessageRequest
+
+# FastMCP tool validation (actual pattern used)
+async def add_message_tool(
+    request: AddMessageRequest,  # Pydantic validates automatically
+    agent_id: str
+) -> dict[str, Any]:
+    """Add message with database operation using DatabaseManager pattern."""
+    # Create message model from validated request
+    message = MessageModel(
+        session_id=request.session_id,
+        sender=agent_id,
+        content=request.content,
+        visibility=request.visibility,
+        metadata=request.metadata,
+        parent_message_id=request.parent_message_id
+    )
+
+    # Use DatabaseManager pattern for persistence
+    async with get_db_connection() as conn:
+        message_id = await execute_insert(
+            """INSERT INTO messages
+               (session_id, sender, content, visibility, message_type, metadata, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (message.session_id, message.sender, message.content,
+             message.visibility.value, message.message_type.value,
+             message.metadata, message.timestamp.isoformat())
+        )
+
+    return {"success": True, "message_id": message_id}
 ```
 
 ### 3. Use Enums for Fixed Values
 
 ```python
-# Good - Type-safe and self-documenting
-visibility: MessageVisibility = MessageVisibility.PUBLIC
+from shared_context_server.models import MessageVisibility, MessageType
 
-# Bad - Magic strings
+# Good - Type-safe with actual enum values
+visibility: MessageVisibility = MessageVisibility.PUBLIC
+message_type: MessageType = MessageType.AGENT_RESPONSE
+
+# Bad - Magic strings that can break
 visibility: str = "public"
+message_type: str = "agent_response"
 ```
 
 ### 4. Custom Validators for Business Logic
@@ -433,92 +452,140 @@ visibility: str = "public"
 @field_validator('session_id')
 @classmethod
 def validate_session_exists(cls, v: str) -> str:
-    """Ensure session exists in database."""
-    if not session_exists(v):  # Custom check
-        raise ValueError(f"Session {v} not found")
+    """Ensure session exists in database using DatabaseManager."""
+    # Use actual database pattern from codebase
+    from shared_context_server.database import execute_query
+
+    async def check_session():
+        results = await execute_query(
+            "SELECT id FROM sessions WHERE id = ?", (v,)
+        )
+        return len(results) > 0
+
+    # Note: In practice, this would need async validation
+    # For demonstration of the pattern only
+    if not v.startswith("session_"):
+        raise ValueError(f"Session {v} has invalid format")
     return v
 ```
 
 ## Common Pitfalls
 
-### 1. ❌ Not Sanitizing User Input
+### 1. ❌ Not Using Established Validation Functions
 
 ```python
-# BAD - No sanitization
+# BAD - Custom validation without established patterns
 content: str = Field(...)
 
-# GOOD - Sanitize in validator
+@field_validator('content')
+@classmethod
+def custom_sanitize(cls, v: str) -> str:
+    return v.replace("<", "").replace(">", "")  # Incomplete
+
+# GOOD - Use established sanitization from codebase
+from shared_context_server.models import sanitize_text_input
+
 @field_validator('content')
 @classmethod
 def sanitize_content(cls, v: str) -> str:
-    # Remove dangerous content
-    return sanitize_html(v)
+    v = sanitize_text_input(v)
+    if not v:
+        raise ValueError("Content cannot be empty after sanitization")
+    return v
 ```
 
-### 2. ❌ Using Mutable Defaults
+### 2. ❌ Incorrect Type Annotations
 
 ```python
-# BAD - Shared mutable default
-metadata: Dict = {}
+# BAD - Old-style type annotations
+from typing import Dict, Optional
+metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
-# GOOD - Factory function
-metadata: Dict = Field(default_factory=dict)
+# GOOD - Modern Python 3.10+ annotations (as used in codebase)
+metadata: dict[str, Any] | None = Field(default=None)
 ```
 
-### 3. ❌ Ignoring Timezone
+### 3. ❌ Inconsistent UTC Handling
 
 ```python
-# BAD - Timezone-naive
-timestamp: datetime = datetime.now()
+# BAD - Not using established UTC utilities
+from datetime import datetime, timezone
+timestamp = datetime.now()  # Local timezone
+created_at = datetime.utcnow()  # Deprecated in Python 3.12+
 
-# GOOD - UTC timezone-aware
+# GOOD - Use DatabaseManager UTC utilities
+from shared_context_server.database import utc_now, utc_timestamp
+created_at = utc_now()  # Proper UTC with timezone info
+timestamp_str = utc_timestamp()  # ISO string format
+
+# GOOD - Field definition with UTC default
 timestamp: datetime = Field(
     default_factory=lambda: datetime.now(timezone.utc)
 )
 ```
 
-### 4. ❌ Loose Pattern Matching
+### 4. ❌ Not Using Database Validation Functions
 
 ```python
-# BAD - Too permissive
-session_id: str = Field(...)
+# BAD - Inconsistent validation patterns
+session_id: str = Field(..., pattern=r'^[a-zA-Z0-9-_]{8,64}$')
 
-# GOOD - Strict pattern
-session_id: str = Field(
-    ...,
-    pattern=r'^[a-zA-Z0-9-_]{8,64}$'
-)
+# GOOD - Use established validation functions
+from shared_context_server.models import validate_session_id
+
+@field_validator('session_id')
+@classmethod
+def validate_session_id_format(cls, v: str) -> str:
+    return validate_session_id(v)  # Uses proper pattern: session_[16 hex chars]
 ```
 
-## Performance Considerations
+## Database Integration Patterns
 
-### 1. Validation Performance
-
-- Pydantic v2 is 5-50x faster than v1
-- Use `model_validate()` for existing dicts
-- Avoid repeated validation in loops
-
-### 2. Serialization Optimization
+### 1. Using DatabaseManager Pattern
 
 ```python
-# Fast JSON serialization
-model.model_dump_json()  # Optimized C implementation
+from shared_context_server.database import get_db_connection, execute_query, execute_insert
+from shared_context_server.models import SessionModel, validate_session_id
 
-# Slower
-import json
-json.dumps(model.model_dump())
+async def create_session(request: CreateSessionRequest, agent_id: str) -> dict[str, Any]:
+    """Create session using established DatabaseManager pattern."""
+    # Generate session ID with proper format
+    import secrets
+    session_id = f"session_{secrets.token_hex(8)}"
+
+    # Create validated session model
+    session = SessionModel(
+        id=session_id,
+        purpose=request.purpose,
+        created_by=agent_id,
+        metadata=request.metadata
+    )
+
+    # Use DatabaseManager connection pattern
+    async with get_db_connection() as conn:
+        await execute_insert(
+            """INSERT INTO sessions
+               (id, purpose, created_by, created_at, updated_at, metadata)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (session.id, session.purpose, session.created_by,
+             session.created_at.isoformat(), session.updated_at.isoformat(),
+             serialize_metadata(session.metadata))
+        )
+
+    return {"success": True, "session_id": session.id}
 ```
 
-### 3. Schema Caching
+### 2. UTC Timestamp Consistency
 
 ```python
-# Cache schema generation
-schema_cache = {}
+from shared_context_server.database import utc_now, utc_timestamp, parse_utc_timestamp
 
-def get_model_schema(model_class):
-    if model_class not in schema_cache:
-        schema_cache[model_class] = model_class.model_json_schema()
-    return schema_cache[model_class]
+# Always use DatabaseManager UTC utilities
+created_at = utc_now()  # datetime object
+created_at_str = utc_timestamp()  # ISO string
+
+# Parse timestamp with proper UTC handling
+timestamp = parse_utc_timestamp("2025-01-15T10:30:00Z")
 ```
 
 ## Security Implications
@@ -558,12 +625,13 @@ Always validate JWT claims:
 ```python
 import pytest
 from pydantic import ValidationError
+from shared_context_server.models import MessageModel, MessageVisibility
 
 def test_message_model_validation():
-    # Valid message
+    # Valid message with proper session_id format
     msg = MessageModel(
-        session_id="test-session-123",
-        sender="agent-1",
+        session_id="session_1234567890abcdef",  # Proper format: session_[16 hex chars]
+        sender="agent_1",
         content="Test message"
     )
     assert msg.visibility == MessageVisibility.PUBLIC
@@ -571,53 +639,125 @@ def test_message_model_validation():
     # Invalid session_id pattern
     with pytest.raises(ValidationError) as exc:
         MessageModel(
-            session_id="invalid!@#",
-            sender="agent-1",
+            session_id="invalid_session_format",
+            sender="agent_1",
             content="Test"
         )
     assert "session_id" in str(exc.value)
+
+    # Test UTC timezone handling
+    from datetime import datetime, timezone
+    assert msg.timestamp.tzinfo == timezone.utc
 ```
 
 ### 2. Sanitization Testing
 
 ```python
 def test_content_sanitization():
+    """Test content sanitization with actual validation functions."""
+    from shared_context_server.models import sanitize_text_input
+
+    # Test sanitization directly
+    dangerous_content = "<script>alert('xss')</script>Normal text\x00\x01"
+    sanitized = sanitize_text_input(dangerous_content)
+
+    # Verify null bytes and control characters are removed
+    assert "\x00" not in sanitized
+    assert "\x01" not in sanitized
+    assert "Normal text" in sanitized
+
+    # Test via model validation
     msg = MessageModel(
-        session_id="test-123",
-        sender="agent",
-        content="<script>alert('xss')</script>Normal text"
+        session_id="session_1234567890abcdef",
+        sender="agent_1",
+        content=dangerous_content
     )
-    assert "<script>" not in msg.content
     assert "Normal text" in msg.content
 ```
 
-### 3. Custom Validator Testing
+### 3. Database Integration Testing
 
 ```python
-def test_metadata_redaction():
+import pytest
+from shared_context_server.database import get_db_connection, execute_query
+from shared_context_server.models import MessageModel, serialize_metadata
+
+@pytest.mark.asyncio
+async def test_message_database_integration():
+    """Test message validation with database operations."""
+
+    # Create valid message
     msg = MessageModel(
-        session_id="test-123",
-        sender="agent",
-        content="Test",
-        metadata={
-            "api_key": "secret123",
-            "normal_field": "value"
-        }
+        session_id="session_1234567890abcdef",
+        sender="test_agent",
+        content="Test message",
+        metadata={"test_key": "test_value"}
     )
-    assert msg.metadata["api_key"] == "[REDACTED]"
-    assert msg.metadata["normal_field"] == "value"
+
+    # Test database insertion with proper UTC timestamps
+    async with get_db_connection() as conn:
+        cursor = await conn.execute(
+            """INSERT INTO messages
+               (session_id, sender, content, timestamp, metadata)
+               VALUES (?, ?, ?, ?, ?)""",
+            (msg.session_id, msg.sender, msg.content,
+             msg.timestamp.isoformat(), serialize_metadata(msg.metadata))
+        )
+        message_id = cursor.lastrowid
+
+    # Verify message was stored correctly
+    results = await execute_query(
+        "SELECT * FROM messages WHERE id = ?", (message_id,)
+    )
+    assert len(results) == 1
+    assert results[0]["sender"] == "test_agent"
+```
+
+## Error Handling Integration
+
+### Using Established Error Hierarchy
+
+```python
+from shared_context_server.database import DatabaseError, DatabaseConnectionError
+from shared_context_server.models import ValidationErrorResponse, extract_pydantic_validation_errors
+
+async def handle_validation_with_proper_errors(data: dict[str, Any]) -> dict[str, Any]:
+    """Handle validation using established error patterns."""
+    try:
+        # Validate using actual model
+        model = MessageModel(**data)
+        return {"success": True, "data": model.model_dump()}
+
+    except ValidationError as e:
+        # Use established error extraction pattern
+        error_details = extract_pydantic_validation_errors(e)
+        error_response = ValidationErrorResponse(
+            error="Message validation failed",
+            details=error_details
+        )
+        return error_response.model_dump()
+
+    except DatabaseError as e:
+        # Handle database errors using established hierarchy
+        return {
+            "success": False,
+            "error": "Database operation failed",
+            "code": "DATABASE_ERROR",
+            "details": str(e)
+        }
 ```
 
 ## References
 
 - [Pydantic v2 Documentation](https://docs.pydantic.dev/latest/)
-- [FastAPI Integration](https://fastapi.tiangolo.com/tutorial/body/)
-- Research findings: `/RESEARCH_FINDINGS_DEVELOPER.md`
-- MCP Integration: `/.claude/tech-guides/mcp-integration.md`
-- Security patterns: `/.claude/tech-guides/security-authentication.md`
+- [FastMCP Integration](https://github.com/jlowin/fastmcp) - MCP server framework
+- Core Architecture: `/.claude/tech-guides/core-architecture.md` - Database patterns
+- Framework Integration: `/.claude/tech-guides/framework-integration.md` - FastMCP patterns
+- Error Handling: `/.claude/tech-guides/error-handling.md` - Error hierarchy
 
 ## Related Guides
 
-- Security & Authentication Guide - JWT and permission models
-- Data Architecture Guide - Database schema alignment
-- Testing Patterns Guide - Model validation testing
+- **Core Architecture Guide** - DatabaseManager patterns and schema design
+- **Framework Integration Guide** - FastMCP server and tool validation patterns
+- **Error Handling Guide** - Comprehensive error hierarchy and validation patterns
+- **Security & Authentication Guide** - JWT validation and input sanitization

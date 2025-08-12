@@ -1,4 +1,5 @@
-# Shared Context MCP Server
+# Shared Context Server
+
 [![CI](https://github.com/leoric-crown/shared-context-server/workflows/CI/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
 [![Docker](https://github.com/leoric-crown/shared-context-server/workflows/Build%20and%20Publish%20Docker%20Image/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
 [![GHCR](https://img.shields.io/badge/ghcr.io-leoric--crown%2Fshared--context--server-blue?logo=docker)](https://github.com/leoric-crown/shared-context-server/pkgs/container/shared-context-server)
@@ -6,292 +7,300 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to collaborate on complex tasks through shared conversational context.
+## Content Navigation
 
-## Quick Setup
+| Symbol | Meaning | Time Investment |
+|--------|---------|----------------|
+| 🚀 | Quick start | 2-5 minutes |
+| ⚙️ | Configuration | 10-15 minutes |
+| 🔧 | Deep dive | 30+ minutes |
+| 💡 | Why this works | Context only |
+| ⚠️ | Important note | Read carefully |
 
-Choose your preferred setup method:
+---
 
-### 🐳 Docker (Recommended - Multi-Client Ready)
+## 🎯 Quick Understanding (30 seconds)
 
-**Option A: Pre-built Image (Easiest)**
+**A shared workspace for AI agents to collaborate on complex tasks.**
+
+**The Problem**: AI agents work independently, duplicate research, and can't build on each other's discoveries.
+
+**The Solution**: Shared sessions where agents see previous findings and build incrementally instead of starting over.
+
+```python
+# Agent 1: Security analysis
+session.add_message("security_agent", "Found SQL injection in user login")
+
+# Agent 2: Performance review (sees security findings)
+session.add_message("perf_agent", "Optimized query while fixing SQL injection")
+
+# Agent 3: Documentation (has full context)
+session.add_message("docs_agent", "Documented secure, optimized login implementation")
+```
+
+Each agent builds on previous work instead of starting over.
+
+---
+
+## 🚀 Try It Now (2 minutes)
+
+### One-Command Docker Setup
+
 ```bash
-# Use published multi-platform image
-docker run -d \
-  --name shared-context-server \
-  -p 23456:23456 \
+docker run -d --name shared-context-server -p 23456:23456 \
   -e API_KEY="$(openssl rand -base64 32)" \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
   -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   ghcr.io/leoric-crown/shared-context-server:latest
-
-# Configure any MCP client
-docker exec shared-context-server shared-context-server client-config claude
 ```
 
-**Option B: Docker Compose (Full Setup)**
+### Quick Test
 ```bash
-# Generate secure keys and start server
-echo "API_KEY=$(openssl rand -base64 32)" > .env
-echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
-echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
-chmod 600 .env
-docker compose up -d
-
-# Get configuration instructions for any MCP client
-docker exec shared-context-server shared-context-server client-config claude
-```
-
-### 🔥 Development Mode (Hot Reload)
-
-```bash
-# Install dependencies
-uv sync
-
-# Start development server with hot reload
-uv run python -m shared_context_server.scripts.dev
-
-# Connect Claude Code
+# Connect with Claude Code
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+claude mcp list  # Should show: ✓ Connected
 ```
 
-### ⚡ Direct Run (Production)
+---
 
-```bash
-# Install dependencies
-uv sync
+## 🔧 Choose Your Path
 
-# Setup secure environment
-echo "API_KEY=$(openssl rand -base64 32)" > .env
-echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
-echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
-chmod 600 .env
+**Are you...**
 
-# Run server
-uv run shared-context-server --transport http --port 23456
+```
+├── 👨‍💻 Building a side project?
+│   → [Simple Integration](#-simple-integration) (5 minutes)
+│
+├── 🏢 Planning enterprise deployment?
+│   → [Enterprise Setup](#-enterprise-considerations) (15+ minutes)
+│
+├── 🎓 Researching multi-agent systems?
+│   → [Technical Deep Dive](#-technical-architecture) (30+ minutes)
+│
+└── 🤔 Just evaluating the concept?
+    → [Framework Integration Examples](#-framework-examples) (5 minutes)
+```
 
-# Connect Claude Code
+---
+
+## 🚀 Simple Integration
+
+Works with existing tools you already use:
+
+### Direct MCP Integration (Tested)
+```python
+# Via Claude Code or any MCP client
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+
+# Direct API usage
+import httpx
+client = httpx.AsyncClient()
+session = await client.post("http://localhost:23456/mcp/tool/create_session",
+                           json={"purpose": "agent collaboration"})
 ```
 
-**Prerequisites**: Python 3.11+ and [uv](https://docs.astral.sh/uv/) package manager
+⚠️ **Framework Integration Status**: Direct MCP protocol tested. CrewAI, AutoGen, and LangChain integrations are conceptual - we welcome community contributions to develop and test these patterns.
 
-See [DOCKER.md](./DOCKER.md) for complete Docker setup and troubleshooting.
-
-## Development
-
-### Quick Start
-- 🚀 **30-second setup**: See [Development Quick Start](./docs/dev-quick-start.md)
-- 📖 **Full guide**: See [Development Setup](./docs/development-setup.md)
-- 🔥 **Hot Reload**: Automatic server restart on file changes
-- 🔗 **MCP Integration**: Works with Claude Code, VS Code, and other MCP clients
-
-### Available Commands
-```bash
-# Use Makefile for common tasks (recommended)
-make help                 # Show all available commands
-make dev                  # Start development server with hot reload
-make test                 # Run tests with coverage
-make quality              # Run all quality checks
-make clean                # Clean caches and temp files
-
-# Or run tools directly
-uv run python -m shared_context_server.scripts.dev  # Dev server
-uv run ruff check         # Linting
-uv run ruff format        # Formatting
-uv run mypy src/          # Type checking
-uv run pytest tests/      # Run tests
-```
-
-### Quality Gates
-```bash
-# Use Makefile (recommended)
-make quality              # Run all quality checks (lint + type + security)
-
-# Or run manually
-uv run ruff check . && uv run mypy . && uv run pytest
-```
-
-## Architecture
-
-### Multi-Agent Infrastructure
-- **FastMCP Server**: 15+ operational MCP tools with stdio transport
-- **Session Isolation**: UUID-based session boundaries with lifecycle management
-- **Message Visibility**: Public/private/agent_only/admin_only filtering with audit trails
-- **JWT Authentication**: Role-based access control with secure token validation
-- **Agent Coordination**: Session locking, presence tracking, coordination channels
-- **Database Operations**: Async SQLite with optimized indexing and RapidFuzz search
-
-## Status
-
-🎉 **Phase 4 Complete**: Production Ready
-- ✅ **Performance Optimization**: Connection pooling (5-50 connections), multi-level caching (>70% hit ratio)
-- ✅ **Comprehensive Testing**: 666 tests, 88.30% coverage across all modules
-- ✅ **LLM-Optimized Error Framework**: Actionable error messages with recovery suggestions
-- ✅ **Complete API Documentation**: 12+ MCP tools fully documented with examples
-- ✅ **Integration Guides**: AutoGen, CrewAI, LangChain with working examples
-- ✅ **Troubleshooting Guide**: Common issues, diagnostics, and recovery procedures
-- ✅ **Production Deployment**: Docker, Kubernetes, monitoring, and scaling guides
-- ✅ **Security & Authentication**: JWT tokens, role-based permissions, audit logging
-- ✅ **All Performance Targets Met**: <10ms session creation, <20ms message ops, <30ms queries
-
-🚀 **Status**: **PRODUCTION READY** - Comprehensive documentation, tested integrations, optimized performance
-
-## API Tools
-
-### Authentication & Security
-- `authenticate_agent` - JWT token generation with role-based permissions
-- `get_audit_log` - Query comprehensive audit trail (admin only)
-
-### Session Management
-- `create_session` - Create isolated collaboration sessions
-- `get_session` - Retrieve session info and message history
-- `coordinate_session_work` - Lock/unlock sessions for coordinated work
-
-### Message System
-- `add_message` - Add messages with visibility controls (including admin_only)
-- `get_messages` - Retrieve messages with agent-specific filtering
-- `get_messages_advanced` - Advanced retrieval with admin visibility override
-- `set_message_visibility` - Modify message visibility (owner/admin only)
-- `search_context` - RapidFuzz-powered fuzzy search (2-3ms performance)
-- `search_by_sender` - Find messages by specific sender
-- `search_by_timerange` - Query messages within time window
-
-### Agent Memory
-- `set_memory` - Store values with TTL and scope management
-- `get_memory` - Retrieve memory with automatic cleanup
-- `list_memory` - Browse memory with filtering options
-
-### Agent Coordination
-- `register_agent_presence` - Track agent status and availability
-- `coordinate_session_work` - Session locking for coordinated work
-- `send_coordination_message` - Direct agent-to-agent messaging
-
-### MCP Resources
-- Session resources with real-time updates
-- Agent memory resources with subscriptions
-- Performance metrics resources (admin only)
-
-## Authentication
-
-### JWT Token Usage
-```bash
-# Authenticate and get JWT token
-TOKEN=$(curl -X POST http://localhost:8000/authenticate \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id": "my-agent", "agent_type": "claude", "api_key": "your-api-key"}' \
-  | jq -r '.token')
-
-# Use token in MCP requests
-curl http://localhost:8000/mcp/tool/add_message \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"session_id": "session_abc123", "content": "Hello", "visibility": "admin_only"}'
-```
-
-### Permission Levels
-- **read**: View public messages and session info
-- **write**: Create sessions and add messages
-- **admin**: Access admin_only messages, view audit logs, modify visibility
-
-**Database**: SQLite with WAL mode, 20+ concurrent agent support
-**Performance**: < 30ms API responses, 2-3ms RapidFuzz search
-**Security**: JWT authentication, comprehensive audit logging, input validation
+**➡️ Next**: [MCP Integration Examples](./docs/integration-guide.md)
 
 ---
 
-## Docker Images
+## ⚙️ Framework Examples
 
-### Available Registries
-- **GitHub Container Registry**: `ghcr.io/leoric-crown/shared-context-server` (Recommended)
-- **Multi-platform**: Supports `linux/amd64` and `linux/arm64`
+### Code Review Pipeline
+1. **Security Agent** finds vulnerabilities → shares findings
+2. **Performance Agent** builds on security context → optimizes safely
+3. **Documentation Agent** documents complete solution
 
-### Image Tags
+💡 **Why this works**: Each agent builds on discoveries instead of duplicating work.
+
+### Research & Implementation
+1. **Research Agent** gathers requirements → shares insights
+2. **Architecture Agent** designs using research → documents decisions
+3. **Developer Agent** implements with full context
+
+**More examples**: [Collaborative Workflows Guide](./docs/integration-guide.md#collaborative-workflows)
+
+---
+
+## 🔧 What This Is / What This Isn't
+
+### ✅ **What this MCP server provides**
+- **Real-time collaboration substrate** for multi-agent workflows
+- **Session isolation** with clean boundaries between different tasks
+- **MCP protocol compliance** that works with any MCP-compatible agent framework
+- **Infrastructure layer** that enhances existing orchestration tools
+
+💡 **Why MCP protocol?** Universal compatibility - works with Claude Code, CrewAI, AutoGen, LangChain, and custom frameworks without vendor lock-in.
+
+### ❌ **What this MCP server isn't**
+- **Not a vector database** - Use Pinecone, Milvus, or Chroma for long-term storage
+- **Not an orchestration platform** - Use CrewAI, AutoGen, or LangChain for task management
+- **Not for permanent memory** - Sessions are for active collaboration, not archival
+
+💡 **Why this approach?** We enhance your existing tools rather than replacing them - no need to rewrite your agent workflows.
+
+---
+
+## 🏢 Enterprise Considerations
+
+<details>
+<summary>⚙️ Production Setup & Scaling</summary>
+
+### Development → Production Path
+
+**Development (SQLite)**
+- ✅ Zero configuration
+- ✅ Perfect for prototyping
+- ❌ Limited to ~5 concurrent agents
+
+**Production (PostgreSQL)**
+- ✅ High concurrency (20+ agents)
+- ✅ Enterprise backup/recovery
+- ❌ Requires database management
+
+### Enterprise Features Roadmap
+- **SSO Integration**: SAML/OIDC support planned
+- **Audit Logging**: Enhanced compliance logging
+- **High Availability**: Multi-node deployment
+- **Advanced RBAC**: Attribute-based permissions
+
+**Migration**: Start with SQLite, migrate when you hit concurrency limits.
+
+</details>
+
+<details>
+<summary>🔧 Security & Compliance</summary>
+
+### Current Security Features
+- **JWT Authentication**: Role-based access control
+- **Input Sanitization**: XSS and injection prevention
+- **Secure Token Management**: Prevents JWT exposure vulnerabilities
+- **Message Visibility**: Public/private/agent-only filtering
+
+### Enterprise Security Roadmap
+- **SSO Integration**: SAML, OIDC, Active Directory
+- **Audit Trails**: SOX, HIPAA-compliant logging
+- **Data Governance**: Retention policies, geographic residency
+- **Advanced Encryption**: At-rest and in-transit encryption
+
+</details>
+
+---
+
+## 🔧 Technical Architecture
+
+<details>
+<summary>Core Design Principles</summary>
+
+### Session-Based Isolation
+**What**: Each collaborative task gets its own workspace
+**Why**: Prevents cross-contamination while enabling rich collaboration within teams
+
+### Message Visibility Controls
+**What**: Four-tier system (public/private/agent-only/admin-only)
+**Why**: Granular information sharing - agents can have private working memory and shared discoveries
+
+### MCP Protocol Integration
+**What**: Model Context Protocol compliance for universal compatibility
+**Why**: Works with any MCP-compatible framework without custom integration code
+
+</details>
+
+<details>
+<summary>Performance Characteristics</summary>
+
+### Designed for Real-Time Collaboration
+- **<30ms** message operations for smooth agent handoffs
+- **2-3ms** fuzzy search across session history
+- **20+ concurrent agents** per session
+- **Session continuity** during agent switches
+
+💡 **Why these targets?** Sub-30ms ensures imperceptible delays during agent handoffs, maintaining workflow momentum.
+
+### Scalability Considerations
+- **SQLite**: Development and small teams (<5 concurrent agents)
+- **PostgreSQL**: Production deployments (20+ concurrent agents)
+- **Connection pooling**: Built-in performance optimization
+- **Multi-level caching**: >70% cache hit ratio for common operations
+
+</details>
+
+<details>
+<summary>Database & Storage</summary>
+
+### Architecture Decision: Database Choice
+
+**SQLite for Development**
+- ✅ Zero configuration
+- ✅ Perfect for prototyping
+- ❌ Single writer limitation
+
+**PostgreSQL for Production**
+- ✅ Multi-writer concurrency
+- ✅ Enterprise backup/recovery
+- ✅ Advanced indexing and performance
+- ❌ Requires database administration
+
+**Migration Path**: Automatic schema migration tools provided for production deployment.
+
+💡 **Why this hybrid approach?** Optimizes for developer experience during development while supporting enterprise scale in production.
+
+</details>
+
+---
+
+## 📖 Documentation & Next Steps
+
+### 🟢 Getting Started Paths
+- **[Integration Guide](./docs/integration-guide.md)** - CrewAI, AutoGen, LangChain examples
+- **[Quick Reference](./docs/quick-reference.md)** - Commands and common tasks
+- **[Development Setup](./docs/development.md)** - Local development environment
+
+### 🟡 Production Deployment
+- **[Docker Setup](./DOCKER.md)** - Container deployment guide
+- **[API Reference](./docs/api-reference.md)** - All 15+ MCP tools with examples
+- **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
+
+### 🔴 Advanced Topics
+- **[Custom Integration](./docs/integration-guide.md#custom-agent-integration)** - Build your own MCP integration
+- **[Production Deployment](./docs/production-deployment.md)** - Docker and scaling strategies
+
+**All documentation**: [Documentation Index](./docs/README.md)
+
+---
+
+## 🚀 Development Commands
+
 ```bash
-# Latest release
-docker pull ghcr.io/leoric-crown/shared-context-server:latest
-
-# Specific version
-docker pull ghcr.io/leoric-crown/shared-context-server:1.0.0
-
-# Major version
-docker pull ghcr.io/leoric-crown/shared-context-server:1
-
-# Development branch
-docker pull ghcr.io/leoric-crown/shared-context-server:main
+make help    # Show all available commands
+make dev     # Start development server with hot reload
+make test    # Run tests with coverage
+make quality # Run all quality checks
 ```
 
-### Production Docker Compose
-```yaml
-services:
-  shared-context-server:
-    image: ghcr.io/leoric-crown/shared-context-server:latest
-    ports:
-      - "23456:23456"
-    environment:
-      - API_KEY=${API_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY}
-    volumes:
-      - shared-context-data:/app/data
-```
+<details>
+<summary>⚙️ Direct commands without make</summary>
 
----
-
-## 🚀 Releases & Publishing
-
-### Automated Docker Publishing
-Every release automatically publishes multi-platform Docker images to GitHub Container Registry:
-
-**Release Process:**
 ```bash
-# Create a new release (triggers Docker build automatically)
-gh release create v1.1.0 --title "v1.1.0" --notes "Release notes here"
+# Development
+uv sync && uv run python -m shared_context_server.scripts.dev
 
-# Or create a git tag (also triggers build)
-git tag v1.1.0 && git push origin v1.1.0
+# Testing
+uv run pytest --cov=src
+
+# Quality checks
+uv run ruff check && uv run mypy src/
 ```
 
-**Generated Images:**
-- `ghcr.io/leoric-crown/shared-context-server:1.1.0` (specific version)
-- `ghcr.io/leoric-crown/shared-context-server:1.1` (minor version)
-- `ghcr.io/leoric-crown/shared-context-server:1` (major version)
-- `ghcr.io/leoric-crown/shared-context-server:latest` (latest release)
-
-**Platforms:** `linux/amd64`, `linux/arm64`
-
-### For Maintainers
-- Releases trigger GitHub Actions workflow automatically
-- Build time: ~8-12 minutes (with caching)
-- Images published to GitHub Container Registry (GHCR)
-- No manual Docker builds needed
+</details>
 
 ---
 
-## Documentation
+## License
 
-📖 **Complete Production Documentation**
-
-- **[API Reference](./docs/api-reference.md)** - Complete reference for all 12+ MCP tools with request/response examples
-- **[Integration Guide](./docs/integration-guide.md)** - AutoGen, CrewAI, LangChain integrations with working examples
-- **[Troubleshooting Guide](./docs/troubleshooting.md)** - Common issues, diagnostics, and recovery procedures
-- **[Development Setup](./docs/development-setup.md)** - Comprehensive development environment setup
-- **[Quick Start](./docs/dev-quick-start.md)** - 30-second setup guide for development
-
-### Framework Integration Examples
-
-- **AutoGen**: Multi-agent conversations with shared context memory
-- **CrewAI**: Role-based agent crews with coordination tools
-- **LangChain**: Multi-agent workflows with persistent memory
-- **Custom Agents**: Direct API integration with Python SDK patterns
-
-### Production Features
-
-- **Performance**: Connection pooling, multi-level caching, <100ms response times
-- **Security**: JWT authentication, role-based permissions, audit logging
-- **Scalability**: 20+ concurrent agents, PostgreSQL ready, Docker/K8s deployment
-- **Monitoring**: Performance metrics, health checks, comprehensive logging
-- **Recovery**: Database backup/restore, crash recovery, system reset procedures
+MIT License - Open source software for the AI community.
 
 ---
 
-Built with modern Python tooling and MCP standards.
+_Built with modern Python tooling and MCP standards. Contributions welcome!_

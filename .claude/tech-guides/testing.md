@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide implements comprehensive testing patterns for the Shared Context MCP Server, focusing on behavioral testing, FastMCP in-memory testing, and multi-agent collaboration scenarios. The approach emphasizes testing what the system does rather than how it does it.
+This guide implements comprehensive testing patterns for the Shared Context MCP Server - a collaborative agent workspace. Focus on behavioral testing, agent handoff scenarios, and session-based collaboration workflows. The approach emphasizes testing collaborative agent behaviors rather than internal implementation.
 
 ## Core Testing Philosophy
 
@@ -16,16 +16,16 @@ This guide implements comprehensive testing patterns for the Shared Context MCP 
 ### Test Pyramid Strategy
 ```
          /\
-        /  \  E2E Tests (10%)
+        /  \  E2E Tests (Few)
        /    \  - Critical user journeys
       /      \  - Multi-agent scenarios
      /--------\
-    /          \  Integration Tests (30%)
+    /          \  Integration Tests (Some)
    /            \  - MCP tool interactions
   /              \  - Database operations
  /                \  - API endpoints
 /------------------\
-                     Unit Tests (60%)
+                     Unit Tests (Many)
                      - Business logic
                      - Validation rules
                      - Utility functions
@@ -114,7 +114,7 @@ async def test_db_connection(test_db_manager):
 ### FastMCP Integration with Real Database Testing
 
 ```python
-# Integration pattern for FastMCP tools with real database
+# Testing-specific patterns for FastMCP tools (see Framework Integration Guide for implementation details)
 async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
     """
     Call a FastMCP tool function with proper default handling.
@@ -133,13 +133,9 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
 
 def patch_database_connection(test_db_manager):
     """
-    Create a patcher for the global get_db_connection function.
+    Create a patcher for the global get_db_connection function for testing.
 
-    Args:
-        test_db_manager: The test database manager to use
-
-    Returns:
-        unittest.mock.patch context manager
+    Note: See Framework Integration Guide for production database patterns.
     """
     from unittest.mock import patch
 
@@ -259,51 +255,14 @@ async def test_database():
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
 
-    # Initialize schema
+    # Initialize schema (see Core Architecture Guide for complete schema)
     async with aiosqlite.connect(db_path) as conn:
-        await conn.executescript("""
-            CREATE TABLE sessions (
-                id TEXT PRIMARY KEY,
-                purpose TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_by TEXT NOT NULL,
-                metadata JSON
-            );
+        from shared_context_server.database import DatabaseManager
 
-            CREATE TABLE messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                content TEXT NOT NULL,
-                visibility TEXT DEFAULT 'public',
-                message_type TEXT DEFAULT 'agent_response',
-                metadata JSON,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                parent_message_id INTEGER,
-                FOREIGN KEY (session_id) REFERENCES sessions(id),
-                FOREIGN KEY (parent_message_id) REFERENCES messages(id)
-            );
+        # Use DatabaseManager to apply schema
+        db_manager = DatabaseManager(f"sqlite:///{db_path}")
+        await db_manager.initialize()
 
-            CREATE TABLE agent_memory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_id TEXT NOT NULL,
-                session_id TEXT,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL,
-                metadata JSON,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                expires_at TIMESTAMP,
-                UNIQUE(agent_id, session_id, key)
-            );
-
-            -- Performance indexes
-            CREATE INDEX idx_messages_session_time ON messages(session_id, timestamp);
-            CREATE INDEX idx_messages_sender ON messages(sender, timestamp);
-            CREATE INDEX idx_agent_memory_lookup ON agent_memory(agent_id, session_id, key);
-        """)
         await conn.commit()
 
     yield db_path
@@ -314,15 +273,14 @@ async def test_database():
 @pytest.fixture
 async def mcp_server(test_database):
     """Create MCP server with test database."""
-    from shared_context_server import create_mcp_server
+    from shared_context_server.server import mcp  # Use actual FastMCP server instance
 
-    # Create server with test database
-    server = await create_mcp_server(database_path=test_database)
+    # Use the actual FastMCP server instance from server.py
+    # Database is handled through the global DatabaseManager
 
-    yield server
+    yield mcp
 
-    # Cleanup server resources
-    await server.cleanup()
+    # Cleanup handled by test fixtures
 
 @pytest.fixture
 async def mcp_client(mcp_server):
@@ -1045,6 +1003,103 @@ async def test_message_visibility_controls(mcp_server, agent_identities):
         assert "Test results look good" in test_messages
 ```
 
+## Security Testing Patterns
+
+### Agent Memory Isolation Testing
+```python
+@pytest.mark.asyncio
+async def test_agent_memory_isolation_in_shared_sessions():
+    """Test that agents maintain isolated memory even in shared sessions."""
+    from tests.security.test_agent_memory_isolation import (
+        test_agent_memory_isolation_in_shared_sessions
+    )
+
+    # Create shared session with multiple agents
+    session_id = "shared_session_123"
+    agent1_ctx = MockContext(session_id, "agent_alpha")
+    agent2_ctx = MockContext(session_id, "agent_beta")
+
+    # Each agent stores private memory
+    await agent1_set_memory("current_task", {"task": "implement_auth"})
+    await agent2_set_memory("current_task", {"task": "write_tests"})
+
+    # Verify memory isolation
+    agent1_memory = await agent1_get_memory("current_task")
+    agent2_memory = await agent2_get_memory("current_task")
+
+    assert agent1_memory["task"] == "implement_auth"
+    assert agent2_memory["task"] == "write_tests"
+    assert agent1_memory != agent2_memory
+```
+
+### Authentication Security Testing
+```python
+@pytest.mark.asyncio
+async def test_jwt_token_validation_security():
+    """Test JWT token validation with various attack scenarios."""
+    # Test invalid signatures
+    invalid_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.invalid.signature"
+
+    with pytest.raises(AuthenticationError):
+        await validate_jwt_token(invalid_token)
+
+    # Test expired tokens
+    expired_token = create_expired_token()
+    with pytest.raises(TokenExpiredError):
+        await validate_jwt_token(expired_token)
+
+    # Test malformed tokens
+    malformed_token = "not.a.jwt.token"
+    with pytest.raises(ValidationError):
+        await validate_jwt_token(malformed_token)
+```
+
+### Message Visibility Security Testing
+```python
+@pytest.mark.asyncio
+async def test_message_visibility_security_boundaries():
+    """Test that message visibility controls prevent unauthorized access."""
+    session_id = "security_test_session"
+    agent1_ctx = MockContext(session_id, "agent_secure")
+    agent2_ctx = MockContext(session_id, "agent_unauthorized")
+
+    # Agent 1 creates private message
+    await add_message(
+        agent1_ctx,
+        session_id=session_id,
+        content="Sensitive security information",
+        visibility="private"
+    )
+
+    # Agent 2 should not see private message
+    agent2_messages = await get_messages(agent2_ctx, session_id=session_id)
+    private_content = [msg for msg in agent2_messages["messages"]
+                      if "Sensitive security information" in msg["content"]]
+
+    assert len(private_content) == 0, "Private message leaked to unauthorized agent"
+```
+
+### MCP Authentication Validation Testing
+```python
+@pytest.mark.asyncio
+async def test_mcp_tool_requires_valid_authentication():
+    """Test that MCP tools require proper authentication."""
+    # Test without authentication
+    unauthenticated_ctx = MockContext("test_session", None)  # No agent_id
+
+    with pytest.raises(AuthenticationRequired):
+        await create_session(unauthenticated_ctx, purpose="unauthorized access")
+
+    # Test with invalid authentication
+    invalid_ctx = MockContext("test_session", "invalid_agent_id")
+
+    with patch('shared_context_server.auth.validate_agent_permissions') as mock_validate:
+        mock_validate.return_value = False
+
+        with pytest.raises(PermissionDenied):
+            await create_session(invalid_ctx, purpose="permission test")
+```
+
 ## End-to-End Testing
 
 ### Complete Workflow Testing
@@ -1334,6 +1389,12 @@ tests/
 │   ├── test_workflows.py          # Complete workflows
 │   ├── test_privacy.py            # Privacy and visibility
 │   └── test_real_time.py          # Subscriptions and updates
+├── security/
+│   ├── test_agent_memory_isolation.py    # Agent memory isolation
+│   ├── test_authentication_security.py  # Auth security patterns
+│   ├── test_mcp_auth_validation.py       # MCP auth validation
+│   ├── test_message_visibility.py       # Message visibility controls
+│   └── test_uat_reproduction.py         # Security regression tests
 ├── performance/
 │   ├── test_load.py                # Concurrent usage
 │   ├── test_search_speed.py       # Search performance
@@ -1400,19 +1461,14 @@ def message_visibility(request):
 
 ## Continuous Integration
 
-### Test Running Strategy ⚠️ **PHASE-SPECIFIC QUALITY GATES**
+### Test Running Strategy
 
-**Mandatory Quality Commands** ⚠️ **MUST PASS BEFORE EACH PHASE**:
+**Mandatory Quality Commands** - **MUST PASS**:
 ```bash
-# Phase 3 quality gates (70% coverage minimum)
+# Quality gates for all development
 uv run ruff check .                                          # MANDATORY: Zero lint errors
 uv run mypy .                                               # MANDATORY: Zero type errors
-uv run pytest tests/ --cov=src --cov-fail-under=70         # MANDATORY: 70%+ coverage
-
-# Phase 4 quality gates (85% coverage minimum + performance)
-uv run ruff check .                                          # MANDATORY: Zero lint errors
-uv run mypy .                                               # MANDATORY: Zero type errors
-uv run pytest tests/ --cov=src --cov-fail-under=85         # MANDATORY: 85%+ coverage
+uv run pytest tests/ --cov=src --cov-fail-under=80         # MANDATORY: High coverage
 uv run pytest tests/performance/ -v --benchmark-only        # MANDATORY: Performance targets met
 ```
 
@@ -1423,7 +1479,7 @@ test_strategy:
     command: |
       uv run ruff check . &&
       uv run mypy . &&
-      uv run pytest tests/ --cov=src --cov-fail-under=${COVERAGE_TARGET}
+      uv run pytest tests/ --cov=src --cov-fail-under=80
     timeout: 10 minutes
 
   unit_tests:
@@ -1438,35 +1494,33 @@ test_strategy:
     command: pytest tests/behavioral/ -v --tb=short
     timeout: 20 minutes
 
+  security_tests:
+    command: pytest tests/security/ -v --tb=short
+    timeout: 15 minutes
+
   performance_tests:
     command: pytest tests/performance/ -v --tb=short -m benchmark
     timeout: 30 minutes
-    required_for: phase_4_only
 ```
 
-### Coverage Requirements ⚠️ **PHASE-SPECIFIC COVERAGE TARGETS**
+### Coverage Requirements
 
-**Progressive Coverage Targets**:
-- **Phase 1-2 (Completed)**: 54% baseline coverage achieved
-- **Phase 3 (Multi-Agent)**: ≥70% coverage REQUIRED before implementation
-- **Phase 4 (Production)**: ≥85% coverage REQUIRED before implementation
-
-**Module-Specific Coverage Expectations**:
-- `database.py`: 80% (excellent) → maintain 85%+
-- `server.py`: 56% → 75%+ (Phase 3), 85%+ (Phase 4)
-- `models.py`: 59% → 80%+ (Phase 3), 85%+ (Phase 4)
-- New modules: Must achieve 90%+ during development
+**Coverage Quality Standards**:
+- **Core modules**: Achieve high coverage of critical business logic
+- **Database operations**: Comprehensive coverage of all database patterns
+- **Security functions**: Complete coverage of authentication and authorization
+- **New modules**: Achieve excellent coverage during development
 
 **Quality Gate Commands**:
 ```bash
-# Phase 3 coverage validation (70% minimum)
-uv run pytest tests/ --cov=src --cov-report=html --cov-fail-under=70
+# Coverage validation with quality reporting
+uv run pytest tests/ --cov=src --cov-report=html --cov-fail-under=80
 
-# Phase 4 coverage validation (85% minimum)
-uv run pytest tests/ --cov=src --cov-report=html --cov-fail-under=85
-
-# Performance testing (Phase 4)
+# Performance testing
 uv run pytest tests/performance/ -v --benchmark-only
+
+# Security testing
+uv run pytest tests/security/ -v
 ```
 
 ```python
@@ -1478,6 +1532,7 @@ markers =
     benchmark: performance and load testing
     integration: integration tests requiring database
     behavioral: multi-agent behavioral tests
+    security: security and authentication tests
 
 # Coverage configuration
 [tool.coverage.run]
@@ -1495,28 +1550,28 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError"
 ]
-# Phase-specific fail_under targets
-fail_under = 70  # Phase 3 minimum, update to 85 for Phase 4
+# Quality coverage target
+fail_under = 80  # High quality coverage standard
 ```
 
 ## Success Criteria
 
-### Test Quality Success ⚠️ **PHASE-SPECIFIC QUALITY STANDARDS**
+### Test Quality Success
 - **Tests focus on behavior, not implementation details**
 - **All critical user workflows have test coverage**
 - **Multi-agent scenarios are thoroughly tested**
 - **Edge cases and error conditions are covered**
 - **Tests are fast, reliable, and maintainable**
-- **Phase-specific coverage targets achieved**: 70% (Phase 3), 85% (Phase 4)
+- **Security patterns are comprehensively tested**
 
-### Coverage Success ⚠️ **MANDATORY QUALITY GATES**
-- **Phase 3**: ≥70% coverage of critical business logic REQUIRED
-- **Phase 4**: ≥85% coverage of critical business logic REQUIRED
+### Coverage Success
+- **High coverage of critical business logic**
 - **All MCP tools and resources have comprehensive tests**
 - **Error handling paths are tested**
-- **Performance requirements are validated** (Phase 4: <100ms API, 20+ agents)
+- **Performance requirements are validated**
 - **Multi-agent collaboration patterns are verified**
-- **Quality gate enforcement**: Implementation MUST NOT proceed without passing coverage targets
+- **Security boundaries and authentication are tested**
+- **Quality gate enforcement**: All tests must pass before deployment
 
 ### Test Maintainability Success
 - Tests survive refactoring without modification
@@ -1527,9 +1582,9 @@ fail_under = 70  # Phase 3 minimum, update to 85 for Phase 4
 
 ## Testing Standardization Findings
 
-⚠️ **COMPREHENSIVE TEST STANDARDIZATION COMPLETED**
+**COMPREHENSIVE TEST STANDARDIZATION**
 
-During the comprehensive test standardization effort, critical implementation fixes were discovered and applied across the entire codebase. This resulted in achieving **97/97 tests passing (100% success rate)** across all test categories.
+During the comprehensive test standardization effort, critical implementation fixes were discovered and applied across the entire codebase. This resulted in achieving excellent test coverage and reliability across all test categories.
 
 ### Critical Implementation Fixes Applied
 
@@ -1610,7 +1665,7 @@ During the comprehensive test standardization effort, critical implementation fi
       db_module._db_manager = test_db_manager
       stats = await cleanup_expired_data()
   ```
-- **Result**: All 33/33 database tests passing
+- **Result**: All database tests passing with comprehensive coverage
 
 #### 6. Test Pattern Standardization ⚠️ **TESTING INFRASTRUCTURE STANDARDIZATION**
 - **Issue**: Inconsistent test patterns across unit, integration, and behavioral tests
@@ -1629,14 +1684,15 @@ During the comprehensive test standardization effort, critical implementation fi
 
 ### Test Success Rate Achievement
 
-**Final Test Results: 97/97 tests passing (100% success rate)**
+**Test Results**: Excellent test reliability and coverage achieved
 
 #### By Test Category:
-- **Database Tests**: 33/33 passing (100%)
-- **Behavioral Tests**: 6/6 passing (100%)
-- **Integration Tests**: All passing (100%)
-- **Unit Tests**: All passing (100%)
-- **Phase 1 End-to-End Tests**: 4/4 passing (100%)
+- **Database Tests**: All passing - comprehensive database operation coverage
+- **Behavioral Tests**: All passing - multi-agent scenarios working reliably
+- **Integration Tests**: All passing - component integration verified
+- **Unit Tests**: All passing - individual component validation complete
+- **Security Tests**: All passing - authentication and isolation verified
+- **End-to-End Tests**: All passing - complete workflow validation
 
 #### Key Test Categories Fixed:
 1. **Agent Memory Isolation**: Tests now properly validate agent memory isolation in shared sessions
@@ -1677,7 +1733,7 @@ async def test_example_functionality():
 2. **Security-First Approach**: Visibility filtering logic completely rewritten to ensure proper security boundaries
 3. **Consistency Standards**: Agent ID generation, database operations, and test patterns now consistent system-wide
 4. **Performance Maintained**: All fixes applied with no performance degradation
-5. **Test Coverage**: 100% test success rate maintained throughout all fixes
+5. **Test Coverage**: Excellent test success rate maintained throughout all fixes
 
 ## References
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide implements research-validated performance optimizations for the Shared Context MCP Server. Key improvements include RapidFuzz search (5-10x faster than difflib), aiosqlitepool connection pooling, and SQLite WAL mode optimizations for concurrent multi-agent access.
+This guide implements research-validated performance optimizations for the Shared Context MCP Server. Key improvements include RapidFuzz search (typically 5-10x faster than difflib), DatabaseManager singleton patterns, and SQLite WAL mode optimizations for concurrent multi-agent access.
 
 ## Research-Based Performance Enhancements
 
@@ -18,35 +18,40 @@ This guide implements research-validated performance optimizations for the Share
 - **Write throughput**: Significant improvement over journal mode
 - **Connection overhead**: ~95% reduction with connection pooling
 
-**aiosqlitepool Benefits:**
-- **Significant performance gains** for high-concurrency scenarios
-- Connection pooling eliminates connection overhead
-- Specifically designed for "SQLite with asyncio (FastAPI, background jobs, etc.)"
+**DatabaseManager Benefits:**
+- **Connection lifecycle management** with optimized PRAGMA settings
+- Consistent foreign key constraints and WAL mode application
+- Singleton pattern reduces connection overhead for concurrent operations
 
 ## Performance Targets
 
-Based on requirements and research:
-- **Session creation**: < 10ms
-- **Message insertion**: < 20ms
-- **Message retrieval (50 messages)**: < 30ms
-- **Fuzzy search (1000 messages)**: < 100ms
-- **Concurrent agents**: 10+ (target: 20+)
-- **Message capacity**: 1000+ per session
-- **MCP tool response**: < 100ms total
+Target performance based on optimizations and testing (actual performance may vary with hardware and load):
+- **Session creation**: < 10ms (target)
+- **Message insertion**: < 20ms (target)
+- **Message retrieval (50 messages)**: < 30ms (target)
+- **Fuzzy search (1000 messages)**: < 100ms (target with RapidFuzz)
+- **Concurrent agents**: 10+ (verified), 20+ (target)
+- **Message capacity**: 1000+ per session (tested)
+- **MCP tool response**: < 100ms total (target end-to-end)
 
 ## Critical Optimizations
 
 ### 1. RapidFuzz for Fuzzy Search (5-10x Faster)
 
-**Research Finding**: RapidFuzz is 5-10x faster than Python's difflib for fuzzy string matching.
+**Research Finding**: RapidFuzz is typically 5-10x faster than Python's difflib for fuzzy string matching, based on community benchmarks and our testing scenarios.
 
 ```python
 # Installation
 pip install rapidfuzz
 
+# RapidFuzz is included in project dependencies
 from rapidfuzz import fuzz, process
+from shared_context_server.database import get_db_connection
 from typing import List, Tuple, Dict, Any
 import json
+from datetime import datetime, timezone
+import aiosqlite
+from datetime import datetime, timezone
 
 class HighPerformanceSearch:
     """Fuzzy search optimized with RapidFuzz."""
@@ -120,8 +125,13 @@ class HighPerformanceSearch:
         if cached := await session_cache.get(session_id):
             return cached
 
-        # Load from database
-        messages = await db.get_messages(session_id)
+        # Load from database using actual pattern
+        async with get_db_connection() as conn:
+            cursor = await conn.execute(
+                "SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC",
+                (session_id,)
+            )
+            messages = [dict(row) for row in await cursor.fetchall()]
 
         # Cache for future requests
         await session_cache.set(session_id, messages)
@@ -157,122 +167,123 @@ async def benchmark_search_performance():
     # Speedup: 6.9x
 ```
 
-### 2. Connection Pooling with aiosqlitepool
+### 2. DatabaseManager Singleton Pattern
 
-**Critical Finding**: Connection pooling is essential for multi-agent concurrency.
+**Critical Finding**: Consistent connection management is essential for multi-agent concurrency.
 
 ```python
-# Installation
-pip install aiosqlitepool
-
-import aiosqlitepool
-from contextlib import asynccontextmanager
+# Use actual DatabaseManager implementation
+from shared_context_server.database import (
+    DatabaseManager,
+    get_db_connection,
+    utc_now,
+    utc_timestamp,
+)
+from datetime import datetime, timezone
 import aiosqlite
+import json
+from typing import Any
 
-class OptimizedDatabasePool:
+class OptimizedDatabaseOperations:
     """
-    High-performance connection pool for SQLite.
+    High-performance database operations using DatabaseManager.
 
     Key optimizations:
-    - Reuses connections (avoiding ~5ms connection overhead)
-    - Pre-configured for optimal SQLite settings
-    - Automatic retry on busy database
+    - Singleton DatabaseManager reduces connection overhead
+    - Pre-configured PRAGMA settings for optimal SQLite performance
+    - Automatic WAL mode and foreign key constraint enforcement
+    - UTC timestamp handling for multi-agent coordination
     """
 
-    def __init__(
+    async def add_message_optimized(
         self,
-        database_path: str,
-        min_connections: int = 2,
-        max_connections: int = 20
-    ):
-        self.database_path = database_path
-        self.min_connections = min_connections
-        self.max_connections = max_connections
-        self.pool = None
+        session_id: str,
+        content: str,
+        sender: str
+    ) -> int:
+        """Add message using DatabaseManager pattern."""
 
-    async def initialize(self):
-        """Initialize the connection pool with optimized settings."""
+        # Always use explicit UTC timestamps
+        timestamp = utc_timestamp()
 
-        self.pool = await aiosqlitepool.create_pool(
-            self.database_path,
-            min_size=self.min_connections,
-            max_size=self.max_connections,
-            check_same_thread=False,
-            # Connection factory with optimizations
-            factory=self._create_optimized_connection
-        )
+        async with get_db_connection() as conn:
+            cursor = await conn.execute(
+                """
+                INSERT INTO messages (session_id, sender, content, timestamp)
+                VALUES (?, ?, ?, ?)
+                """,
+                (session_id, sender, content, timestamp)
+            )
 
-    async def _create_optimized_connection(self) -> aiosqlite.Connection:
-        """Create a connection with performance optimizations."""
+            await conn.commit()
+            return cursor.lastrowid or 0
 
-        conn = await aiosqlite.connect(self.database_path)
+    async def get_messages_optimized(
+        self,
+        session_id: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get messages with pagination using DatabaseManager."""
 
-        # Critical performance settings
-        await conn.execute("PRAGMA journal_mode = WAL")  # Enable concurrent reads/writes
-        await conn.execute("PRAGMA synchronous = NORMAL")  # Faster writes
-        await conn.execute("PRAGMA cache_size = -8000")  # 8MB cache
-        await conn.execute("PRAGMA temp_store = MEMORY")  # Use memory for temp tables
-        await conn.execute("PRAGMA mmap_size = 30000000000")  # Memory-mapped I/O
-        await conn.execute("PRAGMA busy_timeout = 5000")  # 5 second timeout
+        async with get_db_connection() as conn:
+            conn.row_factory = aiosqlite.Row
+            cursor = await conn.execute(
+                """
+                SELECT * FROM messages
+                WHERE session_id = ?
+                ORDER BY timestamp ASC
+                LIMIT ? OFFSET ?
+                """,
+                (session_id, limit, offset)
+            )
 
-        # Enable query optimizer
-        await conn.execute("PRAGMA optimize")
+            messages = await cursor.fetchall()
+            return [dict(row) for row in messages]
 
-        return conn
+    async def create_session_optimized(
+        self,
+        purpose: str,
+        metadata: dict[str, Any] | None = None
+    ) -> str:
+        """Create session with optimized database operations."""
 
-    @asynccontextmanager
-    async def acquire(self):
-        """Acquire a connection from the pool."""
+        import secrets
+        session_id = f"session_{secrets.token_hex(8)}"
+        timestamp = utc_timestamp()
 
-        if not self.pool:
-            raise RuntimeError("Pool not initialized. Call initialize() first.")
+        async with get_db_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO sessions (id, purpose, metadata, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (session_id, purpose, json.dumps(metadata) if metadata else None, timestamp, timestamp)
+            )
+            await conn.commit()
 
-        async with self.pool.acquire() as conn:
-            # Ensure connection is still valid
-            try:
-                await conn.execute("SELECT 1")
-            except Exception:
-                # Connection is dead, create new one
-                conn = await self._create_optimized_connection()
+        return session_id
 
-            yield conn
+# Usage patterns with actual implementation
+async def performance_example():
+    """Example of optimized database operations."""
+    ops = OptimizedDatabaseOperations()
 
-    async def close(self):
-        """Close all connections in the pool."""
-        if self.pool:
-            await self.pool.close()
-            self.pool = None
+    # Create session with UTC timestamp
+    session_id = await ops.create_session_optimized(
+        purpose="Performance testing",
+        metadata={"test": True, "created_at": datetime.now(timezone.utc).isoformat()}
+    )
 
-# Global pool instance
-db_pool = OptimizedDatabasePool(
-    "sqlite:///./chat_history.db",
-    min_connections=2,
-    max_connections=20
-)
+    # Add messages efficiently
+    message_id = await ops.add_message_optimized(
+        session_id=session_id,
+        content="Test message",
+        sender="performance_agent"
+    )
 
-# Usage pattern for optimal performance
-async def add_message_optimized(
-    session_id: str,
-    content: str,
-    sender: str
-) -> int:
-    """Add message with connection pooling."""
-
-    async with db_pool.acquire() as conn:
-        cursor = await conn.execute(
-            """
-            INSERT INTO messages (session_id, sender, content, timestamp)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """,
-            (session_id, sender, content)
-        )
-
-        await conn.commit()
-
-        # Invalidate cache for this session
-        await session_cache.invalidate(session_id)
-
-        return cursor.lastrowid
+    # Retrieve with pagination
+    messages = await ops.get_messages_optimized(session_id, limit=10)
 ```
 
 ### 3. TTL Caching for Hot Sessions
@@ -281,6 +292,7 @@ async def add_message_optimized(
 from typing import Optional, List, Dict, Any
 import asyncio
 import time
+from datetime import datetime, timezone
 
 class OptimizedSessionCache:
     """
@@ -309,7 +321,7 @@ class OptimizedSessionCache:
     async def get(self, key: str) -> Optional[Any]:
         """
         Get cached value with automatic expiration check.
-        Average time: < 0.1ms
+        Performance: Generally very fast for cached data
         """
 
         async with self.lock:
@@ -336,7 +348,7 @@ class OptimizedSessionCache:
     async def set(self, key: str, value: Any):
         """
         Set cached value with TTL.
-        Average time: < 0.1ms
+        Performance: Optimized for frequent updates
         """
 
         async with self.lock:
@@ -401,7 +413,7 @@ class LayeredCache:
             return cached
 
         # Load from database
-        async with db_pool.acquire() as conn:
+        async with get_db_connection() as conn:
             cursor = await conn.execute(
                 """
                 SELECT * FROM messages
@@ -428,7 +440,7 @@ cache = LayeredCache()
 
 ```python
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 class OptimizedPagination:
     """
@@ -468,7 +480,7 @@ class OptimizedPagination:
         Performance: O(log n) regardless of position in dataset
         """
 
-        async with db_pool.acquire() as conn:
+        async with get_db_connection() as conn:
             if cursor:
                 message_id, timestamp = self.decode_cursor(cursor)
 
@@ -525,6 +537,7 @@ class OptimizedPagination:
 ```python
 import asyncio
 from typing import List, Dict, Any
+from shared_context_server.database import get_db_connection
 
 class AsyncOptimizations:
     """Patterns for optimal async/await usage."""
@@ -583,8 +596,9 @@ class AsyncOptimizations:
 
         async def notify_agent(agent_id: str):
             try:
-                # Non-blocking notification
-                await send_notification(agent_id, session_id, message)
+                # Non-blocking notification placeholder
+                # Implementation would use actual notification system
+                pass
             except Exception:
                 # Log but don't fail the operation
                 pass
@@ -603,57 +617,59 @@ class AsyncOptimizations:
 
 ```python
 class QueryOptimizer:
-    """SQL query optimization patterns."""
+    """SQL query optimization patterns using DatabaseManager."""
 
     @staticmethod
-    async def create_optimal_indexes(conn: aiosqlite.Connection):
-        """Create indexes for common query patterns."""
+    async def create_optimal_indexes():
+        """Create indexes for common query patterns using DatabaseManager."""
 
-        indexes = [
-            # Primary access patterns
-            "CREATE INDEX IF NOT EXISTS idx_messages_session_time ON messages(session_id, timestamp)",
-            "CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender, timestamp)",
+        async with get_db_connection() as conn:
+            indexes = [
+                # Primary access patterns
+                "CREATE INDEX IF NOT EXISTS idx_messages_session_time ON messages(session_id, timestamp)",
+                "CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender, timestamp)",
 
-            # Visibility filtering
-            "CREATE INDEX IF NOT EXISTS idx_messages_visibility ON messages(visibility, session_id)",
+                # Visibility filtering
+                "CREATE INDEX IF NOT EXISTS idx_messages_visibility ON messages(visibility, session_id)",
 
-            # Agent memory lookups
-            "CREATE INDEX IF NOT EXISTS idx_agent_memory_lookup ON agent_memory(agent_id, session_id, key)",
+                # Agent memory lookups
+                "CREATE INDEX IF NOT EXISTS idx_agent_memory_lookup ON agent_memory(agent_id, session_id, key)",
 
-            # Expiration cleanup
-            "CREATE INDEX IF NOT EXISTS idx_agent_memory_expiry ON agent_memory(expires_at) WHERE expires_at IS NOT NULL",
+                # Expiration cleanup
+                "CREATE INDEX IF NOT EXISTS idx_agent_memory_expiry ON agent_memory(expires_at) WHERE expires_at IS NOT NULL",
 
-            # Audit trail
-            "CREATE INDEX IF NOT EXISTS idx_audit_agent ON audit_log(agent_id, timestamp)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, timestamp)",
-        ]
+                # Audit trail
+                "CREATE INDEX IF NOT EXISTS idx_audit_agent ON audit_log(agent_id, timestamp)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, timestamp)",
+            ]
 
-        for index in indexes:
-            await conn.execute(index)
+            for index in indexes:
+                await conn.execute(index)
 
-        # Analyze tables for query planner
-        await conn.execute("ANALYZE")
+            # Analyze tables for query planner
+            await conn.execute("ANALYZE")
+            await conn.commit()
 
     @staticmethod
     async def explain_query(
-        conn: aiosqlite.Connection,
         query: str,
         params: tuple
     ):
-        """Analyze query performance."""
+        """Analyze query performance using DatabaseManager."""
 
-        explain_query = f"EXPLAIN QUERY PLAN {query}"
-        cursor = await conn.execute(explain_query, params)
-        plan = await cursor.fetchall()
+        async with get_db_connection() as conn:
+            explain_query = f"EXPLAIN QUERY PLAN {query}"
+            cursor = await conn.execute(explain_query, params)
+            plan = await cursor.fetchall()
 
-        print("Query Plan:")
-        for row in plan:
-            print(f"  {row}")
+            print("Query Plan:")
+            for row in plan:
+                print(f"  {row}")
 
-        # Check for table scans (bad for performance)
-        for row in plan:
-            if "SCAN TABLE" in str(row):
-                print("⚠️ WARNING: Table scan detected! Consider adding an index.")
+            # Check for table scans (performance concern)
+            for row in plan:
+                if "SCAN TABLE" in str(row):
+                    print("⚠️ WARNING: Table scan detected! Consider adding an index.")
 ```
 
 ## Performance Monitoring
@@ -759,7 +775,7 @@ class MemoryManager:
     async def cleanup_old_sessions(self, max_age_seconds: int = 3600):
         """Cleanup sessions older than max_age."""
 
-        async with db_pool.acquire() as conn:
+        async with get_db_connection() as conn:
             # Mark old sessions as inactive
             await conn.execute(
                 """
@@ -818,7 +834,7 @@ class MemoryManager:
 ### 1. Use Connection Pooling Always
 ```python
 # GOOD - Reuses connections
-async with db_pool.acquire() as conn:
+async with get_db_connection() as conn:
     # Use connection
 
 # BAD - Creates new connection each time
@@ -877,7 +893,7 @@ conn = await aiosqlite.connect(db_path)
 # No close
 
 # GOOD - Automatic cleanup
-async with db_pool.acquire() as conn:
+async with get_db_connection() as conn:
     # Connection automatically returned to pool
 ```
 
@@ -948,12 +964,12 @@ async def test_concurrent_agents():
 ## References
 
 - RapidFuzz Documentation: https://github.com/maxbachmann/RapidFuzz
-- aiosqlitepool: https://github.com/tortoise/aiosqlitepool
+- SQLite Performance: Database optimization patterns for concurrent operations
 - SQLite Performance Tuning: https://sqlite.org/pragma.html
-- Research findings: `/RESEARCH_FINDINGS_DEVELOPER.md`
+- Research findings: See project documentation and test results
 
 ## Related Guides
 
-- Data Architecture Guide - Database design and schema
-- Security & Authentication Guide - Rate limiting
-- Testing Patterns Guide - Performance testing
+- Core Architecture Guide - Database design and schema
+- Security & Authentication Guide - Rate limiting and authentication
+- Testing Guide - Performance testing patterns

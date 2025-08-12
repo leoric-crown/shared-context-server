@@ -284,7 +284,7 @@ ENV DATABASE_URL="sqlite:///data/chat_history.db"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:23456/health || exit 1
 
 # Expose port
 EXPOSE 8000
@@ -308,7 +308,7 @@ services:
     container_name: shared-context-server
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8000:23456"
       - "9090:9090"  # Metrics port
     environment:
       - DATABASE_URL=sqlite:///data/chat_history.db
@@ -327,7 +327,7 @@ services:
     networks:
       - shared-context-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:23456/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -430,7 +430,7 @@ events {
 
 http {
     upstream shared_context_servers {
-        server shared-context-server:8000 weight=1 max_fails=3 fail_timeout=30s;
+        server shared-context-server:23456 weight=1 max_fails=3 fail_timeout=30s;
         keepalive 32;
     }
 
@@ -1024,7 +1024,7 @@ class ProductionLoadTester:
 
 async def main():
     parser = argparse.ArgumentParser(description='Production load tester')
-    parser.add_argument('--url', default='http://localhost:8000', help='Server URL')
+    parser.add_argument('--url', default='http://localhost:23456', help='Server URL')
     parser.add_argument('--api-key', required=True, help='API key')
     parser.add_argument('--agents', type=int, default=20, help='Number of agents')
     parser.add_argument('--rps', type=int, default=100, help='Target requests per second')

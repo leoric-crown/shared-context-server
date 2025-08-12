@@ -836,7 +836,7 @@ import httpx
 import json
 
 # Authenticate and get token
-auth_response = httpx.post("http://localhost:8000/mcp/tool/authenticate_agent", json={
+auth_response = httpx.post("http://localhost:23456/mcp/tool/authenticate_agent", json={
     "agent_id": "my-agent",
     "agent_type": "claude",
     "api_key": "your-api-key"
@@ -844,14 +844,14 @@ auth_response = httpx.post("http://localhost:8000/mcp/tool/authenticate_agent", 
 token = auth_response.json()["token"]
 
 # Create session
-session_response = httpx.post("http://localhost:8000/mcp/tool/create_session",
+session_response = httpx.post("http://localhost:23456/mcp/tool/create_session",
     headers={"Authorization": f"Bearer {token}"},
     json={"purpose": "Multi-agent collaboration"}
 )
 session_id = session_response.json()["session_id"]
 
 # Add message
-message_response = httpx.post("http://localhost:8000/mcp/tool/add_message",
+message_response = httpx.post("http://localhost:23456/mcp/tool/add_message",
     headers={"Authorization": f"Bearer {token}"},
     json={
         "session_id": session_id,
@@ -865,7 +865,7 @@ message_response = httpx.post("http://localhost:8000/mcp/tool/add_message",
 
 ```python
 # Search context
-search_response = httpx.post("http://localhost:8000/mcp/tool/search_context",
+search_response = httpx.post("http://localhost:23456/mcp/tool/search_context",
     headers={"Authorization": f"Bearer {token}"},
     json={
         "session_id": session_id,
@@ -875,7 +875,7 @@ search_response = httpx.post("http://localhost:8000/mcp/tool/search_context",
 )
 
 # Store in memory
-memory_response = httpx.post("http://localhost:8000/mcp/tool/set_memory",
+memory_response = httpx.post("http://localhost:23456/mcp/tool/set_memory",
     headers={"Authorization": f"Bearer {token}"},
     json={
         "key": "agent_state",

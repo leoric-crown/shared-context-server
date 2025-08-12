@@ -179,7 +179,7 @@ uv run python -m shared_context_server.scripts.dev
 # Update Claude Code connection
 claude mcp add-json shared-context-server '{
   "command": "mcp-proxy",
-  "args": ["--transport=streamablehttp", "http://localhost:8000/mcp/"]
+  "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]
 }'
 ```
 

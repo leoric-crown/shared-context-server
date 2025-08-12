@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide implements comprehensive security measures for the Shared Context MCP Server, addressing critical vulnerabilities identified in research and ensuring secure multi-agent collaboration.
+This guide implements comprehensive security measures for the Shared Context MCP Server - a collaborative agent workspace. Addresses critical vulnerabilities and ensures secure agent handoffs, session isolation, and collaborative workflow protection.
 
 ## Core Security Principles
 
@@ -40,8 +40,8 @@ AUDIENCE = "mcp-shared-context-server"
 
 security = HTTPBearer()
 
-class TokenGenerator:
-    """Secure JWT token generation with MCP-specific claims."""
+class AuthManager:
+    """Authentication manager using actual patterns from auth.py."""
 
     @staticmethod
     def create_agent_token(
@@ -213,6 +213,11 @@ import re
 import html
 from typing import Any, Dict
 import bleach
+from ..utils.llm_errors import (
+    ErrorSeverity,
+    create_llm_error_response,
+    create_validation_error
+)
 
 class InputSanitizer:
     """Comprehensive input sanitization to prevent injection attacks."""
@@ -280,19 +285,27 @@ class InputSanitizer:
         """Validate and sanitize session ID."""
         # Only allow alphanumeric, dash, underscore
         if not re.match(r'^[a-zA-Z0-9-_]{8,64}$', session_id):
-            raise ValueError(f"Invalid session ID format: {session_id}")
+            raise create_validation_error(
+                f"Invalid session ID format: {session_id}",
+                field="session_id",
+                received_value=session_id
+            )
         return session_id
 
     @classmethod
     def validate_agent_id(cls, agent_id: str) -> str:
         """Validate and sanitize agent ID."""
         if not re.match(r'^[a-zA-Z0-9-_.]+$', agent_id):
-            raise ValueError(f"Invalid agent ID format: {agent_id}")
+            raise create_validation_error(
+                f"Invalid agent ID format: {agent_id}",
+                field="agent_id",
+                received_value=agent_id
+            )
         return agent_id
 
 # Middleware for automatic sanitization
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from ..models import create_error_response
 
 @app.middleware("http")
 async def sanitize_inputs(request: Request, call_next):
@@ -303,9 +316,10 @@ async def sanitize_inputs(request: Request, call_next):
         for key, value in request.path_params.items():
             if isinstance(value, str):
                 if InputSanitizer.detect_sql_injection(value):
-                    return JSONResponse(
+                    return create_error_response(
+                        "Potential injection detected",
                         status_code=400,
-                        content={"error": "Potential injection detected"}
+                        error_type="security_violation"
                     )
 
     response = await call_next(request)
@@ -508,37 +522,46 @@ async def add_message(
 ### Pattern 6: Secure Database Operations
 
 ```python
-import aiosqlite
-from typing import List, Optional
+import json
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+from shared_context_server.database import get_db_connection
+from shared_context_server.utils.llm_errors import create_database_error, create_validation_error
 
 class SecureDatabase:
-    """Database operations with security best practices."""
+    """Database operations with security best practices using DatabaseManager."""
 
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self):
+        # Database connection handled by get_db_connection()
 
     async def execute_query(
         self,
         query: str,
         parameters: tuple = ()
-    ) -> List[Dict]:
+    ) -> List[Dict[str, Any]]:
         """Execute query with parameterized inputs (prevents SQL injection)."""
 
         # NEVER use string formatting for queries
         # ALWAYS use parameterized queries
 
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(query, parameters)
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
+        try:
+            async with get_db_connection() as connection:
+                cursor = await connection.execute(query, parameters)
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            raise create_database_error(
+                f"Query execution failed: {str(e)}",
+                operation="execute_query",
+                query=query[:100]  # First 100 chars for debugging
+            )
 
     async def get_session_messages(
         self,
         session_id: str,
         agent_id: str,
         include_private: bool = False
-    ) -> List[Dict]:
+    ) -> List[Dict[str, Any]]:
         """Retrieve messages with visibility controls."""
 
         # Validate inputs
@@ -572,7 +595,7 @@ class SecureDatabase:
         sender: str,
         content: str,
         visibility: str = 'public',
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict[str, Any]] = None
     ) -> int:
         """Add message with sanitization."""
 
@@ -599,10 +622,17 @@ class SecureDatabase:
             datetime.now(timezone.utc).isoformat()
         )
 
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(query, params)
-            await db.commit()
-            return cursor.lastrowid
+        try:
+            async with get_db_connection() as connection:
+                cursor = await connection.execute(query, params)
+                await connection.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            raise create_database_error(
+                f"Failed to add message: {str(e)}",
+                operation="add_message",
+                session_id=session_id
+            )
 ```
 
 ## Best Practices
@@ -682,7 +712,8 @@ class TokenRefresher:
                 raise ValueError("Refresh token revoked")
 
             # Generate new access token
-            new_access_token = TokenGenerator.create_agent_token(
+            # Use actual auth manager patterns
+            new_access_token = auth_manager.validate_token(
                 agent_id=payload["agent_id"],
                 agent_type=payload.get("agent_type"),
                 permissions=payload.get("permissions")
@@ -754,10 +785,11 @@ async def authenticate(credentials):
 
 ## Performance Considerations
 
-- JWT validation adds ~1-2ms per request
-- Rate limiting with Redis adds ~0.5ms
+- JWT validation adds minimal overhead with proper caching
+- Rate limiting should use async patterns to avoid blocking
 - Audit logging should be async to avoid blocking
-- Use connection pooling for database operations
+- DatabaseManager (via get_db_connection()) provides connection pooling for optimal performance
+- Use UTC timestamps consistently to avoid timezone conversion overhead
 
 ## Security Implications
 
@@ -773,6 +805,7 @@ async def authenticate(credentials):
 ```python
 import pytest
 from unittest.mock import patch
+from ..utils.llm_errors import ValidationError, DatabaseError
 
 async def test_jwt_audience_validation():
     """Test that invalid audience is rejected."""
@@ -792,9 +825,23 @@ async def test_sql_injection_prevention():
     """Test that SQL injection attempts are blocked."""
     malicious_input = "'; DROP TABLE messages; --"
 
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValidationError) as exc:
         InputSanitizer.validate_session_id(malicious_input)
     assert "Invalid session ID" in str(exc.value)
+    assert exc.value.field == "session_id"
+
+async def test_database_error_handling():
+    """Test that database errors are properly handled."""
+    secure_db = SecureDatabase()
+
+    with patch('shared_context_server.database.get_db_connection') as mock_conn:
+        mock_conn.side_effect = Exception("Database connection failed")
+
+        with pytest.raises(DatabaseError) as exc:
+            await secure_db.execute_query("SELECT * FROM messages")
+
+        assert "Query execution failed" in str(exc.value)
+        assert exc.value.operation == "execute_query"
 
 async def test_rate_limiting():
     """Test that rate limiting blocks excessive requests."""
@@ -810,11 +857,12 @@ async def test_rate_limiting():
 
 - JWT Best Practices: [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519)
 - OWASP Security Guidelines
-- Research findings: `/RESEARCH_FINDINGS_DEVELOPER.md`
-- Pydantic Models: `/.claude/tech-guides/pydantic-models.md`
+- Data Validation Guide: `.claude/tech-guides/data-validation.md`
+- Error Handling Guide: `.claude/tech-guides/error-handling.md`
+- Core Architecture Guide: `.claude/tech-guides/core-architecture.md`
 
 ## Related Guides
 
-- Pydantic Models Guide - Data validation
+- Data Validation Guide - Pydantic models and validation patterns
 - Error Handling Guide - Security error responses
-- Testing Patterns Guide - Security testing
+- Testing Guide - Security testing patterns

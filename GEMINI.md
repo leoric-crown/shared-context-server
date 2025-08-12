@@ -1,62 +1,71 @@
-# Shared Context Server - Gemini CLI Context
+# GEMINI.md - Gemini CLI Context
 
-This document provides an overview of the `shared-context-server` project, intended to serve as instructional context for the Gemini CLI.
+Instructions for Gemini CLI when working with the Shared Context Server project.
 
-## Project Overview
+## Project Context
 
-The `shared-context-server` is a centralized memory store designed to enable collaboration between multiple AI agents (e.g., Claude, Gemini) by providing a shared conversational context. It implements a RESTful "Context as a Service" pattern, adhering to the principles of a blackboard architecture. The project is currently in its early stages (5% complete), with comprehensive planning documentation in place, ready for the Minimum Viable Product (MVP) implementation phase.
+**Shared Context Server**: Production-ready centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to collaborate through shared conversational context.
+
+**Status**: Phase 4 Complete - Production Ready
+- 15+ MCP tools operational
+- 88%+ test coverage (666 tests)
+- Docker deployment ready
+- Comprehensive documentation
+
+## Gemini-Specific Setup
+
+### Quick Setup for Gemini
+```bash
+# Install dependencies with uv (recommended Python package manager)
+uv sync --dev
+
+# Start development server
+uv run python -m shared_context_server.scripts.dev
+
+# Run tests
+uv run pytest tests/ -v
+
+# Quality checks
+uv run ruff check && uv run mypy src/
+```
+
+### Key Differences from CLAUDE.md
+- **Package Manager**: Use `uv` instead of other package managers for consistency
+- **Port**: Default development port is 23456
+- **Commands**: Use `make help` to see all available commands
+
+## Essential Commands
+
+```bash
+# See all available commands
+make help
+
+# Development
+make dev      # Start development server with hot reload
+make test     # Run tests with coverage
+make quality  # Run all quality checks
+make clean    # Clean caches and temp files
+```
 
 ## Technology Stack
 
-*   **Language:** Python 3.10+
-*   **Web Framework:** FastAPI (for high-performance asynchronous web services)
-*   **Data Validation:** Pydantic (for data validation and settings management using type hints)
-*   **Database:** SQLite (with `aiosqlite` for asynchronous database operations)
-*   **HTTP Client (for testing):** `httpx`
-*   **Testing Frameworks:** `pytest` and `pytest-asyncio`
+- **Python 3.11+** with **uv** package manager
+- **FastMCP** server with MCP tools
+- **SQLite** with aiosqlite (async operations)
+- **Pydantic** for data validation
+- **JWT authentication** with role-based permissions
 
-## Building and Running
+## Core Files
 
-To set up and run the `shared-context-server` project, follow these steps:
+- **CLAUDE.md** - Complete project instructions and architecture
+- **docs/development.md** - Development setup and workflows
+- **docs/quick-reference.md** - Commands and environment variables
+- **pyproject.toml** - Dependencies and tool configuration
 
-### Prerequisites
+## Development Standards
 
-*   Python 3.10 or higher
-*   `pip` (Python package installer)
-
-### Installation
-
-Install the necessary Python dependencies:
-
-```bash
-pip install "fastapi[standard]" aiosqlite pydantic httpx pytest pytest-asyncio
-```
-
-### Running the Development Server
-
-To start the FastAPI development server:
-
-```bash
-fastapi dev main.py
-```
-
-### Running Tests
-
-To execute the project's tests:
-
-```bash
-pytest tests/ -v
-```
-
-## Development Conventions
-
-The project adheres to the following development standards and guidelines:
-
-*   **Component-Centric Design:** Functionality is built around unified interactive components with persistent state.
-*   **Data Preservation:** Emphasis on zero-loss data.
-*   **Progressive Enhancement:** Core functionality is built first, with advanced features added incrementally.
-*   **UTC Timestamps:** All system operations, especially for message timestamps and session coordination, must use UTC.
-*   **File Size Limits:** Maximum 500 lines per code file and 1000 lines per test file.
-*   **Testing:** Unit tests are required for all new code.
-*   **Code Quality:** Linting and type checking (`{{ QUALITY.LINT_COMMAND }}` and `{{ QUALITY.TYPE_CHECK_COMMAND }}`) must pass before commits. (Note: Specific commands for linting and type checking are placeholders and should be inferred from project setup if available, or defined as TODOs).
-*   **PRP Specifications:** Implementations must strictly follow the detailed specifications found in the `PRPs/` directory.
+- **UTC timestamps** for all operations: `datetime.now(timezone.utc)`
+- **File limits**: 500 lines code, 1000 lines tests
+- **Testing required**: Unit and behavioral tests with pytest
+- **Quality gates**: `make quality` must pass before commits
+- **FastMCP patterns**: Use existing server and tool patterns

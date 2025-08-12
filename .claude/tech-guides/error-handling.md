@@ -23,81 +23,89 @@ This guide implements comprehensive error handling patterns for the Shared Conte
 
 ## Error Hierarchy
 
-### Base Exception Classes
+### Actual Error System (LLM-Optimized)
+
+The system uses an **LLM-Optimized Error Framework** specifically designed for AI agent decision-making and recovery.
 
 ```python
-from typing import Optional, Dict, Any
-from enum import Enum
+# Import actual error system from codebase
+from shared_context_server.utils.llm_errors import (
+    ErrorSeverity,
+    LLMOptimizedErrorResponse,
+    create_llm_error_response,
+    create_input_validation_error,
+    create_resource_not_found_error,
+    create_permission_denied_error,
+    create_system_error
+)
+from shared_context_server.database import (
+    DatabaseError,
+    DatabaseConnectionError,
+    DatabaseSchemaError
+)
+from shared_context_server.models import (
+    ValidationErrorResponse,
+    ValidationErrorDetail,
+    create_validation_error_response,
+    extract_pydantic_validation_errors
+)
 
-class ErrorCode(str, Enum):
-    """Standardized error codes for client handling."""
+### Error Severity Levels
 
-    # Authentication & Authorization (401-403)
-    AUTHENTICATION_FAILED = "AUTH_001"
-    TOKEN_EXPIRED = "AUTH_002"
-    TOKEN_INVALID = "AUTH_003"
-    INSUFFICIENT_PERMISSIONS = "AUTH_004"
+class ErrorSeverity(str, Enum):
+    """Error severity levels for LLM decision-making."""
+    WARNING = "warning"     # Non-critical, operation may continue
+    ERROR = "error"         # Operation failed, retry possible
+    CRITICAL = "critical"   # System issue, immediate attention required
 
-    # Resource Errors (404)
-    SESSION_NOT_FOUND = "RESOURCE_001"
-    MESSAGE_NOT_FOUND = "RESOURCE_002"
-    MEMORY_KEY_NOT_FOUND = "RESOURCE_003"
+### LLM-Optimized Error Response
 
-    # Validation Errors (400)
-    INVALID_INPUT = "VALIDATION_001"
-    INVALID_SESSION_ID = "VALIDATION_002"
-    INVALID_AGENT_ID = "VALIDATION_003"
-    MESSAGE_TOO_LARGE = "VALIDATION_004"
-
-    # Rate Limiting (429)
-    RATE_LIMIT_EXCEEDED = "RATE_001"
-
-    # Database Errors (500)
-    DATABASE_CONNECTION_FAILED = "DB_001"
-    DATABASE_LOCKED = "DB_002"
-    DATABASE_INTEGRITY_ERROR = "DB_003"
-
-    # MCP Protocol Errors (500)
-    MCP_TOOL_NOT_FOUND = "MCP_001"
-    MCP_TOOL_EXECUTION_FAILED = "MCP_002"
-    MCP_RESOURCE_UNAVAILABLE = "MCP_003"
-
-    # System Errors (500)
-    INTERNAL_ERROR = "SYSTEM_001"
-    SERVICE_UNAVAILABLE = "SYSTEM_002"
-    MEMORY_LIMIT_EXCEEDED = "SYSTEM_003"
-
-class SharedContextError(Exception):
-    """Base exception for all Shared Context errors."""
+class LLMOptimizedErrorResponse:
+    """Enhanced error response optimized for LLM understanding and recovery."""
 
     def __init__(
         self,
-        message: str,
-        code: ErrorCode,
-        status_code: int = 500,
-        details: Optional[Dict[str, Any]] = None
+        error: str,                              # Clear, actionable description
+        code: str,                               # Semantic error code
+        suggestions: list[str] | None = None,    # Specific next actions for LLMs
+        context: dict[str, Any] | None = None,   # Relevant context for decision-making
+        severity: ErrorSeverity = ErrorSeverity.ERROR,
+        recoverable: bool = True,                # Whether operation can be retried
+        retry_after: int | None = None,          # Seconds to wait before retry
+        related_resources: list[str] | None = None,  # Related MCP resources/tools
     ):
-        self.message = message
-        self.code = code
-        self.status_code = status_code
-        self.details = details or {}
-        super().__init__(message)
+        # Implementation details...
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API responses."""
-        return {
-            "error": {
-                "message": self.message,
-                "code": self.code.value,
-                "details": self.details
-            }
-        }
+### Database Errors
 
-class AuthenticationError(SharedContextError):
-    """Authentication failures."""
+class DatabaseError(Exception):
+    """Base class for database-related errors."""
+    pass
 
-    def __init__(self, message: str, code: ErrorCode = ErrorCode.AUTHENTICATION_FAILED):
-        super().__init__(message, code, status_code=401)
+class DatabaseConnectionError(DatabaseError):
+    """Database connection failures."""
+    pass
+
+class DatabaseSchemaError(DatabaseError):
+    """Database schema validation errors."""
+    pass
+
+### Validation Errors
+
+class ValidationErrorDetail(BaseModel):
+    """Detailed validation error information."""
+    field: str = Field(..., description="Field name that failed validation")
+    message: str = Field(..., description="Validation error message")
+    invalid_value: str | None = Field(None, description="The invalid value (if safe to expose)")
+    expected_type: str | None = Field(None, description="Expected type or format")
+
+class ValidationErrorResponse(BaseModel):
+    """Comprehensive validation error response."""
+    success: bool = False
+    error: str = "Validation failed"
+    code: str = "VALIDATION_ERROR"
+    details: list[ValidationErrorDetail] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class AuthorizationError(SharedContextError):
     """Authorization failures."""
@@ -197,6 +205,20 @@ import aiosqlite
 import asyncio
 from typing import Optional, List, Dict
 import logging
+from datetime import datetime, timezone
+
+# Import actual error handling functions from codebase
+from shared_context_server.database import (
+    get_db_connection,
+    DatabaseError,
+    DatabaseConnectionError
+)
+from shared_context_server.utils.llm_errors import (
+    create_llm_error_response,
+    create_input_validation_error,
+    create_resource_not_found_error,
+    create_system_error
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +238,7 @@ class DatabaseOperations:
 
         for attempt in range(max_retries):
             try:
-                async with self.get_connection() as conn:
+                async with get_db_connection() as conn:
                     cursor = await conn.execute(query, params)
                     await conn.commit()
                     return cursor
@@ -234,22 +256,19 @@ class DatabaseOperations:
                         await asyncio.sleep(retry_delay * (2 ** attempt))
                         continue
                     else:
-                        raise DatabaseError(
+                        return create_system_error(
                             "execute_query",
-                            e,
-                            ErrorCode.DATABASE_LOCKED
+                            "database",
+                            temporary=False,
+                            context={"error": "Database locked after retries"}
                         )
 
                 elif "no such table" in error_msg:
                     # Non-retryable error
-                    raise DatabaseError(
-                        "execute_query",
-                        e,
-                        ErrorCode.DATABASE_INTEGRITY_ERROR
-                    )
+                    raise DatabaseSchemaError(f"Schema error: {e}")
 
                 else:
-                    raise DatabaseError("execute_query", e)
+                    raise DatabaseConnectionError(f"Connection failed: {e}")
 
             except aiosqlite.IntegrityError as e:
                 # Constraint violations
@@ -286,16 +305,11 @@ class DatabaseOperations:
         """Get session with proper error handling."""
 
         try:
-            # Validate input first
-            if not self._is_valid_session_id(session_id):
-                raise ValidationError(
-                    "session_id",
-                    session_id,
-                    "Invalid format",
-                    ErrorCode.INVALID_SESSION_ID
-                )
+            # Validate input first using actual validation functions
+            from shared_context_server.models import validate_session_id
+            validate_session_id(session_id)  # Raises ValueError if invalid
 
-            async with self.get_connection() as conn:
+            async with get_db_connection() as conn:
                 cursor = await conn.execute(
                     "SELECT * FROM sessions WHERE id = ?",
                     (session_id,)
@@ -303,19 +317,26 @@ class DatabaseOperations:
                 row = await cursor.fetchone()
 
                 if not row:
-                    raise ResourceNotFoundError(
-                        "Session",
+                    return create_resource_not_found_error(
+                        "session",
                         session_id,
-                        ErrorCode.SESSION_NOT_FOUND
+                        suggestions=["Use create_session to create a new session"]
                     )
 
                 return dict(row)
 
-        except SharedContextError:
-            raise  # Re-raise our errors
+        except ValueError as e:
+            # Input validation error
+            return create_input_validation_error(
+                "session_id",
+                session_id,
+                "session_[16-char-hex] format"
+            )
+        except DatabaseError:
+            raise  # Re-raise database errors
         except Exception as e:
             logger.error(f"Failed to get session {session_id}: {e}")
-            raise DatabaseError("get_session", e)
+            return create_system_error("get_session", "database", temporary=True)
 
     def _is_valid_session_id(self, session_id: str) -> bool:
         """Validate session ID format."""
@@ -534,7 +555,7 @@ class CircuitBreaker:
         """Handle failed call."""
 
         self.failure_count += 1
-        self.last_failure_time = datetime.now()
+        self.last_failure_time = datetime.now(timezone.utc)
 
         if self.state == CircuitState.HALF_OPEN:
             # Recovery failed, reopen circuit
@@ -556,7 +577,7 @@ class CircuitBreaker:
             return True
 
         time_since_failure = (
-            datetime.now() - self.last_failure_time
+            datetime.now(timezone.utc) - self.last_failure_time
         ).total_seconds()
 
         return time_since_failure >= self.recovery_timeout
@@ -568,7 +589,7 @@ class CircuitBreaker:
             return 0
 
         time_since_failure = (
-            datetime.now() - self.last_failure_time
+            datetime.now(timezone.utc) - self.last_failure_time
         ).total_seconds()
 
         return max(0, self.recovery_timeout - int(time_since_failure))
@@ -585,13 +606,20 @@ class ServiceUnavailableError(SharedContextError):
         )
 
 # Usage example
+from shared_context_server.database import get_db_connection
+
 db_circuit = CircuitBreaker("database", failure_threshold=3)
 
 async def get_data_with_circuit_breaker(session_id: str):
-    return await db_circuit.call(
-        database.get_session,
-        session_id
-    )
+    async def _get_session():
+        async with get_db_connection() as conn:
+            cursor = await conn.execute(
+                "SELECT * FROM sessions WHERE id = ?",
+                (session_id,)
+            )
+            return await cursor.fetchone()
+
+    return await db_circuit.call(_get_session)
 ```
 
 ### Pattern 4: Error Recovery and Cleanup
@@ -599,52 +627,49 @@ async def get_data_with_circuit_breaker(session_id: str):
 ```python
 from contextlib import asynccontextmanager
 import asyncio
+from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TransactionManager:
     """Manage transactions with automatic rollback on error."""
+
+    def __init__(self):
+        from shared_context_server.database import get_database_manager
+        self.db_manager = get_database_manager()
 
     @asynccontextmanager
     async def transaction(self):
         """Context manager for database transactions."""
 
-        conn = None
         transaction_id = None
 
         try:
-            # Acquire connection
-            conn = await self.get_connection()
+            # Use proper async context manager for connection
+            async with self.db_manager.get_connection() as conn:
+                # Start transaction
+                await conn.execute("BEGIN")
+                transaction_id = self._generate_transaction_id()
 
-            # Start transaction
-            await conn.execute("BEGIN")
-            transaction_id = self._generate_transaction_id()
+                logger.debug(f"Transaction {transaction_id} started")
 
-            logger.debug(f"Transaction {transaction_id} started")
+                yield conn
 
-            yield conn
-
-            # Commit on success
-            await conn.execute("COMMIT")
-            logger.debug(f"Transaction {transaction_id} committed")
+                # Commit on success
+                await conn.execute("COMMIT")
+                logger.debug(f"Transaction {transaction_id} committed")
 
         except Exception as e:
-            # Rollback on any error
-            if conn:
-                try:
-                    await conn.execute("ROLLBACK")
-                    logger.warning(f"Transaction {transaction_id} rolled back")
-                except Exception as rollback_error:
-                    logger.error(
-                        f"Failed to rollback transaction {transaction_id}: "
-                        f"{rollback_error}"
-                    )
-
-            # Re-raise the original error
+            # Rollback handled automatically by connection context manager
+            if transaction_id:
+                logger.warning(f"Transaction {transaction_id} failed: {e}")
             raise
 
-        finally:
-            # Always release connection
-            if conn:
-                await self.release_connection(conn)
+    def _generate_transaction_id(self) -> str:
+        """Generate unique transaction ID."""
+        import uuid
+        return str(uuid.uuid4())[:8]
 
 class ResourceCleanup:
     """Ensure resources are cleaned up on error."""
@@ -695,8 +720,9 @@ class ResourceCleanup:
             # Mark session as requiring cleanup
             await self.mark_session_for_cleanup(session_id)
 
-            # Clear any cached data
-            await cache.invalidate(session_id)
+            # Clear any cached data using actual caching utility
+            from shared_context_server.utils.caching import clear_session_cache
+            await clear_session_cache(session_id)
 
             # Log for manual review
             logger.critical(
@@ -751,7 +777,8 @@ async def validation_error_handler(
             "error": {
                 "message": "Validation failed",
                 "code": ErrorCode.INVALID_INPUT.value,
-                "details": exc.errors()
+                "details": exc.errors(),
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         }
     )
@@ -764,7 +791,8 @@ async def global_error_handler(
     """Handle unexpected errors."""
 
     # Generate error ID for tracking
-    error_id = generate_error_id()
+    import uuid
+    error_id = str(uuid.uuid4())[:8]
 
     # Log full traceback
     logger.error(
@@ -780,7 +808,8 @@ async def global_error_handler(
             "error": {
                 "message": "An internal error occurred",
                 "code": ErrorCode.INTERNAL_ERROR.value,
-                "error_id": error_id
+                "error_id": error_id,
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         }
     )
@@ -809,15 +838,17 @@ from pythonjsonlogger import jsonlogger
 def setup_error_logging():
     """Configure comprehensive error logging."""
 
-    # Create formatters
+    # Create formatters with UTC timestamps
     json_formatter = jsonlogger.JsonFormatter(
-        '%(timestamp)s %(level)s %(name)s %(message)s',
-        timestamp=True
+        '%(asctime)s %(levelname)s %(name)s %(message)s'
     )
+
+    # Configure UTC timestamps for all log records
+    logging.Formatter.converter = lambda *args: datetime.now(timezone.utc).timetuple()
 
     # Error file handler (errors and above)
     error_handler = logging.handlers.RotatingFileHandler(
-        'errors.log',
+        'logs/errors.log',
         maxBytes=10_000_000,  # 10MB
         backupCount=5
     )
@@ -826,7 +857,7 @@ def setup_error_logging():
 
     # Warning file handler (warnings and above)
     warning_handler = logging.handlers.RotatingFileHandler(
-        'warnings.log',
+        'logs/warnings.log',
         maxBytes=10_000_000,
         backupCount=3
     )
@@ -851,12 +882,14 @@ class CriticalErrorHandler(logging.Handler):
 
         try:
             # Send alert (email, Slack, etc.)
-            await send_alert({
+            alert_data = {
                 "level": "CRITICAL",
                 "message": record.getMessage(),
                 "module": record.module,
-                "timestamp": record.created
-            })
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            # Implementation would integrate with actual alerting system
+            logger.critical(f"ALERT: {alert_data}")
         except Exception:
             # Don't let alert failure crash the app
             pass
@@ -884,7 +917,9 @@ async def test_database_retry_on_lock():
         ]
     )
 
-    with patch.object(db_ops, 'get_connection', return_value=mock_conn):
+    with patch.object(db_ops.db_manager, 'get_connection') as mock_get_conn:
+        mock_get_conn.return_value.__aenter__.return_value = mock_conn
+        mock_get_conn.return_value.__aexit__.return_value = None
         result = await db_ops.execute_with_retry(
             "SELECT 1",
             (),
@@ -1011,11 +1046,12 @@ async with get_connection() as conn:
 
 - FastAPI Error Handling: https://fastapi.tiangolo.com/tutorial/handling-errors/
 - Circuit Breaker Pattern: https://martinfowler.com/bliki/CircuitBreaker.html
-- Research findings: `/RESEARCH_FINDINGS_DEVELOPER.md`
-- Testing patterns: `/RESEARCH_FINDINGS_TESTER.md`
+- Core Architecture Guide: `.claude/tech-guides/core-architecture.md`
+- Framework Integration Guide: `.claude/tech-guides/framework-integration.md`
+- Data Validation Guide: `.claude/tech-guides/data-validation.md`
 
 ## Related Guides
 
 - Security & Authentication Guide - Auth error handling
 - Performance Optimization Guide - Timeout handling
-- Testing Patterns Guide - Error testing
+- Testing Guide - Error testing patterns

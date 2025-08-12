@@ -2,16 +2,16 @@
 
 ## Overview
 
-This guide defines the foundational architecture for the Shared Context MCP Server - a centralized memory store enabling multi-agent collaboration through the Model Context Protocol. The system implements a blackboard architecture pattern with modern privacy controls and MCP-native integration.
+This guide defines the foundational architecture for the Shared Context MCP Server - a collaborative agent workspace enabling seamless agent handoffs and shared context through the Model Context Protocol. The system implements a session-based collaboration pattern with MCP-native integration for real-time agent coordination.
 
 ## Architecture Principles
 
-### 1. Three-Tier Memory System
-Based on the blackboard pattern with privacy enhancements:
+### 1. Session-Based Collaboration System
+Designed for agent handoffs and collaborative workflows:
 
-- **Public Context**: Shared workspace visible to all agents
-- **Private Notes**: Agent-specific scratchpad for internal reasoning
-- **Agent Memory**: Persistent key-value store with TTL support
+- **Shared Sessions**: Isolated workspaces where agents build on each other's discoveries
+- **Agent Handoffs**: Clean transitions with context preservation between specialized agents
+- **Message Visibility**: Public/private/agent-only controls for granular information sharing
 
 ### 2. MCP-Native Design
 - Sessions exposed as MCP resources with URI scheme `session://{id}`
@@ -19,11 +19,11 @@ Based on the blackboard pattern with privacy enhancements:
 - Real-time updates via resource subscriptions
 - Standard MCP authentication and security
 
-### 3. Multi-Agent Collaboration
-- Concurrent access with SQLite WAL mode
-- Visibility controls for message privacy
-- Audit trail for all operations
-- Agent identity and permission management
+### 3. Collaborative Agent Workflows
+- **Real-time coordination**: <30ms message operations for smooth agent handoffs
+- **Session isolation**: Clean boundaries between different collaborative tasks
+- **Context search**: Sub-3ms fuzzy search for relevant prior discoveries
+- **Agent coordination**: Identity management and handoff tracking
 
 ## System Architecture
 
@@ -57,8 +57,8 @@ Based on the blackboard pattern with privacy enhancements:
 CREATE TABLE sessions (
     id TEXT PRIMARY KEY,
     purpose TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT (datetime('now', 'utc')),
+    updated_at TIMESTAMP DEFAULT (datetime('now', 'utc')),
     is_active BOOLEAN DEFAULT TRUE,
     created_by TEXT NOT NULL,  -- Agent who created the session
     metadata JSON,
@@ -76,7 +76,7 @@ CREATE TABLE messages (
     visibility TEXT DEFAULT 'public' CHECK (visibility IN ('public', 'private', 'agent_only')),
     message_type TEXT DEFAULT 'agent_response',
     metadata JSON,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timestamp TIMESTAMP DEFAULT (datetime('now', 'utc')),
     parent_message_id INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_message_id) REFERENCES messages(id)
@@ -90,8 +90,8 @@ CREATE TABLE agent_memory (
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     metadata JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT (datetime('now', 'utc')),
+    updated_at TIMESTAMP DEFAULT (datetime('now', 'utc')),
     expires_at TIMESTAMP,
     UNIQUE(agent_id, session_id, key),
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -100,7 +100,7 @@ CREATE TABLE agent_memory (
 -- Audit log table: Security and debugging
 CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timestamp TIMESTAMP DEFAULT (datetime('now', 'utc')),
     event_type TEXT NOT NULL,
     agent_id TEXT NOT NULL,
     session_id TEXT,
@@ -108,6 +108,25 @@ CREATE TABLE audit_log (
     action TEXT,
     result TEXT,
     metadata JSON
+);
+
+-- Secure tokens table: Authentication token management (PRP-006)
+CREATE TABLE secure_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_id TEXT UNIQUE NOT NULL,
+    encrypted_jwt BLOB NOT NULL,
+    agent_id TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT secure_tokens_agent_id_not_empty CHECK (length(trim(agent_id)) > 0),
+    CONSTRAINT secure_tokens_token_id_not_empty CHECK (length(trim(token_id)) > 0)
+);
+
+-- Schema versioning table
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
 );
 ```
 
@@ -126,6 +145,11 @@ CREATE INDEX idx_agent_memory_expiry ON agent_memory(expires_at) WHERE expires_a
 -- Audit trail
 CREATE INDEX idx_audit_agent ON audit_log(agent_id, timestamp);
 CREATE INDEX idx_audit_session ON audit_log(session_id, timestamp);
+
+-- Secure token lookups
+CREATE INDEX idx_token_id ON secure_tokens(token_id);
+CREATE INDEX idx_agent_expires ON secure_tokens(agent_id, expires_at);
+CREATE INDEX idx_expires_cleanup ON secure_tokens(expires_at);
 ```
 
 ### SQLite Configuration
@@ -133,12 +157,13 @@ CREATE INDEX idx_audit_session ON audit_log(session_id, timestamp);
 Critical settings for multi-agent concurrency:
 
 ```sql
-PRAGMA journal_mode = WAL;           -- Enable concurrent reads/writes
+PRAGMA foreign_keys = ON;            -- Critical: Enable foreign key constraints
+PRAGMA journal_mode = WAL;           -- Write-Ahead Logging for concurrency
 PRAGMA synchronous = NORMAL;         -- Balance performance and safety
-PRAGMA cache_size = -8000;           -- 8MB cache
+PRAGMA cache_size = -8000;           -- 8MB cache per connection
 PRAGMA temp_store = MEMORY;          -- Use memory for temp tables
-PRAGMA mmap_size = 30000000000;      -- Memory-mapped I/O
-PRAGMA busy_timeout = 5000;          -- 5 second timeout
+PRAGMA mmap_size = 268435456;        -- 256MB memory mapping (production safe)
+PRAGMA busy_timeout = 5000;          -- 5 second timeout for busy database
 PRAGMA optimize;                     -- Enable query optimizer
 ```
 
@@ -190,7 +215,7 @@ PRAGMA optimize;                     -- Enable query optimizer
     "session": {
       "id": "session_abc123",
       "purpose": "Plan authentication feature",
-      "created_at": "2025-01-15T10:30:00Z",
+      "created_at": "2025-01-15T10:30:00+00:00",
       "created_by": "claude-main"
     },
     "messages": [
@@ -198,13 +223,13 @@ PRAGMA optimize;                     -- Enable query optimizer
         "id": 1,
         "sender": "claude-main",
         "content": "Starting authentication feature planning",
-        "timestamp": "2025-01-15T10:30:00Z",
+        "timestamp": "2025-01-15T10:30:00+00:00",
         "visibility": "public",
         "metadata": {}
       }
     ],
     "message_count": 1,
-    "last_updated": "2025-01-15T10:30:00Z"
+    "last_updated": "2025-01-15T10:30:00+00:00"
   }
 }
 ```
@@ -310,6 +335,66 @@ PRAGMA optimize;                     -- Enable query optimizer
 - Excellent real-time collaboration support
 - Standard MCP tooling compatibility
 
+## Database Connection Patterns
+
+### DatabaseManager Usage
+
+The system uses a singleton `DatabaseManager` for all database operations:
+
+```python
+from shared_context_server.database import get_db_connection, utc_now, utc_timestamp
+
+# Standard connection pattern
+async with get_db_connection() as conn:
+    cursor = await conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+    result = await cursor.fetchone()
+```
+
+### UTC Timestamp Management
+
+Always use explicit UTC timestamps for multi-agent coordination:
+
+```python
+from datetime import datetime, timezone
+from shared_context_server.database import utc_now, utc_timestamp, parse_utc_timestamp
+
+# Creating timestamps
+current_time = utc_now()  # Returns datetime.now(timezone.utc)
+timestamp_str = utc_timestamp()  # Returns ISO string with +00:00
+
+# Parsing timestamps from database
+parsed_time = parse_utc_timestamp("2025-01-15T10:30:00+00:00")
+
+# Database insertions with UTC timestamps
+await conn.execute(
+    """
+    INSERT INTO messages (session_id, sender, content, timestamp)
+    VALUES (?, ?, ?, ?)
+    """,
+    (session_id, sender, content, utc_timestamp())
+)
+```
+
+### Connection Context Management
+
+The `DatabaseManager` handles:
+- WAL mode configuration for concurrency
+- Foreign key constraint enforcement
+- Connection pooling and lifecycle
+- PRAGMA optimization settings
+- Schema validation and recovery
+
+```python
+from shared_context_server.database import get_database_manager, initialize_database
+
+# Application startup
+await initialize_database()
+
+# Health checks
+db_manager = get_database_manager()
+stats = db_manager.get_stats()
+```
+
 ## Integration Patterns
 
 ### Agent Connection Flow
@@ -332,14 +417,15 @@ PRAGMA optimize;                     -- Enable query optimizer
 ## Performance Characteristics
 
 ### Target Performance
-- Session creation: < 10ms
-- Message insertion: < 20ms
-- Message retrieval (50 messages): < 30ms
-- Fuzzy search (1000 messages): < 100ms
-- Concurrent agents: 20+
+Target performance with optimizations (see Performance Optimization Guide for detailed metrics):
+- Session creation: < 10ms (target)
+- Message insertion: < 20ms (target)
+- Message retrieval (50 messages): < 30ms (target)
+- Fuzzy search (1000 messages): < 100ms (target with RapidFuzz)
+- Concurrent agents: 20+ (target)
 
 ### Optimization Strategies
-- Connection pooling with aiosqlitepool
+- Connection pooling with DatabaseManager singleton
 - RapidFuzz for fuzzy search (5-10x faster than difflib)
 - TTL caching for hot sessions
 - Cursor-based pagination
