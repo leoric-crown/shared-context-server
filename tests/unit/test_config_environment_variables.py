@@ -337,7 +337,7 @@ class TestDefaultValueApplication:
             assert config.mcp_server_version == "1.0.0"
             assert config.mcp_transport == "stdio"
             assert config.http_host == "localhost"
-            assert config.http_port == 8000
+            assert config.http_port == 23456
 
     def test_operational_config_defaults(self):
         """Test operational configuration default values."""
@@ -426,7 +426,7 @@ class TestDefaultValueApplication:
 
             # Default values should still be used
             assert config.database.database_busy_timeout == 5  # Default
-            assert config.mcp_server.http_port == 8000  # Default
+            assert config.mcp_server.http_port == 23456  # Default
             assert config.operational.enable_performance_monitoring is True  # Default
 
     def test_database_url_fallback_behavior(self):

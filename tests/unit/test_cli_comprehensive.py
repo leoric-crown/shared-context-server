@@ -294,7 +294,7 @@ class TestServerRunners:
             mock_server_class.return_value = mock_server
 
             with pytest.raises(Exception, match="HTTP error"):
-                await run_server_http("localhost", 8000)
+                await run_server_http("localhost", 23456)
 
 
 class TestMainFunction:
@@ -557,7 +557,7 @@ class TestCLIEdgeCases:
         mock_args = Mock()
         mock_args.transport = "stdio"
         mock_args.host = "localhost"
-        mock_args.port = 8000
+        mock_args.port = 23456
         mock_args.log_level = "INFO"
         mock_args.config = None
 
@@ -635,7 +635,7 @@ class TestRealWorldScenarios:
         mock_args = Mock()
         mock_args.transport = "stdio"
         mock_args.host = "localhost"
-        mock_args.port = 8000
+        mock_args.port = 23456
         mock_args.log_level = "INFO"
         mock_args.config = None
 
@@ -665,11 +665,11 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("claude", "localhost", 8000)
+        generate_client_config("claude", "localhost", 23456)
 
         captured = capsys.readouterr()
         assert "=== CLAUDE MCP Client Configuration ===" in captured.out
-        assert "http://localhost:8000/mcp/" in captured.out
+        assert "http://localhost:23456/mcp/" in captured.out
         assert "claude mcp add-json" in captured.out
 
     def test_generate_client_config_cursor(self, capsys):
@@ -798,7 +798,7 @@ class TestProductionServerClass:
             patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
-            await server.start_http_server("localhost", 8000)
+            await server.start_http_server("localhost", 23456)
 
 
 class TestSignalHandlers:

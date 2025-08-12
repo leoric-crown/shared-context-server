@@ -105,7 +105,7 @@ class TestProductionServerErrorPaths:
             ),
             pytest.raises(SystemExit),
         ):
-            await server.start_http_server("localhost", 8000)
+            await server.start_http_server("localhost", 23456)
 
     @pytest.mark.asyncio
     async def test_http_server_general_exception_path(self):
@@ -125,7 +125,7 @@ class TestProductionServerErrorPaths:
             ),
             pytest.raises(SystemExit),
         ):
-            await server.start_http_server("localhost", 8000)
+            await server.start_http_server("localhost", 23456)
 
 
 class TestRunServerErrorPaths:
@@ -157,7 +157,7 @@ class TestRunServerErrorPaths:
             patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
-            await run_server_http("localhost", 8000)
+            await run_server_http("localhost", 23456)
 
 
 class TestShowStatusFunction:
@@ -176,7 +176,7 @@ class TestShowStatusFunction:
         with (
             patch("requests.get", return_value=mock_response),
         ):
-            show_status("localhost", 8000)
+            show_status("localhost", 23456)
 
             captured = capsys.readouterr()
             assert "✅ Server is running" in captured.out
@@ -195,7 +195,7 @@ class TestShowStatusFunction:
         with (
             patch("requests.get", return_value=mock_response),
         ):
-            show_status("localhost", 8000)
+            show_status("localhost", 23456)
 
             captured = capsys.readouterr()
             assert "❌ Server health check failed: 500" in captured.out
@@ -213,7 +213,7 @@ class TestShowStatusFunction:
                 side_effect=requests.exceptions.ConnectionError("Connection failed"),
             ),
         ):
-            show_status("localhost", 8000)
+            show_status("localhost", 23456)
 
             captured = capsys.readouterr()
             assert "❌ Cannot connect to server" in captured.out
@@ -226,7 +226,7 @@ class TestShowStatusFunction:
         with (
             patch("requests.get", side_effect=Exception("General error")),
         ):
-            show_status("localhost", 8000)
+            show_status("localhost", 23456)
 
             captured = capsys.readouterr()
             assert "❌ Error checking server status" in captured.out
@@ -250,7 +250,7 @@ class TestShowStatusFunction:
         with (
             patch("requests.get", side_effect=mock_get_side_effect),
         ):
-            show_status("localhost", 8000)
+            show_status("localhost", 23456)
 
             captured = capsys.readouterr()
             assert "✅ Server is running" in captured.out

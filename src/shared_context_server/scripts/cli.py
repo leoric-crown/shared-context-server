@@ -130,7 +130,7 @@ Transport Options:
 
 Examples:
   shared-context-server                          # Start with STDIO (default)
-  shared-context-server --transport http        # Start HTTP server on localhost:8000
+  shared-context-server --transport http        # Start HTTP server on localhost:23456
   shared-context-server --transport http --host 0.0.0.0 --port 9000  # Custom HTTP config
 
 Claude Desktop Integration:
@@ -153,7 +153,7 @@ Claude Desktop Integration:
     except Exception:
         # Fallback to hardcoded defaults if config loading fails
         default_host = "localhost"
-        default_port = 8000
+        default_port = 23456
 
     parser.add_argument(
         "--host",
@@ -204,7 +204,7 @@ Claude Desktop Integration:
         default_client_host = os.getenv("CLIENT_HOST") or os.getenv(
             "MCP_CLIENT_HOST", "localhost"
         )
-        default_client_port = int(os.getenv("HTTP_PORT", "8000"))
+        default_client_port = int(os.getenv("HTTP_PORT", "23456"))
 
     client_parser.add_argument(
         "--host",
@@ -352,7 +352,7 @@ def show_status(host: str | None = None, port: int | None = None) -> None:
                 or os.getenv("CLIENT_HOST")
                 or os.getenv("MCP_CLIENT_HOST", "localhost")
             )
-            port = port or int(os.getenv("HTTP_PORT", "8000"))
+            port = port or int(os.getenv("HTTP_PORT", "23456"))
 
     try:
         # Check health endpoint
