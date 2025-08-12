@@ -4,13 +4,11 @@ name: Build and Publish Docker Image
 # - Git tags starting with 'v' (e.g., v1.0.0, v1.2.3-beta)
 # - GitHub releases
 # - Manual dispatch
-# - Pushes to main branch (for latest tag)
+# Note: Removed main branch trigger to avoid publishing on every commit
 on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
   release:
     types: [published]
   workflow_dispatch:

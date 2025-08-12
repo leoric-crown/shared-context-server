@@ -191,10 +191,20 @@ def get_auth_manager() -> JWTAuthenticationManager:
     return _auth_manager
 
 
-# For backward compatibility, make auth_manager a function call
-def auth_manager() -> JWTAuthenticationManager:
-    """Get the global authentication manager (backward compatibility)."""
-    return get_auth_manager()
+class AuthManagerProxy:
+    """Proxy for auth_manager that supports both attribute access and function calls."""
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to the actual auth manager."""
+        return getattr(get_auth_manager(), name)
+
+    def __call__(self) -> JWTAuthenticationManager:
+        """Allow auth_manager() to return the auth manager."""
+        return get_auth_manager()
+
+
+# Global auth_manager that works both as object and function
+auth_manager = AuthManagerProxy()
 
 
 def reset_auth_manager() -> None:
@@ -278,7 +288,7 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
                 }
 
             # Validate the resolved JWT
-            jwt_result = auth_manager().validate_token(jwt_token)
+            jwt_result = auth_manager.validate_token(jwt_token)
             if jwt_result["valid"]:
                 logger.info(
                     f"Protected token validated for agent {jwt_result['agent_id']}"
@@ -300,7 +310,7 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
                 "authentication_error": f"JWT validation failed: {jwt_result.get('error')}"
             }
         # Original JWT token validation (for backward compatibility)
-        jwt_result = auth_manager().validate_token(auth_token)
+        jwt_result = auth_manager.validate_token(auth_token)
         if jwt_result["valid"]:
             logger.info(f"JWT token validated for agent {jwt_result['agent_id']}")
             return {
@@ -503,11 +513,11 @@ async def generate_agent_jwt_token(
     if requested_permissions is None:
         requested_permissions = ["read", "write"]
 
-    granted_permissions = auth_manager().determine_permissions(
+    granted_permissions = auth_manager.determine_permissions(
         agent_type, requested_permissions
     )
 
-    token = auth_manager().generate_token(agent_id, agent_type, granted_permissions)
+    token = auth_manager.generate_token(agent_id, agent_type, granted_permissions)
 
     await audit_log_auth_event(
         "jwt_token_generated",
@@ -520,7 +530,7 @@ async def generate_agent_jwt_token(
         },
     )
 
-    return token
+    return str(token)
 
 
 async def validate_agent_context_or_error(
@@ -765,7 +775,7 @@ class SecureTokenManager:
                 jwt_token = self.fernet.decrypt(row[0]).decode()
 
                 # Parse JWT to extract agent information
-                jwt_result = auth_manager().validate_token(jwt_token)
+                jwt_result = auth_manager.validate_token(jwt_token)
                 if jwt_result.get("agent_id"):
                     # Return agent info for recovery, regardless of expiration
                     return {
