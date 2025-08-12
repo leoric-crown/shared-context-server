@@ -246,7 +246,7 @@ async def authenticate_agent(
         )
 
         # Get granted permissions for response
-        granted_permissions = auth_manager.determine_permissions(
+        granted_permissions = auth_manager().determine_permissions(
             agent_type, requested_permissions
         )
 
