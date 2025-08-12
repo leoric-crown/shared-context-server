@@ -9,6 +9,7 @@ env:
   DATABASE_URL: "sqlite:///:memory:"
   ENVIRONMENT: "testing"
   JWT_SECRET_KEY: "test-jwt-secret-key-for-ci-only-not-for-production"
+  JWT_ENCRYPTION_KEY: "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
 
 jobs:
   test:

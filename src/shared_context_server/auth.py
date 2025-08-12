@@ -179,38 +179,37 @@ class JWTAuthenticationManager:
         return granted_permissions
 
 
-# Global authentication manager (lazy-initialized for testing)
-_auth_manager: JWTAuthenticationManager | None = None
+# Global auth manager with lazy initialization
+class LazyAuthManager:
+    """Lazy-initialized auth manager that behaves like the actual manager."""
+
+    def __init__(self) -> None:
+        self._instance: JWTAuthenticationManager | None = None
+
+    def _get_instance(self) -> JWTAuthenticationManager:
+        if self._instance is None:
+            self._instance = JWTAuthenticationManager()
+        return self._instance
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._get_instance(), name)
+
+    def reset(self) -> None:
+        """Reset the auth manager instance (for testing)."""
+        self._instance = None
+
+
+auth_manager = LazyAuthManager()
 
 
 def get_auth_manager() -> JWTAuthenticationManager:
-    """Get the global authentication manager, initializing if needed."""
-    global _auth_manager
-    if _auth_manager is None:
-        _auth_manager = JWTAuthenticationManager()
-    return _auth_manager
-
-
-class AuthManagerProxy:
-    """Proxy for auth_manager that supports both attribute access and function calls."""
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate attribute access to the actual auth manager."""
-        return getattr(get_auth_manager(), name)
-
-    def __call__(self) -> JWTAuthenticationManager:
-        """Allow auth_manager() to return the auth manager."""
-        return get_auth_manager()
-
-
-# Global auth_manager that works both as object and function
-auth_manager = AuthManagerProxy()
+    """Get the global auth manager, initializing lazily."""
+    return auth_manager._get_instance()
 
 
 def reset_auth_manager() -> None:
     """Reset the global auth manager (for testing)."""
-    global _auth_manager
-    _auth_manager = None
+    auth_manager.reset()
 
 
 def require_permission(permission: str) -> Callable[[Callable], Callable]:

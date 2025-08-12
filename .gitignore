@@ -27,6 +27,7 @@ dev_*.db
 .pytest_cache/
 .coverage
 htmlcov/
+.coverage*.wg*
 
 # IDE
 .vscode/
