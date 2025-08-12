@@ -68,7 +68,11 @@ class TestValidateJWTTokenParameter:
 
         result = await validate_jwt_token_parameter("invalid.jwt.token")
 
-        assert result is None
+        # Should return authentication error marker instead of None
+        assert result is not None
+        assert "authentication_error" in result
+        assert "JWT authentication failed" in result["authentication_error"]
+        assert "Token expired" in result["authentication_error"]
 
     async def test_validate_jwt_token_parameter_none(self, mock_auth_manager):
         """Test JWT token parameter validation with None token."""

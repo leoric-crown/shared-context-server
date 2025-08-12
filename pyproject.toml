@@ -1,6 +1,6 @@
 [project]
 name = "shared-context-server"
-version = "1.0.0"
+version = "1.0.1"
 description = "Shared Context MCP Server for multi-agent collaboration"
 authors = [
     {name = "Shared Context Server Team"}

@@ -126,7 +126,7 @@ class DatabaseManager:
         try:
             async with self.get_connection() as conn:
                 await self._ensure_schema_applied(conn)
-                await self._validate_schema(conn)
+                await self._validate_schema_with_recovery(conn)
 
             self.is_initialized = True
             logger.info(f"Database initialized successfully: {self.database_path}")
@@ -364,6 +364,77 @@ class DatabaseManager:
         except Exception as e:
             logger.exception("Schema validation failed")
             raise DatabaseSchemaError(f"Schema validation failed: {e}") from e
+
+    async def _validate_schema_with_recovery(self, conn: aiosqlite.Connection) -> None:
+        """
+        Validate database schema with automatic recovery for missing tables.
+
+        This method attempts to fix schema issues by recreating missing tables,
+        which can happen during parallel test execution or interrupted initialization.
+
+        Args:
+            conn: Database connection
+
+        Raises:
+            DatabaseSchemaError: If schema validation or recovery fails
+        """
+        try:
+            # First try normal validation
+            await self._validate_schema(conn)
+            return
+        except DatabaseSchemaError as e:
+            # If validation fails, check if it's due to missing tables
+            error_msg = str(e)
+            if "secure_tokens" in error_msg and "not found" in error_msg:
+                logger.warning("secure_tokens table missing, attempting recovery...")
+                try:
+                    # Recreate the secure_tokens table specifically
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS secure_tokens (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            token_id TEXT UNIQUE NOT NULL,
+                            encrypted_jwt BLOB NOT NULL,
+                            agent_id TEXT NOT NULL,
+                            expires_at TIMESTAMP NOT NULL,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                            -- Ensure data consistency for concurrent access
+                            CONSTRAINT secure_tokens_agent_id_not_empty CHECK (length(trim(agent_id)) > 0),
+                            CONSTRAINT secure_tokens_token_id_not_empty CHECK (length(trim(token_id)) > 0)
+                        )
+                    """)
+
+                    # Create indexes
+                    await conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_token_id ON secure_tokens(token_id)"
+                    )
+                    await conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_agent_expires ON secure_tokens(agent_id, expires_at)"
+                    )
+                    await conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_expires_cleanup ON secure_tokens(expires_at)"
+                    )
+
+                    # Update schema version if needed
+                    await conn.execute("""
+                        INSERT OR REPLACE INTO schema_version (version, description)
+                        VALUES (3, 'PRP-006: Added secure_tokens table with Fernet encryption for JWT hiding (recovered)')
+                    """)
+
+                    await conn.commit()
+                    logger.info("Successfully recovered secure_tokens table")
+
+                    # Try validation again
+                    await self._validate_schema(conn)
+                    return
+                except Exception as recovery_error:
+                    logger.exception("Failed to recover secure_tokens table")
+                    raise DatabaseSchemaError(
+                        f"Schema recovery failed: {recovery_error}"
+                    ) from recovery_error
+            else:
+                # Re-raise original error if it's not the secure_tokens issue
+                raise
 
     async def _validate_pragmas(self, conn: aiosqlite.Connection) -> None:
         """

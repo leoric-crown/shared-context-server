@@ -36,7 +36,7 @@ from starlette.responses import JSONResponse
 from .auth import (
     audit_log_auth_event,
     auth_manager,
-    extract_agent_context,
+    validate_agent_context_or_error,
 )
 from .database import get_db_connection, initialize_database
 from .models import (
@@ -318,31 +318,98 @@ async def refresh_token(
 
         # Extract agent context from current token
         agent_context = await extract_agent_context(ctx, current_token)
+
+        # Handle case where token is expired/invalid but can be used for recovery
         if not agent_context.get("authenticated"):
+            # Check if this is an authentication error (expired token) that we can recover from
+            if agent_context.get("authentication_error") and agent_context.get(
+                "recovery_token"
+            ):
+                logger.info(
+                    f"Attempting recovery refresh for expired token: {current_token[:12]}..."
+                )
+
+                # Try to extract agent info for recovery
+                token_manager = get_secure_token_manager()
+                recovery_info = await token_manager.extract_agent_info_for_recovery(
+                    current_token
+                )
+
+                if recovery_info:
+                    agent_id = recovery_info["agent_id"]
+                    agent_type = recovery_info["agent_type"]
+                    logger.info(
+                        f"Successfully extracted agent info for recovery: {agent_id}"
+                    )
+
+                    # Generate new token for the recovered agent
+                    from .auth import generate_agent_jwt_token
+
+                    new_jwt = await generate_agent_jwt_token(
+                        agent_id,
+                        agent_type,
+                        recovery_info.get("permissions", ["read", "write"]),
+                    )
+                    new_token = await token_manager.create_protected_token(
+                        new_jwt, agent_id
+                    )
+
+                    # Log successful recovery refresh
+                    await audit_log_auth_event(
+                        "token_recovered",
+                        agent_id,
+                        None,
+                        {
+                            "old_token_prefix": current_token[:8],
+                            "new_token_prefix": new_token[:8],
+                            "recovery_method": "expired_token_refresh",
+                            "agent_type": agent_type,
+                        },
+                    )
+
+                    return {
+                        "success": True,
+                        "token": new_token,
+                        "expires_in": 3600,  # 1 hour
+                        "expires_at": (
+                            datetime.now(timezone.utc) + timedelta(hours=1)
+                        ).isoformat(),
+                        "token_type": "Protected",
+                        "token_format": "sct_*",
+                        "issued_at": datetime.now(timezone.utc).isoformat(),
+                        "recovery_performed": True,
+                        "original_agent_id": agent_id,
+                    }
+
+            # If recovery failed or this wasn't an authentication error, return error
             await audit_log_auth_event(
                 "token_refresh_failed",
                 "unknown",
                 None,
                 {
-                    "error": "invalid_current_token",
+                    "error": "token_not_recoverable",
                     "token_prefix": current_token[:8] if current_token else "none",
+                    "error_type": agent_context.get("authentication_error", "unknown"),
                 },
             )
             return create_llm_error_response(
-                error="Invalid or expired token provided",
-                code="INVALID_TOKEN",
+                error="Token cannot be refreshed",
+                code="TOKEN_REFRESH_FAILED",
                 suggestions=[
-                    "Ensure the token is a valid protected token (sct_*)",
-                    "Check that the token has not expired",
-                    "Authenticate again if the token is no longer valid",
+                    "Token may be permanently invalid or corrupted",
+                    "Use authenticate_agent to get a completely new token",
+                    "Ensure you're using the correct protected token format (sct_*)",
                 ],
                 context={
                     "token_format": "sct_*",
                     "current_token_prefix": current_token[:8]
                     if current_token
                     else "none",
+                    "error_details": agent_context.get(
+                        "authentication_error", "Unknown error"
+                    ),
                 },
-                severity=ErrorSeverity.WARNING,
+                severity=ErrorSeverity.ERROR,
             )
 
         agent_id = agent_context["agent_id"]
@@ -564,8 +631,16 @@ async def add_message(
     """
 
     try:
-        # Extract enhanced agent context (includes JWT authentication via parameter)
-        agent_context = await extract_agent_context(ctx, auth_token)
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
         agent_id = agent_context["agent_id"]
         agent_type = agent_context["agent_type"]
 
@@ -670,16 +745,27 @@ async def get_messages(
     visibility_filter: str | None = Field(
         default=None, description="Filter by visibility: public, private, agent_only"
     ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
+    ),
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.
     """
 
     try:
-        from .auth import get_auth_info
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
 
-        auth_info = get_auth_info(ctx)
-        agent_id = auth_info.agent_id
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
 
         # Phase 4: Try cache first for frequently accessed message lists
         cache_context = {
@@ -711,7 +797,6 @@ async def get_messages(
             params: list[Any] = [session_id]
 
             # Agent-specific visibility filtering
-            agent_context = await extract_agent_context(ctx)
             has_admin_permission = "admin" in agent_context.get("permissions", [])
 
             if visibility_filter:
@@ -739,7 +824,8 @@ async def get_messages(
                 if has_admin_permission:
                     visibility_conditions.append("visibility = 'admin_only'")
 
-                where_conditions.append(f"({' OR '.join(visibility_conditions)})")
+                visibility_clause = f"({' OR '.join(visibility_conditions)})"
+                where_conditions.append(visibility_clause)
 
             # First, get total count for pagination
             count_query = f"""
@@ -805,6 +891,10 @@ async def search_context(
     search_scope: Literal["all", "public", "private"] = Field(
         default="all", description="Search scope: all, public, private"
     ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
 ) -> dict[str, Any]:
     """
     Fuzzy search messages using RapidFuzz for 5-10x performance improvement.
@@ -815,7 +905,17 @@ async def search_context(
 
     try:
         start_time = time.time()
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
 
         # Phase 4: Try cache first for search results (10-minute TTL due to compute cost)
         cache_key = generate_search_cache_key(
@@ -864,13 +964,8 @@ async def search_context(
                 where_conditions.append("visibility = 'private' AND sender = ?")
                 params.append(agent_id)
             else:  # all accessible messages
-                # Check if agent has admin permissions
-                auth_info = getattr(ctx, "_auth_info", None)
-                has_admin_permission = (
-                    auth_info
-                    and hasattr(auth_info, "permissions")
-                    and "admin" in auth_info.permissions
-                )
+                # Check if agent has admin permissions using extracted agent context
+                has_admin_permission = "admin" in agent_context.get("permissions", [])
 
                 if has_admin_permission:
                     where_conditions.append("""
@@ -1159,11 +1254,9 @@ async def set_memory(
     session_id: str | None = Field(
         default=None, description="Session scope (null for global memory)"
     ),
-    expires_in: int | None = Field(
+    expires_in: int | str | None = Field(
         default=None,
         description="TTL in seconds (null for permanent)",
-        ge=1,
-        le=86400 * 365,  # Max 1 year
     ),
     metadata: Any = Field(
         default=None,
@@ -1172,6 +1265,10 @@ async def set_memory(
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"
+    ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
     ),
 ) -> dict[str, Any]:
     """
@@ -1219,15 +1316,65 @@ async def set_memory(
         if "\n" in key or "\t" in key or " " in key:
             return ERROR_MESSAGE_PATTERNS["memory_key_invalid"](key)  # type: ignore[no-any-return,operator]
 
-        # Use actual agent_id from context if available, otherwise derive from session
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
+
+        # Validate and process expires_in parameter
+        expires_in_seconds = None
+        if expires_in is not None:
+            try:
+                # Convert string to int if needed
+                if isinstance(expires_in, str):
+                    expires_in_seconds = int(expires_in)
+                else:
+                    expires_in_seconds = expires_in
+
+                # Validate range - treat 0 as "no expiration"
+                if expires_in_seconds < 0:
+                    return create_llm_error_response(
+                        error="expires_in cannot be negative",
+                        code="INVALID_TTL_VALUE",
+                        suggestions=[
+                            "Use 0 for no expiration or positive integer for TTL",
+                            "Example: expires_in: 3600 (1 hour)",
+                        ],
+                    )
+
+                if expires_in_seconds > 86400 * 365:  # Max 1 year
+                    return create_llm_error_response(
+                        error="expires_in cannot exceed 1 year (31536000 seconds)",
+                        code="INVALID_TTL_VALUE",
+                        suggestions=[
+                            "Use a smaller TTL value",
+                            "Maximum is 31536000 seconds (1 year)",
+                        ],
+                    )
+
+            except (ValueError, TypeError) as e:
+                return create_llm_error_response(
+                    error=f"Invalid expires_in format: {str(e)}",
+                    code="INVALID_TTL_FORMAT",
+                    suggestions=[
+                        "Use an integer value for expires_in",
+                        "Example: expires_in: 3600 (for 1 hour)",
+                    ],
+                )
 
         # Calculate timestamps
         now_timestamp = datetime.now(timezone.utc)
         created_at_timestamp = now_timestamp.timestamp()
         expires_at = None
-        if expires_in:
-            expires_at = created_at_timestamp + expires_in
+        if expires_in_seconds and expires_in_seconds > 0:
+            expires_at = created_at_timestamp + expires_in_seconds
 
         # Serialize value to JSON with error handling
         try:
@@ -1346,14 +1493,27 @@ async def get_memory(
     session_id: str | None = Field(
         default=None, description="Session scope (null for global memory)"
     ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
 ) -> dict[str, Any]:
     """
     Retrieve value from agent's private memory with automatic cleanup.
     """
 
     try:
-        # Use actual agent_id from context if available, otherwise derive from session
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
@@ -1370,6 +1530,8 @@ async def get_memory(
             )
 
             # Retrieve memory entry
+            # Note: Global memory (session_id IS NULL) is only accessible when session_id parameter is NULL
+            # This ensures session-scoped calls don't accidentally access global memory
             cursor = await conn.execute(
                 """
                 SELECT key, value, metadata, created_at, updated_at, expires_at
@@ -1428,14 +1590,27 @@ async def list_memory(
     ),
     prefix: str | None = Field(default=None, description="Key prefix filter"),
     limit: int = Field(default=50, ge=1, le=200),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
 ) -> dict[str, Any]:
     """
     List agent's memory entries with filtering options.
     """
 
     try:
-        # Use actual agent_id from context if available, otherwise derive from session
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
@@ -1525,8 +1700,16 @@ async def get_performance_metrics(
     """
 
     try:
-        # Extract enhanced agent context (includes JWT authentication via parameter)
-        agent_context = await extract_agent_context(ctx, auth_token)
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
         agent_id = agent_context["agent_id"]
 
         # Check permission for admin access

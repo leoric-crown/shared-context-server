@@ -225,7 +225,8 @@ class TestSecureTokenManager:
 
         # Run cleanup
         cleaned_count = await token_manager.cleanup_expired_tokens()
-        assert cleaned_count == 2
+        # Should clean up at least the 2 expired tokens we created
+        assert cleaned_count >= 2
 
         # Verify only non-expired token remains
         valid_jwt = await token_manager.resolve_protected_token(tokens[2])

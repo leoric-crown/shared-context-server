@@ -238,6 +238,12 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
         return None
 
     try:
+        # First, validate token format to reject malformed tokens explicitly
+        if not _is_valid_token_format(auth_token):
+            logger.warning(f"Malformed token format rejected: {auth_token}")
+            # Return a special error marker instead of None to prevent fallback
+            return {"validation_error": f"Malformed token format: {auth_token}"}
+
         # Check if this is a protected token (sct_*)
         if auth_token.startswith("sct_"):
             # Resolve protected token to JWT
@@ -246,7 +252,10 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
 
             if not jwt_token:
                 logger.warning(f"Invalid or expired protected token: {auth_token}")
-                return None
+                # Return authentication error marker instead of None to prevent fallback
+                return {
+                    "authentication_error": f"Protected token invalid or expired: {auth_token[:12]}..."
+                }
 
             # Validate the resolved JWT
             jwt_result = auth_manager.validate_token(jwt_token)
@@ -266,7 +275,10 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
             logger.warning(
                 f"Invalid JWT from protected token: {jwt_result.get('error')}"
             )
-            return None
+            # Return authentication error marker for expired/invalid JWT
+            return {
+                "authentication_error": f"JWT validation failed: {jwt_result.get('error')}"
+            }
         # Original JWT token validation (for backward compatibility)
         jwt_result = auth_manager.validate_token(auth_token)
         if jwt_result["valid"]:
@@ -280,10 +292,41 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
                 "token_id": jwt_result.get("token_id"),
             }
         logger.warning(f"Invalid JWT token provided: {jwt_result.get('error')}")
-        return None
+        # Return authentication error marker for invalid/expired JWT tokens
+        return {
+            "authentication_error": f"JWT authentication failed: {jwt_result.get('error')}"
+        }
     except Exception:
         logger.exception("Error validating JWT token parameter")
         return None
+
+
+def _is_valid_token_format(token: str) -> bool:
+    """
+    Validate basic token format to reject malformed tokens.
+
+    Valid formats:
+    - Protected tokens: sct_[uuid] (e.g., sct_3361ce9d-8d6f-47f5-9a1e-d3ae5149fdb8)
+    - JWT tokens: Standard JWT format (3 base64 parts separated by dots)
+    """
+    import re
+
+    # Protected token format (sct_ followed by UUID)
+    if token.startswith("sct_"):
+        # UUID pattern: 8-4-4-4-12 hexadecimal digits
+        uuid_pattern = (
+            r"^sct_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        )
+        return bool(re.match(uuid_pattern, token))
+
+    # JWT format: header.payload.signature (3 base64url-encoded parts)
+    jwt_parts = token.split(".")
+    if len(jwt_parts) != 3:
+        return False
+
+    # Basic base64url character set validation (allow padding)
+    base64url_pattern = r"^[A-Za-z0-9_-]+={0,2}$"
+    return all(re.match(base64url_pattern, part) for part in jwt_parts)
 
 
 def validate_api_key_header(ctx: Context) -> bool:
@@ -337,6 +380,34 @@ async def extract_agent_context(
     if auth_token:
         jwt_context = await validate_jwt_token_parameter(auth_token)
         if jwt_context:
+            # Check if this is a validation error (malformed token)
+            if "validation_error" in jwt_context:
+                # Return the error directly - don't fall back to generic agent
+                return {
+                    "agent_id": "validation_failed",
+                    "agent_type": "invalid",
+                    "authenticated": False,
+                    "auth_method": "failed",
+                    "permissions": [],
+                    "token_id": None,
+                    "api_key_authenticated": api_key_valid,
+                    "validation_error": jwt_context["validation_error"],
+                }
+
+            # Check if this is an authentication error (expired/invalid token)
+            if "authentication_error" in jwt_context:
+                # Return the error directly - don't fall back to generic agent
+                return {
+                    "agent_id": "authentication_failed",
+                    "agent_type": "expired",
+                    "authenticated": False,
+                    "auth_method": "failed",
+                    "permissions": [],
+                    "token_id": None,
+                    "api_key_authenticated": api_key_valid,
+                    "authentication_error": jwt_context["authentication_error"],
+                    "recovery_token": auth_token,  # Include original token for recovery
+                }
             # Enhanced context with API key validation status
             jwt_context["api_key_authenticated"] = api_key_valid
             return jwt_context
@@ -430,6 +501,63 @@ async def generate_agent_jwt_token(
     )
 
     return token
+
+
+async def validate_agent_context_or_error(
+    ctx: Context, auth_token: str | None
+) -> dict[str, Any]:
+    """
+    Extract and validate agent context, returning error response if validation fails.
+
+    This is a common helper function that extracts agent context and handles
+    token validation errors consistently across all MCP tools.
+
+    Args:
+        ctx: FastMCP context
+        auth_token: Optional authentication token
+
+    Returns:
+        dict: Either agent context or error response structure
+    """
+    agent_context = await extract_agent_context(ctx, auth_token)
+
+    # Check for token validation errors
+    if "validation_error" in agent_context:
+        from .utils.llm_errors import ErrorSeverity, create_llm_error_response
+
+        return create_llm_error_response(
+            error="Invalid authentication token format",
+            code="INVALID_TOKEN_FORMAT",
+            suggestions=[
+                "Ensure token follows the correct format (sct_* for protected tokens or valid JWT)",
+                "Use authenticate_agent to get a valid token",
+                "Check that the token is not corrupted or malformed",
+            ],
+            context={"validation_error": agent_context["validation_error"]},
+            severity=ErrorSeverity.ERROR,
+        )
+
+    # Check for authentication errors (expired/invalid tokens)
+    if "authentication_error" in agent_context:
+        from .utils.llm_errors import ErrorSeverity, create_llm_error_response
+
+        return create_llm_error_response(
+            error="Authentication token invalid or expired",
+            code="TOKEN_AUTHENTICATION_FAILED",
+            suggestions=[
+                "Use refresh_token with your current token to get a new one",
+                "No need to remember your agent_id - the system will extract it",
+                "If refresh fails, use authenticate_agent to get a new token",
+            ],
+            context={
+                "authentication_error": agent_context["authentication_error"],
+                "recovery_method": "refresh_token",
+                "recovery_token": agent_context.get("recovery_token"),
+            },
+            severity=ErrorSeverity.ERROR,
+        )
+
+    return agent_context
 
 
 # ============================================================================
@@ -578,6 +706,66 @@ class SecureTokenManager:
                 return self.fernet.decrypt(row[0]).decode()
             except Exception:
                 logger.warning(f"Failed to decrypt protected token {token_id}")
+                return None
+
+    async def extract_agent_info_for_recovery(
+        self, token_id: str
+    ) -> dict[str, Any] | None:
+        """
+        Extract agent information from expired/invalid tokens for recovery purposes.
+
+        This method can retrieve agent info even from expired tokens to enable
+        seamless token refresh without requiring agent_id input.
+
+        Args:
+            token_id: Protected token ID to extract info from
+
+        Returns:
+            Dictionary with agent_id, agent_type, etc. or None if token not found
+        """
+        if not token_id.startswith("sct_"):
+            return None
+
+        async with get_db_connection() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT encrypted_jwt, agent_id, expires_at FROM secure_tokens
+                WHERE token_id = ?
+                """,
+                (token_id,),
+            )
+
+            row = await cursor.fetchone()
+            if not row:
+                logger.warning(f"Protected token not found for recovery: {token_id}")
+                return None
+
+            # Try to decrypt and parse JWT even if expired
+            try:
+                jwt_token = self.fernet.decrypt(row[0]).decode()
+
+                # Parse JWT to extract agent information
+                jwt_result = auth_manager.validate_token(jwt_token)
+                if jwt_result.get("agent_id"):
+                    # Return agent info for recovery, regardless of expiration
+                    return {
+                        "agent_id": jwt_result["agent_id"],
+                        "agent_type": jwt_result.get("agent_type", "unknown"),
+                        "permissions": jwt_result.get("permissions", ["read"]),
+                        "stored_agent_id": row[1],  # Cross-check with stored value
+                        "token_expired": datetime.fromisoformat(row[2])
+                        <= datetime.now(timezone.utc),
+                        "original_token": token_id,
+                    }
+                logger.warning(
+                    f"Could not extract agent info from JWT in token {token_id}"
+                )
+                return None
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to decrypt/parse token for recovery {token_id}: {e}"
+                )
                 return None
 
     async def cleanup_expired_tokens(self) -> int:
