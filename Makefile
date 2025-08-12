@@ -45,13 +45,13 @@ clean: ## Clean caches and temporary files
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Cleanup complete"
 
-docker: ## Full Docker lifecycle: stop → rebuild → up → logs
+docker: ## Full Docker lifecycle: stop → pull/build → up → logs
 	@echo "🐳 Starting Docker lifecycle..."
 	@echo "1/4 Stopping containers..."
-	docker-compose down || true
-	@echo "2/4 Building with --no-cache..."
-	docker-compose build --no-cache
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
+	@echo "2/4 Pulling/building images..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") pull || $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") build --no-cache
 	@echo "3/4 Starting containers..."
-	docker-compose up -d
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") up -d
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
-	docker-compose logs -f
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f

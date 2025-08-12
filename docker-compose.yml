@@ -4,14 +4,12 @@
 services:
   shared-context-server:
     # Option 1: Use pre-built image from GitHub Container Registry (recommended)
-    # Uncomment the line below and comment out the 'build' section
-    # image: ghcr.io/leoric-crown/shared-context-server:latest
+    image: ghcr.io/leoric-crown/shared-context-server:latest
 
     # Option 2: Build locally from source (development)
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: shared-context-server:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: shared-context-server
     restart: unless-stopped
     ports:
