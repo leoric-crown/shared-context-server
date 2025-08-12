@@ -12,6 +12,7 @@ cd shared-context-server
 # 2. Generate secure keys
 echo "API_KEY=$(openssl rand -base64 32)" > .env
 echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
 
 # 3. Start the server
 docker compose up -d

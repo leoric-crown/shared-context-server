@@ -155,6 +155,24 @@ class DatabaseManager:
                 check_same_thread=False,
             )
 
+            # Configure datetime adapters for Python 3.12+ compatibility
+            import datetime as dt
+            import sqlite3
+
+            def adapt_datetime_iso(val: dt.datetime) -> str:
+                """Adapt datetime to ISO format string."""
+                return val.isoformat()
+
+            def convert_datetime(val: bytes) -> dt.datetime:
+                """Convert ISO format string to datetime."""
+                return dt.datetime.fromisoformat(val.decode())
+
+            sqlite3.register_adapter(dt.datetime, adapt_datetime_iso)
+            sqlite3.register_converter("datetime", convert_datetime)
+            sqlite3.register_converter("DATETIME", convert_datetime)
+            sqlite3.register_converter("timestamp", convert_datetime)
+            sqlite3.register_converter("TIMESTAMP", convert_datetime)
+
             # Apply optimized PRAGMA settings
             await self._apply_pragmas(conn)
 
@@ -312,6 +330,7 @@ class DatabaseManager:
                 "agent_memory",
                 "audit_log",
                 "schema_version",
+                "secure_tokens",  # PRP-006: Secure token authentication
             ]
 
             for table in required_tables:
@@ -337,8 +356,8 @@ class DatabaseManager:
             assert row is not None
             version = row[0]
 
-            if version != 2:
-                logger.warning(f"Unexpected schema version: {version}, expected: 2")
+            if version != 3:
+                logger.warning(f"Unexpected schema version: {version}, expected: 3")
 
             logger.info("Database schema validation successful")
 

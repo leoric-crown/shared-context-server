@@ -22,6 +22,7 @@ docker run -d \
   -p 23456:23456 \
   -e API_KEY="$(openssl rand -base64 32)" \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
+  -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   ghcr.io/leoric-crown/shared-context-server:latest
 
 # Configure any MCP client
@@ -33,6 +34,7 @@ docker exec shared-context-server shared-context-server client-config claude
 # Generate secure keys and start server
 echo "API_KEY=$(openssl rand -base64 32)" > .env
 echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
 chmod 600 .env
 docker compose up -d
 
@@ -62,6 +64,7 @@ uv sync
 # Setup secure environment
 echo "API_KEY=$(openssl rand -base64 32)" > .env
 echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
 chmod 600 .env
 
 # Run server
@@ -227,6 +230,7 @@ services:
     environment:
       - API_KEY=${API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY}
     volumes:
       - shared-context-data:/app/data
 ```

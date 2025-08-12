@@ -24,6 +24,7 @@ services:
       # Security configuration
       - API_KEY=${API_KEY:-dev-key-please-change}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-please-change}
+      - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY:-dev-fernet-key-please-change}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
 
       # Server configuration

@@ -231,11 +231,43 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
 
     This enables per-request agent identification while the MCP connection
     uses static API key authentication.
+
+    PRP-006: Enhanced to support protected token resolution for JWT hiding.
     """
     if not auth_token:
         return None
 
     try:
+        # Check if this is a protected token (sct_*)
+        if auth_token.startswith("sct_"):
+            # Resolve protected token to JWT
+            token_manager = get_secure_token_manager()
+            jwt_token = await token_manager.resolve_protected_token(auth_token)
+
+            if not jwt_token:
+                logger.warning(f"Invalid or expired protected token: {auth_token}")
+                return None
+
+            # Validate the resolved JWT
+            jwt_result = auth_manager.validate_token(jwt_token)
+            if jwt_result["valid"]:
+                logger.info(
+                    f"Protected token validated for agent {jwt_result['agent_id']}"
+                )
+                return {
+                    "agent_id": jwt_result["agent_id"],
+                    "agent_type": jwt_result["agent_type"],
+                    "authenticated": True,
+                    "auth_method": "protected_jwt",
+                    "permissions": jwt_result["permissions"],
+                    "token_id": jwt_result.get("token_id"),
+                    "protected_token": auth_token,  # Include original protected token
+                }
+            logger.warning(
+                f"Invalid JWT from protected token: {jwt_result.get('error')}"
+            )
+            return None
+        # Original JWT token validation (for backward compatibility)
         jwt_result = auth_manager.validate_token(auth_token)
         if jwt_result["valid"]:
             logger.info(f"JWT token validated for agent {jwt_result['agent_id']}")
@@ -398,3 +430,193 @@ async def generate_agent_jwt_token(
     )
 
     return token
+
+
+# ============================================================================
+# PRP-006: SECURE TOKEN AUTHENTICATION SYSTEM
+# ============================================================================
+
+
+class SecureTokenManager:
+    """
+    Secure Token Manager with Fernet encryption for JWT hiding.
+
+    Implements protected token format (sct_<uuid>) with multi-agent concurrency
+    safety and race-condition-safe refresh patterns.
+    """
+
+    def __init__(self) -> None:
+        """Initialize SecureTokenManager with Fernet encryption."""
+        import uuid
+
+        from cryptography.fernet import Fernet
+
+        # Store imports as instance attributes to avoid repeated imports
+        self._uuid = uuid
+        self._fernet_cls = Fernet
+
+        # Get encryption key from environment
+        key = os.getenv("JWT_ENCRYPTION_KEY")
+        if not key:
+            raise ValueError("JWT_ENCRYPTION_KEY environment variable required")
+
+        # Initialize Fernet cipher
+        self.fernet = self._fernet_cls(key.encode())
+
+        logger.info("Secure Token Manager initialized")
+
+    async def create_protected_token(self, jwt_token: str, agent_id: str) -> str:
+        """
+        Create encrypted protected token with simple UUID.
+
+        Args:
+            jwt_token: Original JWT token to encrypt
+            agent_id: Agent identifier for audit purposes
+
+        Returns:
+            Protected token ID (sct_<uuid>)
+        """
+        # Generate protected token ID
+        token_id = f"sct_{self._uuid.uuid4()}"
+
+        # Encrypt JWT token
+        encrypted_jwt = self.fernet.encrypt(jwt_token.encode())
+
+        # Store in database with transaction safety
+        async with get_db_connection() as conn:
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO secure_tokens (token_id, encrypted_jwt, agent_id, expires_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        token_id,
+                        encrypted_jwt,
+                        agent_id,
+                        datetime.now(timezone.utc) + timedelta(hours=1),
+                    ),
+                )
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise
+
+        logger.info(f"Created protected token for agent {agent_id}")
+        return token_id
+
+    async def refresh_token_safely(self, current_token: str, agent_id: str) -> str:
+        """
+        Atomic refresh: create new, then delete old to prevent race conditions.
+
+        Args:
+            current_token: Current protected token to refresh
+            agent_id: Agent identifier for validation
+
+        Returns:
+            New protected token ID
+        """
+        # Get current JWT
+        jwt = await self.resolve_protected_token(current_token)
+        if not jwt:
+            raise ValueError("Token invalid or expired")
+
+        # Create new token first (atomic operation)
+        new_token = await self.create_protected_token(jwt, agent_id)
+
+        # Then delete old token (if this fails, old token expires naturally)
+        try:
+            async with get_db_connection() as conn:
+                await conn.execute(
+                    "DELETE FROM secure_tokens WHERE token_id = ?", (current_token,)
+                )
+                await conn.commit()
+        except Exception:
+            # Cleanup failed but new token is valid - acceptable degradation
+            logger.warning(
+                f"Failed to cleanup old token {current_token}, will expire naturally"
+            )
+            pass
+
+        logger.info(f"Refreshed protected token for agent {agent_id}")
+        return new_token
+
+    async def resolve_protected_token(self, token_id: str) -> str | None:
+        """
+        Resolve protected token to original JWT.
+
+        Args:
+            token_id: Protected token ID to resolve
+
+        Returns:
+            Original JWT token if valid and not expired, None otherwise
+        """
+        if not token_id.startswith("sct_"):
+            return None
+
+        async with get_db_connection() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT encrypted_jwt, expires_at FROM secure_tokens
+                WHERE token_id = ?
+                """,
+                (token_id,),
+            )
+
+            row = await cursor.fetchone()
+            if not row:
+                return None
+
+            # Check expiration
+            expires_at = datetime.fromisoformat(row[1])
+            if expires_at <= datetime.now(timezone.utc):
+                return None
+
+            # Decrypt and return JWT
+            try:
+                return self.fernet.decrypt(row[0]).decode()
+            except Exception:
+                logger.warning(f"Failed to decrypt protected token {token_id}")
+                return None
+
+    async def cleanup_expired_tokens(self) -> int:
+        """
+        Clean up expired tokens from database.
+
+        Returns:
+            Number of tokens cleaned up
+        """
+        try:
+            async with get_db_connection() as conn:
+                cursor = await conn.execute(
+                    """
+                    DELETE FROM secure_tokens
+                    WHERE expires_at <= ?
+                    """,
+                    (datetime.now(timezone.utc).isoformat(),),
+                )
+                await conn.commit()
+                count = cursor.rowcount
+
+                if count > 0:
+                    logger.info(f"Cleaned up {count} expired secure tokens")
+
+                return count
+        except Exception:
+            logger.exception("Failed to cleanup expired tokens")
+            return 0
+
+
+# Global secure token manager
+secure_token_manager: SecureTokenManager | None = None
+
+
+def get_secure_token_manager() -> SecureTokenManager:
+    """Get global secure token manager instance."""
+    global secure_token_manager
+
+    if secure_token_manager is None:
+        secure_token_manager = SecureTokenManager()
+
+    return secure_token_manager

@@ -45,7 +45,13 @@ class TestAuthenticateAgentTool:
         assert "token" in result
         assert "expires_at" in result
         assert "issued_at" in result
-        assert result["token_type"] == "Bearer"
+        assert result["token_type"] == "Protected"
+        assert (
+            result["token_format"] == "sct_*"
+        )  # PRP-006: Verify protected token format
+        assert result["token"].startswith(
+            "sct_"
+        )  # PRP-006: Verify protected token prefix
 
         # Verify permissions were granted
         assert "permissions" in result
@@ -297,11 +303,11 @@ class TestAuthenticateAgentTool:
 
         with (
             patch.dict(os.environ, {"API_KEY": "valid_key"}),
-            patch("shared_context_server.server.auth_manager") as mock_auth_manager,
+            patch(
+                "shared_context_server.auth.generate_agent_jwt_token"
+            ) as mock_generate_token,
         ):
-            mock_auth_manager.generate_token.side_effect = Exception(
-                "Token generation failed"
-            )
+            mock_generate_token.side_effect = Exception("Token generation failed")
 
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,

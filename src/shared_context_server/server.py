@@ -233,8 +233,16 @@ async def authenticate_agent(
             return ERROR_MESSAGE_PATTERNS["invalid_api_key"](agent_id)  # type: ignore[no-any-return,operator]
 
         # Generate JWT token using the new utility function
-        token = await generate_agent_jwt_token(
+        jwt_token = await generate_agent_jwt_token(
             agent_id, agent_type, requested_permissions
+        )
+
+        # PRP-006: Create protected token instead of returning raw JWT
+        from .auth import get_secure_token_manager
+
+        token_manager = get_secure_token_manager()
+        protected_token = await token_manager.create_protected_token(
+            jwt_token, agent_id
         )
 
         # Get granted permissions for response
@@ -242,20 +250,19 @@ async def authenticate_agent(
             agent_type, requested_permissions
         )
 
-        # Calculate expiration
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            seconds=auth_manager.token_expiry
-        )
+        # Calculate expiration (1 hour for protected tokens)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
 
         return {
             "success": True,
-            "token": token,
+            "token": protected_token,  # Return protected token instead of JWT
             "agent_id": agent_id,
             "agent_type": agent_type,
             "permissions": granted_permissions,
             "expires_at": expires_at.isoformat(),
-            "token_type": "Bearer",
+            "token_type": "Protected",  # Changed from Bearer to indicate protected format
             "issued_at": datetime.now(timezone.utc).isoformat(),
+            "token_format": "sct_*",  # Indicate protected token format
         }
 
     except Exception as e:
@@ -272,6 +279,133 @@ async def authenticate_agent(
 
         return create_system_error(
             "authenticate_agent", "authentication_service", temporary=True
+        )
+
+
+@mcp.tool()
+async def refresh_token(
+    ctx: Context,
+    current_token: str = Field(
+        description="Current protected token to refresh", pattern=r"^sct_[a-f0-9-]{36}$"
+    ),
+) -> dict[str, Any]:
+    """
+    Refresh a protected token (PRP-006: Secure Token Authentication).
+
+    Returns a new protected token with extended expiry using the atomic
+    refresh pattern to prevent race conditions in multi-agent environments.
+    """
+    try:
+        # Validate MCP client authentication via API key header
+        from .auth import (
+            extract_agent_context,
+            get_secure_token_manager,
+            validate_api_key_header,
+        )
+
+        api_key_valid = validate_api_key_header(ctx)
+        if not api_key_valid:
+            await audit_log_auth_event(
+                "token_refresh_failed",
+                "unknown",
+                None,
+                {
+                    "error": "invalid_api_key_header",
+                    "token_prefix": current_token[:8] if current_token else "none",
+                },
+            )
+            return ERROR_MESSAGE_PATTERNS["invalid_api_key"]("token_refresh")  # type: ignore[no-any-return,operator]
+
+        # Extract agent context from current token
+        agent_context = await extract_agent_context(ctx, current_token)
+        if not agent_context.get("authenticated"):
+            await audit_log_auth_event(
+                "token_refresh_failed",
+                "unknown",
+                None,
+                {
+                    "error": "invalid_current_token",
+                    "token_prefix": current_token[:8] if current_token else "none",
+                },
+            )
+            return create_llm_error_response(
+                error="Invalid or expired token provided",
+                code="INVALID_TOKEN",
+                suggestions=[
+                    "Ensure the token is a valid protected token (sct_*)",
+                    "Check that the token has not expired",
+                    "Authenticate again if the token is no longer valid",
+                ],
+                context={
+                    "token_format": "sct_*",
+                    "current_token_prefix": current_token[:8]
+                    if current_token
+                    else "none",
+                },
+                severity=ErrorSeverity.WARNING,
+            )
+
+        agent_id = agent_context["agent_id"]
+
+        # Use the race-condition-safe refresh method
+        token_manager = get_secure_token_manager()
+        new_token = await token_manager.refresh_token_safely(current_token, agent_id)
+
+        # Log successful refresh
+        await audit_log_auth_event(
+            "token_refreshed",
+            agent_id,
+            None,
+            {
+                "old_token_prefix": current_token[:8],
+                "new_token_prefix": new_token[:8],
+                "agent_type": agent_context.get("agent_type", "unknown"),
+            },
+        )
+
+        return {
+            "success": True,
+            "token": new_token,
+            "expires_in": 3600,  # 1 hour
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "token_type": "Protected",
+            "token_format": "sct_*",
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except ValueError as e:
+        # Handle token validation errors
+        logger.warning(f"Token refresh failed: {e}")
+        return create_llm_error_response(
+            error=str(e),
+            code="TOKEN_REFRESH_FAILED",
+            suggestions=[
+                "Verify the current token is valid and not expired",
+                "Re-authenticate if the token is no longer valid",
+                "Ensure the token format is correct (sct_*)",
+            ],
+            context={
+                "current_token_prefix": current_token[:8] if current_token else "none",
+            },
+            severity=ErrorSeverity.WARNING,
+        )
+    except Exception as e:
+        logger.exception("Token refresh system error")
+        try:
+            await audit_log_auth_event(
+                "token_refresh_error",
+                "unknown",
+                None,
+                {
+                    "error": str(e),
+                    "token_prefix": current_token[:8] if current_token else "none",
+                },
+            )
+        except Exception:
+            logger.warning("Failed to audit token refresh error")
+
+        return create_system_error(
+            "refresh_token", "token_refresh_service", temporary=True
         )
 
 

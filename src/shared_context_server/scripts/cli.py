@@ -257,18 +257,28 @@ def generate_client_config(client: str, host: str, port: int) -> None:
     """Generate MCP client configuration."""
     server_url = f"http://{host}:{port}/mcp/"
 
+    # Get API key from environment for display
+    api_key = os.getenv("API_KEY", "").strip()
+    api_key_display = api_key if api_key else "YOUR_API_KEY_HERE"
+
     configs = {
         "claude": f"""Add to Claude Code MCP configuration:
 claude mcp add-json shared-context-server '{{
   "type": "http",
-  "url": "{server_url}"
+  "url": "{server_url}",
+  "headers": {{
+    "X-API-Key": "{api_key_display}"
+  }}
 }}'""",
         "cursor": f"""Add to Cursor settings.json:
 {{
   "mcp.servers": {{
     "shared-context-server": {{
       "type": "http",
-      "url": "{server_url}"
+      "url": "{server_url}",
+      "headers": {{
+        "X-API-Key": "{api_key_display}"
+      }}
     }}
   }}
 }}""",
@@ -276,7 +286,10 @@ claude mcp add-json shared-context-server '{{
 {{
   "shared-context-server": {{
     "type": "http",
-    "url": "{server_url}"
+    "url": "{server_url}",
+    "headers": {{
+      "X-API-Key": "{api_key_display}"
+    }}
   }}
 }}""",
         "vscode": f"""Add to VS Code settings.json:
@@ -284,18 +297,36 @@ claude mcp add-json shared-context-server '{{
   "mcp.servers": {{
     "shared-context-server": {{
       "type": "http",
-      "url": "{server_url}"
+      "url": "{server_url}",
+      "headers": {{
+        "X-API-Key": "{api_key_display}"
+      }}
     }}
   }}
 }}""",
         "generic": f"""Generic MCP client configuration:
 Type: http
-URL: {server_url}""",
+URL: {server_url}
+Headers: X-API-Key: {api_key_display}""",
     }
 
     print(f"\n=== {client.upper()} MCP Client Configuration ===\n")
     print(configs[client])
-    print(f"\nServer URL: {server_url}\n")
+    print(f"\nServer URL: {server_url}")
+
+    if api_key_display == "YOUR_API_KEY_HERE":
+        print(
+            "⚠️  SECURITY: Replace 'YOUR_API_KEY_HERE' with your actual API_KEY from server environment"
+        )
+        print(
+            "   You can find the API_KEY in your server's .env file or environment variables"
+        )
+    else:
+        print(
+            f"✅ Using API_KEY from server environment (first 8 chars: {api_key[:8]}...)"
+        )
+
+    print()
 
 
 def show_status(host: str | None = None, port: int | None = None) -> None:

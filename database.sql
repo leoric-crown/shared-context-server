@@ -209,9 +209,32 @@ CREATE TABLE IF NOT EXISTS schema_version (
     description TEXT
 );
 
+-- ============================================================================
+-- SECURE TOKEN AUTHENTICATION (PRP-006)
+-- ============================================================================
+-- Protected token storage with Fernet encryption for JWT hiding
+
+CREATE TABLE secure_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_id TEXT UNIQUE NOT NULL,
+    encrypted_jwt BLOB NOT NULL,
+    agent_id TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Ensure data consistency for concurrent access
+    CONSTRAINT secure_tokens_agent_id_not_empty CHECK (length(trim(agent_id)) > 0),
+    CONSTRAINT secure_tokens_token_id_not_empty CHECK (length(trim(token_id)) > 0)
+);
+
+-- Indexes for efficient multi-agent access
+CREATE INDEX IF NOT EXISTS idx_token_id ON secure_tokens(token_id);
+CREATE INDEX IF NOT EXISTS idx_agent_expires ON secure_tokens(agent_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_expires_cleanup ON secure_tokens(expires_at);
+
 -- Insert current schema version
 INSERT OR REPLACE INTO schema_version (version, description)
-VALUES (2, 'Phase 3: Added sender_type column to messages table for agent type denormalization');
+VALUES (3, 'PRP-006: Added secure_tokens table with Fernet encryption for JWT hiding');
 
 -- ============================================================================
 -- INITIAL DATA VALIDATION

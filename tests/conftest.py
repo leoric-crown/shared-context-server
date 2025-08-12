@@ -384,8 +384,8 @@ async def test_db_manager():
             # Quick validation that our schema version is correct
             cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
             version = await cursor.fetchone()
-            assert version and version[0] == 2, (
-                f"Expected schema version 2, got {version[0] if version else None}"
+            assert version and version[0] == 3, (
+                f"Expected schema version 3, got {version[0] if version else None}"
             )
 
         yield db_manager

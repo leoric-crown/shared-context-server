@@ -112,7 +112,7 @@ class TestDatabaseSchemaSmoke:
         await db_manager.initialize()
 
         version = await get_schema_version()
-        assert version == 2, f"Expected schema version 2, got: {version}"
+        assert version == 3, f"Expected schema version 3, got: {version}"
 
 
 class TestErrorEnvelopeValidation:
@@ -362,7 +362,7 @@ class TestDatabaseSchema:
             cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
             version = (await cursor.fetchone())[0]
 
-        assert version == 2, f"Expected schema version 2, got {version}"
+        assert version == 3, f"Expected schema version 3, got {version}"
 
     @pytest.mark.asyncio
     async def test_views_creation(self, test_db_manager):
@@ -922,7 +922,7 @@ class TestHealthCheck:
 
             version = await get_schema_version()
 
-        assert version == 2
+        assert version == 3
 
 
 class TestCleanupOperations:
