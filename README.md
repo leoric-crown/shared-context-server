@@ -1,5 +1,7 @@
 # Shared Context MCP Server
 [![CI](https://github.com/leoric-crown/shared-context-server/workflows/CI/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
+[![Docker](https://github.com/leoric-crown/shared-context-server/workflows/Build%20and%20Publish%20Docker%20Image/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
+[![GHCR](https://img.shields.io/badge/ghcr.io-leoric--crown%2Fshared--context--server-blue?logo=docker)](https://github.com/leoric-crown/shared-context-server/pkgs/container/shared-context-server)
 [![codecov](https://codecov.io/gh/leoric-crown/shared-context-server/graph/badge.svg?token=07ZITBOAZ7)](https://codecov.io/gh/leoric-crown/shared-context-server)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -228,6 +230,36 @@ services:
     volumes:
       - shared-context-data:/app/data
 ```
+
+---
+
+## 🚀 Releases & Publishing
+
+### Automated Docker Publishing
+Every release automatically publishes multi-platform Docker images to GitHub Container Registry:
+
+**Release Process:**
+```bash
+# Create a new release (triggers Docker build automatically)
+gh release create v1.1.0 --title "v1.1.0" --notes "Release notes here"
+
+# Or create a git tag (also triggers build)
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+**Generated Images:**
+- `ghcr.io/leoric-crown/shared-context-server:1.1.0` (specific version)
+- `ghcr.io/leoric-crown/shared-context-server:1.1` (minor version)
+- `ghcr.io/leoric-crown/shared-context-server:1` (major version)
+- `ghcr.io/leoric-crown/shared-context-server:latest` (latest release)
+
+**Platforms:** `linux/amd64`, `linux/arm64`
+
+### For Maintainers
+- Releases trigger GitHub Actions workflow automatically
+- Build time: ~8-12 minutes (with caching)
+- Images published to GitHub Container Registry (GHCR)
+- No manual Docker builds needed
 
 ---
 
