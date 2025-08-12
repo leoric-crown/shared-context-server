@@ -12,6 +12,21 @@ Choose your preferred setup method:
 
 ### 🐳 Docker (Recommended - Multi-Client Ready)
 
+**Option A: Pre-built Image (Easiest)**
+```bash
+# Use published multi-platform image
+docker run -d \
+  --name shared-context-server \
+  -p 23456:23456 \
+  -e API_KEY="$(openssl rand -base64 32)" \
+  -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
+  ghcr.io/leoric-crown/shared-context-server:latest
+
+# Configure any MCP client
+docker exec shared-context-server shared-context-server client-config claude
+```
+
+**Option B: Docker Compose (Full Setup)**
 ```bash
 # Generate secure keys and start server
 echo "API_KEY=$(openssl rand -base64 32)" > .env
@@ -21,8 +36,6 @@ docker compose up -d
 
 # Get configuration instructions for any MCP client
 docker exec shared-context-server shared-context-server client-config claude
-
-# Then run the displayed commands in your local terminal to actually configure the client
 ```
 
 ### 🔥 Development Mode (Hot Reload)
@@ -178,6 +191,43 @@ curl http://localhost:8000/mcp/tool/add_message \
 **Database**: SQLite with WAL mode, 20+ concurrent agent support
 **Performance**: < 30ms API responses, 2-3ms RapidFuzz search
 **Security**: JWT authentication, comprehensive audit logging, input validation
+
+---
+
+## Docker Images
+
+### Available Registries
+- **GitHub Container Registry**: `ghcr.io/leoric-crown/shared-context-server` (Recommended)
+- **Multi-platform**: Supports `linux/amd64` and `linux/arm64`
+
+### Image Tags
+```bash
+# Latest release
+docker pull ghcr.io/leoric-crown/shared-context-server:latest
+
+# Specific version
+docker pull ghcr.io/leoric-crown/shared-context-server:1.0.0
+
+# Major version
+docker pull ghcr.io/leoric-crown/shared-context-server:1
+
+# Development branch
+docker pull ghcr.io/leoric-crown/shared-context-server:main
+```
+
+### Production Docker Compose
+```yaml
+services:
+  shared-context-server:
+    image: ghcr.io/leoric-crown/shared-context-server:latest
+    ports:
+      - "23456:23456"
+    environment:
+      - API_KEY=${API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    volumes:
+      - shared-context-data:/app/data
+```
 
 ---
 

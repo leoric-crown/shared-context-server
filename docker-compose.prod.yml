@@ -2,8 +2,8 @@
 # Optimized for production deployment with security and reliability
 services:
   shared-context-server:
-    # Use published image instead of building locally
-    image: ghcr.io/shared-context-server/server:latest
+    # Use published multi-platform image from GitHub Container Registry
+    image: ghcr.io/leoric-crown/shared-context-server:latest
     container_name: shared-context-server-prod
     restart: always
 
