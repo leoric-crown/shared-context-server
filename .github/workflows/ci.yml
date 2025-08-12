@@ -8,6 +8,7 @@ env:
   API_KEY: "test-api-key-for-ci-only"
   DATABASE_URL: "sqlite:///:memory:"
   ENVIRONMENT: "testing"
+  JWT_SECRET_KEY: "test-jwt-secret-key-for-ci-only-not-for-production"
 
 jobs:
   test:
@@ -74,3 +75,4 @@ jobs:
           API_KEY: "test-api-key-for-ci-smoke-test"
           DATABASE_URL: "sqlite:///./test_smoke.db"
           ENVIRONMENT: "development"
+          JWT_SECRET_KEY: "test-jwt-secret-key-for-smoke-test-only"
