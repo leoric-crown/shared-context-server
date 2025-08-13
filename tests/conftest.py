@@ -24,6 +24,8 @@ from pydantic.fields import FieldInfo
 from shared_context_server.auth import AuthInfo
 from shared_context_server.database import DatabaseManager
 
+pytest_plugins = ["tests.fixtures.database"]
+
 # =============================================================================
 # COMPREHENSIVE THREAD AND TASK REGISTRY FOR TEST CLEANUP
 # =============================================================================
@@ -511,6 +513,12 @@ async def seed_test_data(test_db_connection):
 
 
 # =============================================================================
+# IMPORT DATABASE FIXTURES
+# =============================================================================
+
+# Import all fixtures from fixtures/database.py
+
+# =============================================================================
 # INTEGRATION WITH EXISTING FASTMCP PATTERNS
 # =============================================================================
 
@@ -655,6 +663,17 @@ async def reset_global_singletons():
     except ImportError:
         pass
 
+    # Reset database managers for both aiosqlite and SQLAlchemy
+    try:
+        import shared_context_server.database as db_module
+
+        with suppress(Exception):
+            # Reset global database managers to ensure clean state
+            db_module._db_manager = None
+            db_module._sqlalchemy_manager = None
+    except ImportError:
+        pass
+
 
 @pytest.fixture(scope="session", autouse=True)
 async def cleanup_on_session_finish():
@@ -768,6 +787,18 @@ def pytest_sessionfinish(session, exitstatus):
 
     except Exception as e:
         _quiet_print(f"⚠️ Error during final cleanup: {e}")
+
+    # Clean up any SQLAlchemy-created directory artifacts
+    try:
+        import shutil
+        from pathlib import Path
+
+        sqlite_dir = Path("./sqlite+aiosqlite:")
+        if sqlite_dir.exists():
+            shutil.rmtree(sqlite_dir)
+            _quiet_print(f"🔧 Cleaned up SQLAlchemy artifact directory: {sqlite_dir}")
+    except Exception as e:
+        _quiet_print(f"⚠️ Error cleaning up SQLAlchemy directory: {e}")
 
     # Check for any truly persistent threads
     remaining_threads = [

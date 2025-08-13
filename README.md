@@ -242,7 +242,12 @@ session = await client.post("http://localhost:23456/mcp/tool/create_session",
 - ✅ Advanced indexing and performance
 - ❌ Requires database administration
 
-**Migration Path**: Automatic schema migration tools provided for production deployment.
+**Database Backend Options**
+- **Default**: Direct aiosqlite (fastest, simplest)
+- **Optional**: SQLAlchemy Core via `USE_SQLALCHEMY=true` (future-ready for PostgreSQL)
+- **Migration**: Seamless switching between backends with identical interface
+
+**Migration Path**: SQLAlchemy backend provides smooth transition to PostgreSQL when scaling needs arise.
 
 💡 **Why this hybrid approach?** Optimizes for developer experience during development while supporting enterprise scale in production.
 

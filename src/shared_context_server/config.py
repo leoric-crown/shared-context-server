@@ -69,6 +69,13 @@ def get_default_database_path() -> str:
 class DatabaseConfig(BaseSettings):
     """Database configuration settings."""
 
+    # Backend selection
+    use_sqlalchemy: bool = Field(
+        default=False,
+        json_schema_extra={"env": "USE_SQLALCHEMY"},
+        description="Enable SQLAlchemy backend for future PostgreSQL support",
+    )
+
     # Database connection
     database_path: str = Field(
         default_factory=get_default_database_path,

@@ -18,8 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+        backend: ["aiosqlite", "sqlalchemy"]
         include:
           - python-version: "3.12"
+            backend: "sqlalchemy"
             is-main: true
     steps:
       - uses: actions/checkout@v4
@@ -39,8 +41,10 @@ jobs:
       - name: Security audit
         run: uv run pip-audit
 
-      - name: Test with coverage
+      - name: Test with coverage (${{ matrix.backend }} backend)
         run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
+        env:
+          USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' && 'true' || 'false' }}
 
       # Upload only once (on the main Python job) to avoid duplicates
       - name: Check coverage file exists
@@ -58,6 +62,9 @@ jobs:
 
   smoke-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        backend: ["aiosqlite", "sqlalchemy"]
     steps:
       - uses: actions/checkout@v4
 
@@ -70,10 +77,11 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: WAL/Schema smoke test
+      - name: WAL/Schema smoke test (${{ matrix.backend }} backend)
         run: uv run pytest tests/test_smoke.py -v
         env:
           API_KEY: "test-api-key-for-ci-smoke-test"
           DATABASE_URL: "sqlite:///./test_smoke.db"
           ENVIRONMENT: "development"
           JWT_SECRET_KEY: "test-jwt-secret-key-for-smoke-test-only"
+          USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' && 'true' || 'false' }}

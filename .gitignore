@@ -15,7 +15,7 @@ dist/
 .env
 
 # SQLite databases
-:memory:
+:memory:*
 *.db
 *.sqlite
 *.sqlite3
@@ -28,6 +28,8 @@ dev_*.db
 .coverage
 htmlcov/
 .coverage*.wg*
+
+tmp*
 
 # IDE
 .vscode/

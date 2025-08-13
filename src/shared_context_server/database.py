@@ -479,6 +479,7 @@ class DatabaseManager:
 
 # Global database manager instance
 _db_manager: DatabaseManager | None = None
+_sqlalchemy_manager = None
 
 
 def get_database_manager() -> DatabaseManager:
@@ -509,14 +510,60 @@ def get_database_manager() -> DatabaseManager:
     return _db_manager
 
 
+def _get_sqlalchemy_manager() -> Any:
+    """Get global SQLAlchemy manager instance."""
+    global _sqlalchemy_manager
+
+    if _sqlalchemy_manager is None:
+        from .config import get_database_config
+        from .database_sqlalchemy import SimpleSQLAlchemyManager
+
+        try:
+            db_config = get_database_config()
+
+            # Determine database URL for SQLAlchemy
+            if db_config.database_url:
+                database_url = db_config.database_url
+            else:
+                # Convert database_path to SQLAlchemy URL
+                database_url = f"sqlite+aiosqlite:///{db_config.database_path}"
+
+            _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+
+        except Exception:
+            # Fallback to environment variable
+            database_path = os.getenv("DATABASE_PATH", "./chat_history.db")
+            database_url = f"sqlite+aiosqlite:///{database_path}"
+            _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+            logger.warning("Using fallback SQLAlchemy database configuration")
+
+    return _sqlalchemy_manager
+
+
 async def initialize_database() -> None:
     """
     Initialize global database manager.
 
     Should be called during application startup.
     """
-    db_manager = get_database_manager()
-    await db_manager.initialize()
+    # Import here to avoid circular dependency
+    from .config import get_database_config
+
+    try:
+        db_config = get_database_config()
+        use_sqlalchemy = db_config.use_sqlalchemy
+    except Exception:
+        # Fallback to environment variable
+        use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
+
+    if use_sqlalchemy:
+        # Initialize SQLAlchemy backend
+        sqlalchemy_manager = _get_sqlalchemy_manager()
+        await sqlalchemy_manager.initialize()
+    else:
+        # Initialize aiosqlite backend
+        db_manager = get_database_manager()
+        await db_manager.initialize()
 
 
 @asynccontextmanager
@@ -524,16 +571,39 @@ async def get_db_connection() -> AsyncGenerator[aiosqlite.Connection, None]:
     """
     Get database connection using global database manager.
 
+    Automatically routes to either aiosqlite or SQLAlchemy backend based on configuration.
+
     Yields:
-        aiosqlite.Connection: Database connection with optimized settings
+        Connection: Database connection with optimized settings (aiosqlite.Connection or SQLAlchemyConnectionWrapper)
     """
-    db_manager = get_database_manager()
+    # Import here to avoid circular dependency
+    from .config import get_database_config
 
-    if not db_manager.is_initialized:
-        await db_manager.initialize()
+    try:
+        db_config = get_database_config()
+        use_sqlalchemy = db_config.use_sqlalchemy
+    except Exception:
+        # Fallback to environment variable
+        use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
 
-    async with db_manager.get_connection() as conn:
-        yield conn
+    if use_sqlalchemy:
+        # Use SQLAlchemy backend
+        sqlalchemy_manager = _get_sqlalchemy_manager()
+
+        if not sqlalchemy_manager.is_initialized:
+            await sqlalchemy_manager.initialize()
+
+        async with sqlalchemy_manager.get_connection() as conn:
+            yield conn
+    else:
+        # Use aiosqlite backend (current default)
+        db_manager = get_database_manager()
+
+        if not db_manager.is_initialized:
+            await db_manager.initialize()
+
+        async with db_manager.get_connection() as conn:
+            yield conn
 
 
 # Utility functions for common operations
@@ -682,25 +752,119 @@ async def health_check() -> dict[str, Any]:
         Dict with health check results
     """
     try:
-        db_manager = get_database_manager()
+        # Check which backend we're using for proper initialization
+        try:
+            from .config import get_database_config
 
-        if not db_manager.is_initialized:
-            await db_manager.initialize()
+            db_config = get_database_config()
+            use_sqlalchemy = db_config.use_sqlalchemy
+        except Exception:
+            use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
+
+        # Initialize the appropriate database backend
+        if use_sqlalchemy:
+            sqlalchemy_manager = _get_sqlalchemy_manager()
+            if not sqlalchemy_manager.is_initialized:
+                await sqlalchemy_manager.initialize()
+        else:
+            db_manager = get_database_manager()
+            if not db_manager.is_initialized:
+                await db_manager.initialize()
 
         # Test basic connectivity
         async with get_db_connection() as conn:
             cursor = await conn.execute("SELECT 1")
             result = await cursor.fetchone()
 
-            if result is None or result[0] != 1:
+            # Handle different result formats (dict vs tuple)
+            if result is None:
+                _raise_basic_query_error()
+                return {
+                    "status": "error",
+                    "error": "No result",
+                }  # This will never be reached but needed for type checking
+
+            # Check for invalid test mocks that return coroutines
+            import contextlib
+            import inspect
+
+            if inspect.iscoroutine(result):  # type: ignore[unreachable]
+                logger.warning(  # type: ignore[unreachable]
+                    "Database query returned a coroutine (likely a test mock issue)"
+                )
+                # Properly await and close the coroutine to prevent warning
+                with contextlib.suppress(Exception):
+                    await result
+                _raise_basic_query_error()
+                return {
+                    "status": "error",
+                    "error": "Coroutine result",
+                }  # This will never be reached but needed for type checking
+
+            try:
+                value = None
+                if isinstance(result, dict):  # type: ignore[unreachable]
+                    value = list(result.values())[0]  # type: ignore[unreachable]
+                elif hasattr(result, "keys") and callable(
+                    getattr(result, "keys", None)
+                ):
+                    try:
+                        # Check if keys() would return a coroutine (mock issue)
+                        keys_result = result.keys()
+                        if inspect.iscoroutine(keys_result):  # type: ignore[unreachable]
+                            logger.warning(  # type: ignore[unreachable]
+                                "Database result.keys() returned a coroutine (likely a test mock issue)"
+                            )
+                            # Properly await and close the coroutine to prevent warning
+                            with contextlib.suppress(Exception):
+                                await keys_result
+                            _raise_basic_query_error()
+                            return {
+                                "status": "error",
+                                "error": "Coroutine keys",
+                            }  # This will never be reached but needed for type checking
+                        # Convert row-like object to dict safely
+                        try:
+                            result_dict = dict(result)
+                            value = list(result_dict.values())[0]
+                        except (TypeError, ValueError):
+                            # Fallback to indexing if dict conversion fails
+                            value = result[0]
+                    except (TypeError, ValueError, AttributeError):
+                        # Fallback to tuple access if dict conversion fails
+                        value = result[0]
+                else:  # Tuple or other sequence
+                    try:
+                        value = result[0]
+                    except (IndexError, TypeError):
+                        # If we can't index, try converting to list first
+                        value = list(result)[0] if result else None
+
+                if value != 1:
+                    _raise_basic_query_error()
+            except (KeyError, IndexError, TypeError) as e:
+                # If we can't extract a value, consider it a query failure
+                logger.warning(f"Unable to extract value from result {result}: {e}")
                 _raise_basic_query_error()
 
-        # Get statistics
+        # Get statistics from the actual backend being used
+        if use_sqlalchemy:
+            sqlalchemy_manager = _get_sqlalchemy_manager()
+            return {
+                "status": "healthy",
+                "database_initialized": sqlalchemy_manager.is_initialized,
+                "database_exists": True,  # If we got here, it exists
+                "database_size_mb": 0,  # SQLAlchemy doesn't easily provide this
+                "connection_count": 0,  # SQLAlchemy manages this internally
+                "timestamp": utc_timestamp(),
+            }
+        db_manager = get_database_manager()
         stats = db_manager.get_stats()
-
         return {
             "status": "healthy",
-            "database_initialized": stats["is_initialized"],
+            "database_initialized": stats[
+                "is_initialized"
+            ],  # Correct key for aiosqlite
             "database_exists": stats["database_exists"],
             "database_size_mb": stats["database_size_mb"],
             "connection_count": stats["connection_count"],
@@ -724,7 +888,30 @@ async def get_schema_version() -> int:
         async with get_db_connection() as conn:
             cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
             result = await cursor.fetchone()
-            return result[0] if result and result[0] is not None else 0
+
+            if result is None:
+                return 0
+
+            # Handle different result formats (dict vs tuple)
+            try:
+                version = None
+                if isinstance(result, dict):  # type: ignore[unreachable]
+                    version = list(result.values())[0]  # type: ignore[unreachable]
+                elif hasattr(result, "keys") and callable(
+                    getattr(result, "keys", None)
+                ):
+                    try:
+                        version = list(dict(result).values())[0]
+                    except (TypeError, ValueError):
+                        # Fallback to tuple access if dict conversion fails
+                        version = result[0]
+                else:  # Tuple or other sequence
+                    version = result[0]
+
+                return version if version is not None else 0
+            except (KeyError, IndexError, TypeError):
+                # If we can't extract a version, assume no schema
+                return 0
 
     except Exception:
         return 0  # Schema version table doesn't exist
