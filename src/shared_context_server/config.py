@@ -167,12 +167,31 @@ class MCPServerConfig(BaseSettings):
     http_host: str = Field(default="localhost", json_schema_extra={"env": "HTTP_HOST"})
     http_port: int = Field(default=23456, json_schema_extra={"env": "HTTP_PORT"})
 
+    # WebSocket configuration
+    websocket_enabled: bool = Field(
+        default=True, json_schema_extra={"env": "WEBSOCKET_ENABLED"}
+    )
+    websocket_host: str = Field(
+        default="127.0.0.1", json_schema_extra={"env": "WEBSOCKET_HOST"}
+    )
+    websocket_port: int = Field(
+        default=8080, json_schema_extra={"env": "WEBSOCKET_PORT"}
+    )
+
     @field_validator("http_port")
     @classmethod
-    def validate_port(cls, v: int) -> int:
-        """Ensure port is in valid range."""
+    def validate_http_port(cls, v: int) -> int:
+        """Ensure HTTP port is in valid range."""
         if v < 1024 or v > 65535:
             raise ValueError("HTTP port must be between 1024 and 65535")
+        return v
+
+    @field_validator("websocket_port")
+    @classmethod
+    def validate_websocket_port(cls, v: int) -> int:
+        """Ensure WebSocket port is in valid range."""
+        if v < 1024 or v > 65535:
+            raise ValueError("WebSocket port must be between 1024 and 65535")
         return v
 
 

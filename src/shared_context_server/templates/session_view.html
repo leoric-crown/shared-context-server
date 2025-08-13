@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Session: {{ session.purpose[:30] }} - Shared Context Server{% endblock %}
+
+{% block content %}
+<div class="session-view">
+    <div class="session-header">
+        <div class="breadcrumb">
+            <a href="/ui/" class="breadcrumb-link">Dashboard</a>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current">Session View</span>
+        </div>
+
+        <div class="session-info">
+            <h1 class="session-title">{{ session.purpose }}</h1>
+            <div class="session-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Session ID:</span>
+                    <span class="meta-value">
+                        <code>{{ session.id }}</code>
+                        <button class="copy-btn" onclick="copyToClipboard('{{ session.id }}')">📋</button>
+                    </span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created by:</span>
+                    <span class="meta-value">{{ session.created_by }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created at:</span>
+                    <span class="meta-value" data-timestamp="{{ session.created_at }}">{{ session.created_at }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Status:</span>
+                    <span class="status-badge {% if session.is_active %}active{% else %}inactive{% endif %}">
+                        {% if session.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="session-controls">
+            <div class="websocket-status" id="websocket-status">
+                <span class="status-dot" id="ws-indicator"></span>
+                <span class="status-text" id="ws-text">Connecting...</span>
+            </div>
+            <button class="btn btn-secondary" onclick="window.location.reload()">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="messages-container">
+        <div class="messages-header">
+            <h2>Messages ({{ messages|length }})</h2>
+        </div>
+
+        <div class="messages-list" id="messages-list">
+            {% if messages %}
+                {% for message in messages %}
+                <div class="message-item" data-message-id="{{ message.id }}">
+                    <div class="message-header">
+                        <div class="message-sender">
+                            <span class="sender-icon">
+                                {% if message.sender_type == 'claude' %}🤖
+                                {% elif message.sender_type == 'gemini' %}✨
+                                {% else %}👤{% endif %}
+                            </span>
+                            <span class="sender-name">{{ message.sender }}</span>
+                        </div>
+                        <div class="message-meta">
+                            <span class="message-timestamp" data-timestamp="{{ message.timestamp }}">
+                                {{ message.timestamp }}
+                            </span>
+                            <span class="visibility-badge visibility-{{ message.visibility }}">
+                                {{ message.visibility }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="message-content">
+                        <div class="message-text">{{ message.content }}</div>
+                        {% if message.metadata and message.metadata != '{}' %}
+                        <div class="message-metadata">
+                            <details>
+                                <summary>Metadata</summary>
+                                <pre><code>{{ message.metadata | tojson(indent=2) }}</code></pre>
+                            </details>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="empty-messages">
+                <div class="empty-icon">💬</div>
+                <h3>No Messages Yet</h3>
+                <p>Messages will appear here when agents add them to this session.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+let websocket;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+// WebSocket connection management
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ui/ws/{{ session_id }}`;
+
+    websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = function(event) {
+        console.log('WebSocket connected');
+        updateConnectionStatus('connected');
+        reconnectAttempts = 0;
+
+        // Send periodic heartbeat
+        setInterval(() => {
+            if (websocket.readyState === WebSocket.OPEN) {
+                websocket.send('ping');
+            }
+        }, 30000);
+    };
+
+    websocket.onmessage = function(event) {
+        try {
+            if (event.data === 'pong') {
+                return; // Heartbeat response
+            }
+
+            const message = JSON.parse(event.data);
+            handleRealtimeMessage(message);
+        } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+        }
+    };
+
+    websocket.onclose = function(event) {
+        console.log('WebSocket closed');
+        updateConnectionStatus('disconnected');
+
+        // Attempt to reconnect
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            setTimeout(() => {
+                console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
+                connectWebSocket();
+            }, 2000 * reconnectAttempts);
+        }
+    };
+
+    websocket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        updateConnectionStatus('error');
+    };
+}
+
+// Update connection status indicator
+function updateConnectionStatus(status) {
+    const indicator = document.getElementById('ws-indicator');
+    const text = document.getElementById('ws-text');
+
+    indicator.className = 'status-dot';
+
+    switch (status) {
+        case 'connected':
+            indicator.classList.add('online');
+            text.textContent = 'Live Updates';
+            break;
+        case 'disconnected':
+            indicator.classList.add('offline');
+            text.textContent = 'Disconnected';
+            break;
+        case 'error':
+            indicator.classList.add('error');
+            text.textContent = 'Connection Error';
+            break;
+        default:
+            indicator.classList.add('connecting');
+            text.textContent = 'Connecting...';
+    }
+}
+
+// Handle real-time message updates
+function handleRealtimeMessage(message) {
+    if (message.type === 'new_message') {
+        addNewMessage(message.data);
+    } else if (message.type === 'session_update') {
+        // Refresh the page for session updates
+        window.location.reload();
+    }
+}
+
+// Add new message to the UI
+function addNewMessage(messageData) {
+    const messagesList = document.getElementById('messages-list');
+    const emptyMessages = messagesList.querySelector('.empty-messages');
+
+    // Remove empty state if present
+    if (emptyMessages) {
+        emptyMessages.remove();
+    }
+
+    // Create new message element
+    const messageElement = createMessageElement(messageData);
+    messagesList.appendChild(messageElement);
+
+    // Scroll to bottom
+    messageElement.scrollIntoView({ behavior: 'smooth' });
+
+    // Update message count in header
+    updateMessageCount();
+}
+
+// Create message element
+function createMessageElement(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message-item';
+    messageDiv.setAttribute('data-message-id', message.id);
+
+    const senderIcon = getSenderIcon(message.sender_type);
+    const timestamp = new Date(message.timestamp).toLocaleString();
+
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <div class="message-sender">
+                <span class="sender-icon">${senderIcon}</span>
+                <span class="sender-name">${message.sender}</span>
+            </div>
+            <div class="message-meta">
+                <span class="message-timestamp">${timestamp}</span>
+                <span class="visibility-badge visibility-${message.visibility}">
+                    ${message.visibility}
+                </span>
+            </div>
+        </div>
+        <div class="message-content">
+            <div class="message-text">${escapeHtml(message.content)}</div>
+        </div>
+    `;
+
+    return messageDiv;
+}
+
+// Get sender icon based on type
+function getSenderIcon(senderType) {
+    switch (senderType) {
+        case 'claude': return '🤖';
+        case 'gemini': return '✨';
+        default: return '👤';
+    }
+}
+
+// Update message count in header
+function updateMessageCount() {
+    const messages = document.querySelectorAll('.message-item');
+    const header = document.querySelector('.messages-header h2');
+    header.textContent = `Messages (${messages.length})`;
+}
+
+// Copy to clipboard utility
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showNotification('Failed to copy', 'error');
+    });
+}
+
+// Escape HTML for safety
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Simple notification system
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Show notification
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+
+    // Hide and remove notification
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Format timestamps on page load
+document.addEventListener('DOMContentLoaded', () => {
+    // Format all timestamps
+    const timestampElements = document.querySelectorAll('[data-timestamp]');
+    timestampElements.forEach(element => {
+        const timestamp = element.getAttribute('data-timestamp');
+        if (timestamp) {
+            try {
+                const date = new Date(timestamp);
+                element.textContent = date.toLocaleString();
+            } catch (e) {
+                console.warn('Failed to parse timestamp:', timestamp);
+            }
+        }
+    });
+
+    // Connect WebSocket
+    connectWebSocket();
+});
+</script>
+{% endblock %}

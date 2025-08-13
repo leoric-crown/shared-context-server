@@ -39,6 +39,7 @@ dependencies = [
     "python-multipart>=0.0.6",
     "sqlalchemy>=2.0.43",
     "greenlet>=3.2.4",
+    "mcpsock>=0.1.5",
 ]
 
 [project.optional-dependencies]
@@ -216,8 +217,17 @@ module = [
     "rapidfuzz.*",
     "uvloop.*",
     "mcp.*",
+    "mcpsock.*",
 ]
 ignore_missing_imports = true
+
+# Optional WebSocket development modules
+[[tool.mypy.overrides]]
+module = [
+    "shared_context_server.websocket_server",
+    "shared_context_server.scripts.dev_with_websocket",
+]
+ignore_errors = true
 
 # ============================================================================
 # PYTEST CONFIGURATION
@@ -258,6 +268,8 @@ omit = [
     "*/conftest.py",
     "*/__pycache__/*",
     "src/shared_context_server/scripts/dev.py",
+    "src/shared_context_server/scripts/dev_with_websocket.py",
+    "src/shared_context_server/websocket_server.py",
 ]
 
 [tool.coverage.report]

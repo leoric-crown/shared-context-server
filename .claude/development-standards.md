@@ -13,11 +13,19 @@ This document provides comprehensive development standards for **Shared Context 
 
 ### MCP Server Organization
 For complex MCP server modules:
-- `mcp_server.py` - FastMCP server setup and coordination logic (max 200 lines)
+- `server.py` - Main FastMCP server setup and HTTP routes (max 300 lines)
+- `websocket_server.py` - Separate WebSocket server using mcpsock (max 200 lines)
 - `tools.py` - MCP tool definitions and handlers (max 300 lines)
 - `resources.py` - MCP resource providers (max 200 lines)
 - `database.py` - aiosqlite operations and schema (max 200 lines)
 - `models.py` - Pydantic data models and validation (max 200 lines)
+
+### Dual-Server Architecture Patterns
+For WebSocket-enabled applications:
+- **Main Server**: FastMCP server with HTTP routes and MCP tools
+- **WebSocket Server**: Separate mcpsock server for real-time updates
+- **Shared Database**: Both servers use unified `get_db_connection()` interface
+- **Coordination**: Database-mediated communication, not direct server-to-server
 
 ### Module Organization
 - **Organize code into clearly separated modules**, grouped by feature or responsibility
@@ -44,8 +52,15 @@ For complex MCP server modules:
 - **Tests should live in a `/tests` folder** with pytest structure:
   - **Unit tests**: Fast, isolated tests for pure functions
   - **Integration tests**: FastMCP tool and resource testing
+  - **Dual-server tests**: WebSocket server coordination and database sharing
   - **Behavioral tests**: Multi-agent coordination scenarios
   - Include at least: expected use, edge case, failure case
+
+**Dual-Server Testing Patterns**:
+- **Server Coordination Tests**: Both servers accessing shared database correctly
+- **WebSocket Integration Tests**: Real-time updates between servers
+- **Failure Scenarios**: WebSocket server down, database conflicts, connection issues
+- **Performance Tests**: Concurrent access patterns across both servers
 
 **Coverage Validation Commands**:
 ```bash

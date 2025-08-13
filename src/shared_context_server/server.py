@@ -20,6 +20,7 @@ import time
 import traceback
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
@@ -31,7 +32,10 @@ from fastmcp import Context, FastMCP
 from fastmcp.resources import Resource
 from pydantic import AnyUrl, Field
 from rapidfuzz import fuzz, process
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
+from starlette.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .auth import (
     audit_log_auth_event,
@@ -112,6 +116,60 @@ mcp = FastMCP(
     instructions="Centralized memory store for multi-agent collaboration",
 )
 
+# ============================================================================
+# WEB UI TEMPLATE AND STATIC FILE CONFIGURATION
+# ============================================================================
+
+# Determine template and static file paths
+current_dir = Path(__file__).parent
+template_dir = current_dir / "templates"
+static_dir = current_dir / "static"
+
+# Ensure directories exist
+template_dir.mkdir(exist_ok=True)
+static_dir.mkdir(exist_ok=True)
+
+# Initialize Jinja2 templates for HTML rendering
+templates = Jinja2Templates(directory=str(template_dir))
+
+
+# WebSocket connection manager for real-time updates
+class WebSocketManager:
+    def __init__(self) -> None:
+        self.active_connections: dict[str, set[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, session_id: str) -> None:
+        await websocket.accept()
+        if session_id not in self.active_connections:
+            self.active_connections[session_id] = set()
+        self.active_connections[session_id].add(websocket)
+
+    def disconnect(self, websocket: WebSocket, session_id: str) -> None:
+        if session_id in self.active_connections:
+            self.active_connections[session_id].discard(websocket)
+            if not self.active_connections[session_id]:
+                del self.active_connections[session_id]
+
+    async def broadcast_to_session(self, session_id: str, message: dict) -> None:
+        if session_id in self.active_connections:
+            # Extract WebSocket list to avoid performance overhead in loop
+            websockets = list(self.active_connections[session_id])
+            for websocket in websockets:
+                await self._send_message_safe(websocket, message, session_id)
+
+    async def _send_message_safe(
+        self, websocket: WebSocket, message: dict, session_id: str
+    ) -> None:
+        """Safely send message to WebSocket, disconnect on error."""
+        try:
+            await websocket.send_json(message)
+        except Exception:
+            self.disconnect(websocket, session_id)
+
+
+# Global WebSocket manager instance
+websocket_manager = WebSocketManager()
+
 
 # ============================================================================
 # HEALTH CHECK ENDPOINT
@@ -154,6 +212,217 @@ async def health_check(_request: Request) -> JSONResponse:
             },
             status_code=500,
         )
+
+
+# ============================================================================
+# WEB UI ENDPOINTS
+# ============================================================================
+
+
+@mcp.custom_route("/ui/", methods=["GET"])
+async def dashboard(request: Request) -> HTMLResponse:
+    """
+    Main dashboard displaying active sessions with real-time updates.
+    """
+    try:
+        async with get_db_connection() as conn:
+            # Set row factory for dict-like access
+            if hasattr(conn, "row_factory"):
+                conn.row_factory = aiosqlite.Row
+
+            # Get active sessions with message counts
+            cursor = await conn.execute("""
+                SELECT s.*, COUNT(m.id) as message_count, MAX(m.timestamp) as last_activity
+                FROM sessions s
+                LEFT JOIN messages m ON s.id = m.session_id
+                WHERE s.is_active = 1
+                GROUP BY s.id
+                ORDER BY last_activity DESC, s.created_at DESC
+                LIMIT 50
+            """)
+
+            sessions = [dict(row) for row in await cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            request,
+            "dashboard.html",
+            {"request": request, "sessions": sessions, "total_sessions": len(sessions)},
+        )
+
+    except Exception as e:
+        logger.exception("Dashboard failed to load")
+        return HTMLResponse(
+            f"<html><body><h1>Error</h1><p>Failed to load dashboard: {e}</p></body></html>",
+            status_code=500,
+        )
+
+
+@mcp.custom_route("/ui/sessions/{session_id}", methods=["GET"])
+async def session_view(request: Request) -> HTMLResponse:
+    """
+    Individual session message viewer with real-time updates.
+    """
+    session_id = request.path_params["session_id"]
+
+    try:
+        async with get_db_connection() as conn:
+            # Set row factory for dict-like access
+            if hasattr(conn, "row_factory"):
+                conn.row_factory = aiosqlite.Row
+
+            # Get session information
+            cursor = await conn.execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            )
+            session = await cursor.fetchone()
+
+            if not session:
+                return HTMLResponse(
+                    "<html><body><h1>Session Not Found</h1></body></html>",
+                    status_code=404,
+                )
+
+            # Get messages for this session (showing all public + visible private/agent_only)
+            cursor = await conn.execute(
+                """
+                SELECT * FROM messages
+                WHERE session_id = ?
+                AND visibility IN ('public', 'private', 'agent_only')
+                ORDER BY timestamp ASC
+            """,
+                (session_id,),
+            )
+
+            messages = [dict(row) for row in await cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            request,
+            "session_view.html",
+            {
+                "request": request,
+                "session": dict(session),
+                "messages": messages,
+                "session_id": session_id,
+            },
+        )
+
+    except Exception as e:
+        logger.exception(f"Session view failed for {session_id}")
+        return HTMLResponse(
+            f"<html><body><h1>Error</h1><p>Failed to load session: {e}</p></body></html>",
+            status_code=500,
+        )
+
+
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for real-time session updates.
+    """
+    # Extract session_id from WebSocket path
+    path_params = websocket.path_params
+    session_id = path_params.get("session_id")
+
+    if not session_id:
+        await websocket.close(code=1008, reason="Missing session_id")
+        return
+
+    await websocket_manager.connect(websocket, session_id)
+
+    try:
+        while True:
+            # Wait for messages (client heartbeat or disconnect)
+            data = await websocket.receive_text()
+
+            # Handle client heartbeat
+            if data == "ping":
+                await websocket.send_text("pong")
+
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket, session_id)
+    except Exception as e:
+        logger.warning(f"WebSocket error for session {session_id}: {e}")
+        websocket_manager.disconnect(websocket, session_id)
+
+
+# Mount static files for CSS, JS, and assets
+try:
+    mcp.mount(StaticFiles(directory=str(static_dir)), "/ui/static")  # type: ignore[arg-type]
+except Exception as e:
+    logger.warning(f"Failed to mount static files: {e}")
+
+# ============================================================================
+# REAL-TIME WEBSOCKET SUPPORT USING MCPSOCK
+# ============================================================================
+
+# Import mcpsock for proper WebSocket support
+try:
+    from mcpsock import WebSocketServer as MCPWebSocketServer
+
+    MCPSOCK_AVAILABLE = True
+    logger.info("mcpsock package available - WebSocket support enabled")
+except ImportError:
+    MCPSOCK_AVAILABLE = False
+    logger.warning("mcpsock package not available - WebSocket support disabled")
+
+# Create WebSocket server instance for real-time updates
+if MCPSOCK_AVAILABLE:
+    # Create a WebSocket server router for real-time session updates
+    websocket_router = MCPWebSocketServer()
+
+    @websocket_router.initialize()  # type: ignore[misc]
+    async def websocket_initialize(
+        _websocket: Any, session_id: str | None = None
+    ) -> dict[str, str | None]:
+        """Initialize WebSocket connection for a session."""
+        logger.info(f"WebSocket client connected for session: {session_id}")
+        return {"status": "connected", "session_id": session_id}
+
+    @websocket_router.tool("subscribe")  # type: ignore[misc]
+    async def subscribe_to_session(session_id: str) -> dict[str, str]:
+        """Subscribe to real-time updates for a specific session."""
+        # Add the WebSocket connection to our notification manager
+        # This integrates with existing websocket_manager
+        return {"status": "subscribed", "session_id": session_id}
+
+    @websocket_router.tool("get_updates")  # type: ignore[misc]
+    async def get_session_updates(
+        session_id: str, last_message_id: int | None = None
+    ) -> dict[str, Any]:
+        """Get recent updates for a session since last_message_id."""
+        try:
+            async with get_db_connection() as conn:
+                conn.row_factory = aiosqlite.Row
+
+                # Get messages since last_message_id
+                query = """
+                    SELECT * FROM messages
+                    WHERE session_id = ?
+                    AND visibility IN ('public', 'private', 'agent_only')
+                """
+                params = [session_id]
+
+                if last_message_id:
+                    query += " AND id > ?"
+                    params.append(str(last_message_id))
+
+                query += " ORDER BY timestamp ASC LIMIT 50"
+
+                cursor = await conn.execute(query, params)
+                messages = [dict(row) for row in await cursor.fetchall()]
+
+                return {
+                    "session_id": session_id,
+                    "messages": messages,
+                    "count": len(messages),
+                }
+        except Exception as e:
+            logger.exception("Failed to get session updates")
+            return {"error": str(e), "session_id": session_id}
+
+    logger.info("WebSocket tools registered for real-time session updates")
+else:
+    websocket_router = None
+    logger.warning("WebSocket support disabled - mcpsock not available")
 
 
 # ============================================================================
@@ -721,6 +990,26 @@ async def add_message(
 
             # Trigger resource notifications
             await trigger_resource_notifications(session_id, agent_id)
+
+            # Send real-time message update via WebSocket
+            try:
+                await websocket_manager.broadcast_to_session(
+                    session_id,
+                    {
+                        "type": "new_message",
+                        "data": {
+                            "id": message_id,
+                            "sender": agent_id,
+                            "sender_type": agent_type,
+                            "content": content,
+                            "visibility": visibility,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "metadata": metadata or {},
+                        },
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send WebSocket message notification: {e}")
 
         return {
             "success": True,
@@ -2059,6 +2348,17 @@ async def trigger_resource_notifications(session_id: str, agent_id: str) -> None
 
         # Notify agent memory subscribers
         await notification_manager.notify_resource_updated(f"agent://{agent_id}/memory")
+
+        # WebSocket notifications for Web UI
+        await websocket_manager.broadcast_to_session(
+            session_id,
+            {
+                "type": "session_update",
+                "session_id": session_id,
+                "agent_id": agent_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
     except Exception as e:
         logger.warning(f"Failed to trigger resource notifications: {e}")
