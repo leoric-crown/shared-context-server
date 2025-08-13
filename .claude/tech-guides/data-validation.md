@@ -754,6 +754,7 @@ async def handle_validation_with_proper_errors(data: dict[str, Any]) -> dict[str
 - Core Architecture: `/.claude/tech-guides/core-architecture.md` - Database patterns
 - Framework Integration: `/.claude/tech-guides/framework-integration.md` - FastMCP patterns
 - Error Handling: `/.claude/tech-guides/error-handling.md` - Error hierarchy
+- CI Environment: `/.claude/tech-guides/ci.md` - Testing environment configurations
 
 ## Related Guides
 

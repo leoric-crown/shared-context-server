@@ -860,6 +860,7 @@ async def test_rate_limiting():
 - Data Validation Guide: `.claude/tech-guides/data-validation.md`
 - Error Handling Guide: `.claude/tech-guides/error-handling.md`
 - Core Architecture Guide: `.claude/tech-guides/core-architecture.md`
+- CI Environment Guide: `.claude/tech-guides/ci.md`
 
 ## Related Guides
 

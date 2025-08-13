@@ -231,6 +231,7 @@ claude mcp list  # Should show: ✓ Connected
 - `.claude/tech-guides/performance-optimization.md` - RapidFuzz search, connection pooling, caching, and monitoring
 - `.claude/tech-guides/data-validation.md` - Pydantic models, validation rules, and type safety
 - `.claude/tech-guides/error-handling.md` - Error hierarchy, circuit breakers, recovery patterns, and logging
+- `.claude/tech-guides/ci.md` - CI environment testing, SQLite limitations, and concurrency solutions
 
 ### Standards
 - `.claude/development-standards.md` - Code quality, testing, file limits

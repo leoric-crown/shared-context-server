@@ -1049,6 +1049,7 @@ async with get_connection() as conn:
 - Core Architecture Guide: `.claude/tech-guides/core-architecture.md`
 - Framework Integration Guide: `.claude/tech-guides/framework-integration.md`
 - Data Validation Guide: `.claude/tech-guides/data-validation.md`
+- CI Environment Guide: `.claude/tech-guides/ci.md`
 
 ## Related Guides
 
