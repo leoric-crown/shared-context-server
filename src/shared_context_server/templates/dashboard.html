@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Shared Context Server{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>Active Sessions</h1>
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <span class="stat-number">{{ total_sessions }}</span>
+                <span class="stat-label">Active Sessions</span>
+            </div>
+        </div>
+    </div>
+
+    {% if sessions %}
+    <div class="sessions-grid">
+        {% for session in sessions %}
+        <div class="session-card" data-session-id="{{ session.id }}">
+            <div class="session-header">
+                <h3 class="session-title">
+                    <a href="/ui/sessions/{{ session.id }}" class="session-link">
+                        {{ session.purpose[:60] }}{% if session.purpose|length > 60 %}...{% endif %}
+                    </a>
+                </h3>
+                <div class="session-meta">
+                    <span class="session-id">{{ session.id }}</span>
+                </div>
+            </div>
+
+            <div class="session-stats">
+                <div class="stat-item">
+                    <span class="stat-icon">💬</span>
+                    <span class="stat-value">{{ session.message_count or 0 }}</span>
+                    <span class="stat-text">messages</span>
+                </div>
+
+                <div class="stat-item">
+                    <span class="stat-icon">👤</span>
+                    <span class="stat-value">{{ session.created_by[:12] }}{% if session.created_by|length > 12 %}...{% endif %}</span>
+                </div>
+            </div>
+
+            <div class="session-timestamps">
+                <div class="timestamp-item">
+                    <span class="timestamp-label">Created:</span>
+                    <span class="timestamp-value" data-timestamp="{{ session.created_at }}">
+                        {{ session.created_at }}
+                    </span>
+                </div>
+
+                {% if session.last_activity %}
+                <div class="timestamp-item">
+                    <span class="timestamp-label">Last Activity:</span>
+                    <span class="timestamp-value" data-timestamp="{{ session.last_activity }}">
+                        {{ session.last_activity }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="session-actions">
+                <a href="/ui/sessions/{{ session.id }}" class="btn btn-primary">
+                    View Session
+                </a>
+                <button class="btn btn-secondary" onclick="copySessionId('{{ session.id }}')">
+                    Copy ID
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <h2>No Active Sessions</h2>
+        <p>When agents create shared context sessions, they will appear here.</p>
+        <div class="empty-actions">
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                Refresh Dashboard
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Auto-refresh dashboard every 30 seconds
+setInterval(() => {
+    window.location.reload();
+}, 30000);
+
+// Copy session ID to clipboard
+function copySessionId(sessionId) {
+    navigator.clipboard.writeText(sessionId).then(() => {
+        showNotification('Session ID copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showNotification('Failed to copy session ID', 'error');
+    });
+}
+
+// Simple notification system
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Show notification
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+
+    // Hide and remove notification
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Format timestamps on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const timestampElements = document.querySelectorAll('.timestamp-value[data-timestamp]');
+    timestampElements.forEach(element => {
+        const timestamp = element.getAttribute('data-timestamp');
+        if (timestamp) {
+            try {
+                const date = new Date(timestamp);
+                element.textContent = date.toLocaleString();
+            } catch (e) {
+                console.warn('Failed to parse timestamp:', timestamp);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

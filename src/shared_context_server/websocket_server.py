@@ -1,0 +1,231 @@
+"""
+Real-time WebSocket Server for Shared Context Server.
+
+This module provides WebSocket support using the mcpsock package to enable
+real-time updates for the Web UI. It runs as a separate FastAPI server that
+integrates with the main MCP server.
+"""
+
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import uvicorn
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+try:
+    from mcpsock import WebSocketServer as MCPWebSocketServer
+
+    MCPSOCK_AVAILABLE = True
+except ImportError:
+    MCPSOCK_AVAILABLE = False
+
+from .database import get_db_connection
+from .server import websocket_manager
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# WEBSOCKET SERVER SETUP
+# ============================================================================
+
+if MCPSOCK_AVAILABLE:
+    # Create FastAPI app for WebSocket server
+    websocket_app = FastAPI(title="Shared Context WebSocket Server")
+
+    # Create mcpsock WebSocket server
+    ws_router = MCPWebSocketServer()
+
+    @ws_router.initialize()
+    async def ws_initialize(_websocket: WebSocket, session_id: Optional[str] = None):
+        """Initialize WebSocket connection."""
+        logger.info(f"WebSocket connection initialized for session: {session_id}")
+        return {
+            "status": "connected",
+            "session_id": session_id,
+            "server_time": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @ws_router.tool("subscribe")
+    async def subscribe_to_session(session_id: str) -> dict[str, Any]:
+        """Subscribe to real-time updates for a session."""
+        logger.info(f"Client subscribed to session: {session_id}")
+        return {"status": "subscribed", "session_id": session_id}
+
+    @ws_router.tool("get_messages")
+    async def get_session_messages(
+        session_id: str, since_id: Optional[int] = None
+    ) -> dict[str, Any]:
+        """Get messages for a session, optionally since a specific message ID."""
+        try:
+            async with get_db_connection() as conn:
+                # Set row factory for dict-like access
+                if hasattr(conn, "row_factory"):
+                    import aiosqlite
+
+                    conn.row_factory = aiosqlite.Row
+
+                # Build query
+                query = """
+                    SELECT * FROM messages
+                    WHERE session_id = ?
+                    AND visibility IN ('public', 'private', 'agent_only')
+                """
+                params = [session_id]
+
+                if since_id:
+                    query += " AND id > ?"
+                    params.append(since_id)
+
+                query += " ORDER BY timestamp ASC LIMIT 50"
+
+                cursor = await conn.execute(query, params)
+                rows = await cursor.fetchall()
+                messages = [dict(row) for row in rows]
+
+                return {
+                    "session_id": session_id,
+                    "messages": messages,
+                    "count": len(messages),
+                    "since_id": since_id,
+                }
+
+        except Exception as e:
+            logger.exception(f"Failed to get messages for session {session_id}")
+            return {
+                "error": str(e),
+                "session_id": session_id,
+                "messages": [],
+                "count": 0,
+            }
+
+    @ws_router.tool("get_session_info")
+    async def get_session_info(session_id: str) -> dict[str, Any]:
+        """Get basic session information."""
+        try:
+            async with get_db_connection() as conn:
+                # Set row factory for dict-like access
+                if hasattr(conn, "row_factory"):
+                    import aiosqlite
+
+                    conn.row_factory = aiosqlite.Row
+
+                cursor = await conn.execute(
+                    "SELECT * FROM sessions WHERE id = ?", (session_id,)
+                )
+                session = await cursor.fetchone()
+
+                if not session:
+                    return {"error": "Session not found", "session_id": session_id}
+
+                return {
+                    "session_id": session_id,
+                    "session": dict(session),
+                    "status": "active" if session["is_active"] else "inactive",
+                }
+
+        except Exception as e:
+            logger.exception(f"Failed to get session info for {session_id}")
+            return {"error": str(e), "session_id": session_id}
+
+    # Register WebSocket endpoint with FastAPI
+    @websocket_app.websocket("/ws/{session_id}")
+    async def websocket_endpoint(websocket: WebSocket, session_id: str):
+        """Main WebSocket endpoint using mcpsock."""
+        await ws_router.handle_websocket(websocket, session_id=session_id)
+
+    @websocket_app.get("/health")
+    async def websocket_health():
+        """Health check for WebSocket server."""
+        return {
+            "status": "healthy",
+            "websocket_support": True,
+            "mcpsock_version": "0.1.5",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    logger.info("WebSocket server configured with mcpsock integration")
+
+else:
+    # Fallback WebSocket server without mcpsock
+    websocket_app = FastAPI(title="Shared Context WebSocket Server (Fallback)")
+
+    @websocket_app.websocket("/ws/{session_id}")
+    async def websocket_fallback(websocket: WebSocket, session_id: str):
+        """Fallback WebSocket endpoint without mcpsock."""
+        await websocket.accept()
+
+        try:
+            # Add to existing websocket manager
+            await websocket_manager.connect(websocket, session_id)
+            logger.info(f"WebSocket client connected to session: {session_id}")
+
+            # Keep connection alive and handle messages
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    if data == "ping":
+                        await websocket.send_text("pong")
+                    elif data.startswith("subscribe:"):
+                        await websocket.send_json(
+                            {
+                                "type": "subscribed",
+                                "session_id": session_id,
+                                "status": "success",
+                            }
+                        )
+                    else:
+                        await websocket.send_json(
+                            {"type": "error", "message": "Unknown command"}
+                        )
+            except WebSocketDisconnect:
+                pass  # Client disconnected normally
+
+        except Exception:
+            logger.exception("WebSocket error occurred")
+        finally:
+            websocket_manager.disconnect(websocket, session_id)
+            logger.info(f"WebSocket client disconnected from session: {session_id}")
+
+    @websocket_app.get("/health")
+    async def websocket_health_fallback():
+        """Health check for fallback WebSocket server."""
+        return {
+            "status": "healthy",
+            "websocket_support": True,
+            "mcpsock_available": False,
+            "mode": "fallback",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    logger.warning("WebSocket server using fallback mode (no mcpsock)")
+
+
+# ============================================================================
+# SERVER RUNNER
+# ============================================================================
+
+
+async def start_websocket_server(host: str = "127.0.0.1", port: int = 8080):
+    """Start the WebSocket server."""
+    logger.info(f"Starting WebSocket server on {host}:{port}")
+    config = uvicorn.Config(
+        app=websocket_app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=False,  # Reduce log noise
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
+def run_websocket_server(host: str = "127.0.0.1", port: int = 8080):
+    """Run the WebSocket server (synchronous)."""
+    asyncio.run(start_websocket_server(host, port))
+
+
+if __name__ == "__main__":
+    # Run the WebSocket server directly
+    run_websocket_server()

@@ -88,10 +88,12 @@ except ImportError as e:
 class DevelopmentServer:
     """Development server with hot reload and lifecycle management."""
 
-    def __init__(self) -> None:
+    def __init__(self, enable_websocket: bool = True) -> None:
         self.config: SharedContextServerConfig | None = None
         self.running = False
+        self.enable_websocket = enable_websocket
         self._shutdown_event = asyncio.Event()
+        self._websocket_task: asyncio.Task[None] | None = None
 
     async def setup(self) -> None:
         """Setup the development environment."""
@@ -122,6 +124,21 @@ class DevelopmentServer:
             logger.exception("Development setup failed")
             raise
 
+    async def _start_websocket_server(self) -> None:
+        """Start the WebSocket server."""
+        try:
+            from ..websocket_server import start_websocket_server
+
+            assert self.config is not None, "Configuration not initialized"
+            host = self.config.mcp_server.websocket_host
+            port = self.config.mcp_server.websocket_port
+
+            logger.info(f"Starting WebSocket server on ws://{host}:{port}")
+            await start_websocket_server(host=host, port=port)
+        except Exception:
+            logger.exception("WebSocket server failed")
+            raise
+
     async def run(self) -> None:
         """Run the development server."""
         logger.info("Starting Shared Context MCP Development Server...")
@@ -146,6 +163,29 @@ class DevelopmentServer:
                 )
             else:
                 logger.info("MCP server running on stdio transport")
+
+            # Start WebSocket server if enabled (both CLI flag and config setting)
+            websocket_enabled = (
+                self.enable_websocket and self.config.mcp_server.websocket_enabled
+            )
+            if websocket_enabled:
+                host = self.config.mcp_server.websocket_host
+                port = self.config.mcp_server.websocket_port
+                logger.info(
+                    f"WebSocket server enabled - starting on ws://{host}:{port}"
+                )
+                self._websocket_task = asyncio.create_task(
+                    self._start_websocket_server()
+                )
+            else:
+                if not self.enable_websocket:
+                    logger.info(
+                        "WebSocket server disabled via CLI flag (--no-websocket)"
+                    )
+                elif not self.config.mcp_server.websocket_enabled:
+                    logger.info(
+                        "WebSocket server disabled via config (WEBSOCKET_ENABLED=false)"
+                    )
 
             # Start the actual FastMCP server with hot reload
             if self.config.mcp_server.mcp_transport == "http":
@@ -386,6 +426,15 @@ class DevelopmentServer:
         self.running = False
 
         try:
+            # Shutdown WebSocket server if running
+            if self._websocket_task and not self._websocket_task.done():
+                logger.info("Shutting down WebSocket server...")
+                self._websocket_task.cancel()
+                try:
+                    await self._websocket_task
+                except asyncio.CancelledError:
+                    logger.info("WebSocket server shutdown complete")
+
             if SERVER_AVAILABLE:
                 await shutdown_server()
                 logger.info("Development server shutdown completed")
@@ -400,9 +449,9 @@ class DevelopmentServer:
 # ============================================================================
 
 
-async def start_dev_server() -> None:
+async def start_dev_server(enable_websocket: bool = True) -> None:
     """Start the development server."""
-    dev_server = DevelopmentServer()
+    dev_server = DevelopmentServer(enable_websocket=enable_websocket)
     await dev_server.run()
 
 
@@ -505,6 +554,11 @@ Examples:
     parser.add_argument(
         "--config-file", type=str, help="Path to custom .env configuration file"
     )
+    parser.add_argument(
+        "--no-websocket",
+        action="store_true",
+        help="Disable WebSocket server (enabled by default)",
+    )
 
     args = parser.parse_args()
 
@@ -533,7 +587,7 @@ Examples:
         else:
             logger.info("uvloop not available, using default asyncio")
 
-        asyncio.run(start_dev_server())
+        asyncio.run(start_dev_server(enable_websocket=not args.no_websocket))
 
     except KeyboardInterrupt:
         logger.info("Development server interrupted by user")

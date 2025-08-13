@@ -34,16 +34,23 @@ Our comprehensive tech guides validation revealed:
 ## Implementation Specification
 
 ### Core Requirements
-**FastMCP Web Routes** (extends existing `server.py`):
+**Dual-Server Architecture**:
 ```python
+# Main FastMCP Server (server.py) - Port 45678
 @mcp.custom_route("/ui/", methods=["GET"])
 async def dashboard(request: Request) -> HTMLResponse
 
 @mcp.custom_route("/ui/sessions/{session_id}", methods=["GET"])
 async def session_view(request: Request, session_id: str) -> HTMLResponse
 
-@mcp.websocket("/ui/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str)
+# Separate WebSocket Server (websocket_server.py) - Port 8080
+# Uses mcpsock package for FastMCP-compatible WebSocket tools
+class WebSocketMCPServer:
+    @tool(name="subscribe")
+    async def subscribe_to_session(session_id: str) -> str
+
+    @tool(name="get_messages")
+    async def get_messages_since(session_id: str, since_id: int) -> list
 ```
 
 **Template System**:
@@ -52,15 +59,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str)
 - Mobile-responsive design with progressive enhancement
 
 **WebSocket Integration**:
-- Extend `ResourceNotificationManager` for real-time UI updates
-- Connection pooling with cleanup for inactive connections
-- Message broadcasting to connected session viewers
+- Separate mcpsock-based WebSocket server for real-time updates
+- Tool-based API for subscribing to session updates
+- Shared database access between main server and WebSocket server
+- Connection management with automatic cleanup
 
 ### Integration Points
 **Database Layer**:
-- Uses unified `get_db_connection()` - works with both aiosqlite and SQLAlchemy backends
-- Leverages existing `messages` table with `sender`, `content`, `timestamp`, `visibility` fields
-- No schema changes required - read-only access patterns
+- Both servers use unified `get_db_connection()` - works with both aiosqlite and SQLAlchemy backends
+- Shared access to existing `messages` and `sessions` tables
+- WebSocket server provides read-only access for real-time updates
+- No schema changes required - coordinated database access patterns
 
 **Authentication System**:
 - Separate web authentication independent of MCP JWT tokens
@@ -74,10 +83,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str)
 
 ### API Requirements
 **Web UI Endpoints**:
-- `GET /ui/` - Main dashboard with session list
-- `GET /ui/sessions/{id}` - Individual session message viewer
-- `POST /ui/auth` - Web authentication (optional)
-- `WebSocket /ui/ws/{id}` - Real-time session updates
+- `GET /ui/` - Main dashboard with session list (Main Server:45678)
+- `GET /ui/sessions/{id}` - Individual session message viewer (Main Server:45678)
+- `POST /ui/auth` - Web authentication (optional) (Main Server:45678)
+- `WebSocket /ws/{id}` - Real-time session updates (WebSocket Server:8080)
+- `GET /health` - WebSocket server health check (WebSocket Server:8080)
 
 **Data Patterns**:
 - JSON responses for AJAX calls
@@ -89,13 +99,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str)
 ### Testing Strategy
 **Multi-Backend Testing**:
 - Parametrized tests across both aiosqlite and SQLAlchemy backends
-- WebSocket connection and message delivery validation
+- Dual-server coordination testing (main server + WebSocket server)
+- WebSocket tool integration and message delivery validation
 - Template rendering and static file serving tests
 
 **Integration Testing**:
 - FastMCP + HTTP route integration tests
-- Real-time WebSocket message broadcasting
-- Concurrent agent access with web UI monitoring
+- Dual-server startup and coordination testing
+- Real-time WebSocket tool-based message broadcasting
+- Concurrent agent access with web UI monitoring across both servers
 
 **Frontend Testing**:
 - JavaScript unit tests for WebSocket handling
@@ -140,11 +152,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str)
 - Implement static file serving
 - Basic database integration with `get_db_connection()`
 
-**Phase 2: WebSocket Integration (3-4 hours)**
-- Extend `ResourceNotificationManager` for WebSocket support
-- Implement real-time message broadcasting
-- WebSocket connection management and cleanup
-- Frontend JavaScript for real-time updates
+**Phase 2: WebSocket Server (3-4 hours)**
+- Create separate `websocket_server.py` using mcpsock package
+- Implement tool-based API for session subscriptions
+- Real-time message broadcasting via WebSocket tools
+- Frontend JavaScript for WebSocket connection to port 8080
 
 **Phase 3: Authentication & Polish (2-3 hours)**
 - Optional web authentication system
@@ -180,9 +192,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str)
 
 **Missing Dependencies** (to be added):
 - HTML templates and static assets
-- WebSocket integration code
+- mcpsock package for WebSocket server
+- Separate WebSocket server implementation
 - Web authentication system (optional)
-- Frontend JavaScript for real-time updates
+- Frontend JavaScript for dual-server communication
 
 ## Success Criteria
 
@@ -242,9 +255,10 @@ async with get_db_connection() as conn:
 
 ### Zero-Impact Design
 - Web UI routes use `/ui/*` prefix to avoid MCP tool conflicts
-- Separate authentication system prevents MCP JWT interference
-- Optional feature - server functions fully without web UI enabled
-- Feature flag rollback capability for production safety
+- Separate WebSocket server prevents main server performance impact
+- Shared database access with proper connection management
+- Optional feature - main server functions fully without WebSocket server
+- Independent deployment and scaling of both servers
 
 ### Future Extensibility
 - Foundation for advanced features (search, filtering, export)

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Shared Context Server{% endblock %}</title>
+    <link href="/ui/static/css/style.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <a href="/ui/" class="brand-link">
+                    <span class="brand-icon">🔗</span>
+                    <span class="brand-text">Shared Context Server</span>
+                </a>
+            </div>
+            <div class="nav-links">
+                <a href="/ui/" class="nav-link {% if request.url.path == '/ui/' %}active{% endif %}">Dashboard</a>
+                <a href="/health" class="nav-link" target="_blank">Health</a>
+                <div class="status-indicator" id="connection-status">
+                    <span class="status-dot online"></span>
+                    <span class="status-text">Online</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2025 Shared Context Server - Multi-Agent Collaboration Platform</p>
+            <div class="footer-links">
+                <a href="/docs" target="_blank">API Docs</a>
+                <span class="separator">•</span>
+                <a href="/health" target="_blank">System Status</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/ui/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
