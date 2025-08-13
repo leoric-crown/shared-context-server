@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
@@ -147,17 +148,21 @@ class SQLAlchemyConnectionWrapper:
     while handling parameter translation and transaction management.
     """
 
-    def __init__(self, engine: AsyncEngine, conn: AsyncConnection):
+    def __init__(
+        self, engine: AsyncEngine, conn: AsyncConnection, db_type: str = "sqlite"
+    ):
         """Initialize connection wrapper."""
         self.engine = engine
         self.conn = conn
         self.row_factory = None  # Compatibility with aiosqlite.Row assignment
+        self.db_type = db_type
 
     def _convert_params(
         self, query: str, params: tuple[Any, ...] = ()
     ) -> tuple[str, dict[str, Any]]:
         """
         Convert aiosqlite-style ? parameters to SQLAlchemy named parameters.
+        Also handles database-specific column name translations.
 
         Args:
             query: SQL query with ? placeholders
@@ -166,6 +171,26 @@ class SQLAlchemyConnectionWrapper:
         Returns:
             Tuple of (converted_query, named_params_dict)
         """
+        # Handle MySQL column name translation (key -> key_name)
+        if self.db_type == "mysql" and "agent_memory" in query.lower():
+            # Replace references to agent_memory.key with agent_memory.key_name
+            query = query.replace("agent_memory.key", "agent_memory.key_name")
+            # Handle cases where 'key' is used in INSERT/UPDATE for agent_memory
+            if "INSERT INTO agent_memory" in query and " key," in query:
+                query = query.replace(" key,", " key_name,")
+            if "INSERT INTO agent_memory" in query and " key)" in query:
+                query = query.replace(" key)", " key_name)")
+            # Handle WHERE clauses with key column
+            if " key " in query and any(
+                clause in query.lower() for clause in ["where", "and", "or"]
+            ):
+                query = query.replace(" key ", " key_name ")
+            if " key=" in query:
+                query = query.replace(" key=", " key_name=")
+            # Handle UPDATE statements
+            if "UPDATE agent_memory" in query and " key " in query:
+                query = query.replace(" key ", " key_name ")
+
         if not params:
             return query, {}
 
@@ -264,53 +289,175 @@ class SQLAlchemyConnectionWrapper:
 
 class SimpleSQLAlchemyManager:
     """
-    Drop-in replacement for current database connection factory.
+    Multi-database SQLAlchemy manager with URL-based database detection.
 
     Provides the same get_connection() context manager interface while using
-    SQLAlchemy Core for database operations.
+    SQLAlchemy Core for database operations across SQLite, PostgreSQL, and MySQL.
     """
 
     def __init__(self, database_url: str = "sqlite+aiosqlite:///./chat_history.db"):
         """
-        Initialize SQLAlchemy manager.
+        Initialize SQLAlchemy manager with database detection.
 
         Args:
             database_url: SQLAlchemy database URL
         """
         self.database_url = database_url
-        self.engine = create_async_engine(
-            database_url,
-            # SQLite-specific options for compatibility
-            pool_pre_ping=True,
-            pool_recycle=3600,
-        )
+
+        # Simple URL-based detection (KISS principle) - case insensitive
+        url_lower = database_url.lower()
+        if url_lower.startswith("sqlite+aiosqlite://"):
+            self.db_type = "sqlite"
+        elif url_lower.startswith("postgresql+asyncpg://"):
+            self.db_type = "postgresql"
+        elif url_lower.startswith("mysql+aiomysql://"):
+            self.db_type = "mysql"
+        else:
+            raise ValueError(f"Unsupported database URL: {database_url}")
+
+        # Database-specific engine configuration
+        engine_config = self._get_engine_config()
+        self.engine = create_async_engine(database_url, **engine_config)
         self.is_initialized = False
+
+    def _get_engine_config(self) -> dict[str, Any]:
+        """Return database-specific engine configuration."""
+        if self.db_type == "sqlite":
+            return {
+                "pool_pre_ping": True,
+                "pool_recycle": 3600,
+                # Keep existing SQLite optimizations
+            }
+        if self.db_type == "postgresql":
+            return {
+                "pool_size": 20,
+                "max_overflow": 30,
+                "pool_recycle": 3600,
+                "pool_pre_ping": True,
+                "connect_args": {
+                    "prepared_statement_cache_size": 500,
+                    "server_settings": {
+                        "jit": "off",  # Optimize performance
+                        "application_name": "shared_context_mcp",
+                    },
+                },
+            }
+        if self.db_type == "mysql":
+            return {
+                "pool_size": 10,
+                "max_overflow": 20,
+                "pool_recycle": 3600,  # Handle MySQL 8-hour timeout
+                "pool_pre_ping": True,
+                "connect_args": {
+                    "charset": "utf8mb4",
+                    "autocommit": False,
+                    "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+                },
+            }
+        return {"pool_pre_ping": True, "pool_recycle": 3600}
+
+    def _get_schema_file_path(self) -> Path:
+        """Get the appropriate schema file path for the database type."""
+        # Get the project root directory (where schema files are located)
+        current_dir = Path(__file__).parent
+        project_root = current_dir.parent.parent
+
+        if self.db_type == "sqlite":
+            return project_root / "database.sql"
+        if self.db_type == "postgresql":
+            return project_root / "database_postgresql.sql"
+        if self.db_type == "mysql":
+            return project_root / "database_mysql.sql"
+        raise ValueError(f"No schema file for database type: {self.db_type}")
+
+    async def _load_schema_file(self) -> str:
+        """Load the appropriate schema file for the database type."""
+        schema_file = self._get_schema_file_path()
+
+        if not schema_file.exists():
+            raise FileNotFoundError(f"Schema file not found: {schema_file}")
+
+        return schema_file.read_text(encoding="utf-8")
 
     async def initialize(self) -> None:
         """
-        Initialize database with schema using a temporary aiosqlite connection.
-
-        This leverages the existing DatabaseManager initialization logic
-        to ensure the schema is properly applied.
+        Initialize database with database-specific schema.
         """
         if self.is_initialized:
             return
 
-        # Extract the actual database file path from SQLAlchemy URL
-        if self.database_url.startswith("sqlite+aiosqlite:///"):
+        if self.db_type == "sqlite":
+            # Use existing DatabaseManager for SQLite to preserve all optimizations
             db_path = self.database_url[len("sqlite+aiosqlite:///") :]
-
-            # Use the existing DatabaseManager for initialization
-            # This ensures all PRAGMAs, schema, and validation work correctly
             from .database import DatabaseManager
 
             temp_manager = DatabaseManager(db_path)
             await temp_manager.initialize()
-
-            self.is_initialized = True
         else:
-            # For non-SQLite databases, we'd need different initialization
-            raise NotImplementedError("Non-SQLite databases not yet supported")
+            # Initialize PostgreSQL/MySQL with database-specific schema
+            try:
+                schema_sql = await self._load_schema_file()
+
+                # Execute schema using SQLAlchemy connection
+                async with self.engine.connect() as conn, conn.begin():
+                    # Split schema into individual statements for execution
+                    statements = []
+                    current_statement = []
+
+                    for line in schema_sql.split("\n"):
+                        line = line.strip()
+                        if not line or line.startswith("--"):
+                            continue
+
+                        current_statement.append(line)
+
+                        # Check for statement endings (semicolon not inside function/trigger)
+                        if line.endswith(";") and not self._is_inside_function_block(
+                            current_statement
+                        ):
+                            statements.append("\n".join(current_statement))
+                            current_statement = []
+
+                    # Execute each statement
+                    for statement in statements:
+                        if statement.strip():
+                            try:
+                                await conn.execute(text(statement))
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to execute statement (continuing): {e}"
+                                )
+                                # Continue with other statements, some might be idempotent
+
+                logger.info(
+                    f"Initialized {self.db_type} database with {len(statements)} statements"
+                )
+
+            except Exception as e:
+                logger.exception(f"Failed to initialize {self.db_type} database")
+                raise RuntimeError(f"Database initialization failed: {e}") from e
+
+        self.is_initialized = True
+
+    def _is_inside_function_block(self, statement_lines: list[str]) -> bool:
+        """Check if we're inside a PostgreSQL function or MySQL procedure block."""
+        full_statement = "\n".join(statement_lines).upper()
+
+        # PostgreSQL function/trigger patterns
+        if (
+            "CREATE OR REPLACE FUNCTION" in full_statement
+            or "CREATE FUNCTION" in full_statement
+        ):
+            return "$$" not in full_statement or full_statement.count("$$") < 2
+
+        if "CREATE TRIGGER" in full_statement:
+            return "END;" not in full_statement
+
+        # MySQL procedure patterns
+        if "CREATE PROCEDURE" in full_statement or "CREATE FUNCTION" in full_statement:
+            return "END" not in full_statement
+
+        return False
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[SQLAlchemyConnectionWrapper, None]:
@@ -322,7 +469,7 @@ class SimpleSQLAlchemyManager:
         """
         try:
             async with self.engine.connect() as conn, conn.begin():
-                wrapper = SQLAlchemyConnectionWrapper(self.engine, conn)
+                wrapper = SQLAlchemyConnectionWrapper(self.engine, conn, self.db_type)
                 yield wrapper
         except Exception as e:
             logger.exception("SQLAlchemy connection failed")

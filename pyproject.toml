@@ -61,6 +61,16 @@ docs = [
     "mkdocs-material>=9.0.0",
     "mkdocstrings[python]>=0.20.0",
 ]
+postgresql = [
+    "asyncpg>=0.29.0",
+]
+mysql = [
+    "aiomysql>=0.2.0",
+]
+all-databases = [
+    "asyncpg>=0.29.0",
+    "aiomysql>=0.2.0",
+]
 
 [project.scripts]
 shared-context-server = "shared_context_server.scripts.cli:main"
