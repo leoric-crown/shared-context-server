@@ -251,8 +251,18 @@ async def dashboard(request: Request) -> HTMLResponse:
 
     except Exception as e:
         logger.exception("Dashboard failed to load")
+
+        # Get database configuration info for debugging
+        database_url = os.getenv("DATABASE_URL", "not_set")
+        use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "not_set")
+        ci_env = bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
+
+        logger.info(
+            f"Environment: DATABASE_URL={database_url}, USE_SQLALCHEMY={use_sqlalchemy}, CI={ci_env}"
+        )
+
         return HTMLResponse(
-            f"<html><body><h1>Error</h1><p>Failed to load dashboard: {e}</p></body></html>",
+            f"<html><body><h1>Dashboard Error</h1><p>Type: {type(e).__name__}</p><p>Error: {e}</p></body></html>",
             status_code=500,
         )
 
@@ -308,8 +318,9 @@ async def session_view(request: Request) -> HTMLResponse:
 
     except Exception as e:
         logger.exception(f"Session view failed for {session_id}")
+
         return HTMLResponse(
-            f"<html><body><h1>Error</h1><p>Failed to load session: {e}</p></body></html>",
+            f"<html><body><h1>Session View Error</h1><p>Type: {type(e).__name__}</p><p>Error: {e}</p></body></html>",
             status_code=500,
         )
 

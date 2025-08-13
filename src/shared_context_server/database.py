@@ -566,10 +566,20 @@ def _get_sqlalchemy_manager() -> Any:
             _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
 
         except Exception:
-            # Fallback to environment variable
-            database_path = os.getenv("DATABASE_PATH", "./chat_history.db")
-            database_url = f"sqlite+aiosqlite:///{database_path}"
-            _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+            # Fallback to environment variables
+            database_url = os.getenv("DATABASE_URL") or ""
+            if database_url:
+                # Convert sqlite:// to sqlite+aiosqlite:// if needed
+                if database_url.startswith("sqlite://"):
+                    database_url = database_url.replace(
+                        "sqlite://", "sqlite+aiosqlite://", 1
+                    )
+                _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+            else:
+                # Fallback to database path
+                database_path = os.getenv("DATABASE_PATH", "./chat_history.db")
+                database_url = f"sqlite+aiosqlite:///{database_path}"
+                _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
             logger.warning("Using fallback SQLAlchemy database configuration")
 
     return _sqlalchemy_manager

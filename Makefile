@@ -17,6 +17,7 @@ dev: ## Start development server with hot reload
 	uv run python -m shared_context_server.scripts.dev
 
 test: ## Run tests with coverage (SQLAlchemy backend - future default)
+	@echo "Running: USE_SQLALCHEMY=true uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml"
 	USE_SQLALCHEMY=true uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml
 
 test-aiosqlite: ## Run tests with aiosqlite backend (mirrors CI)
@@ -24,6 +25,7 @@ test-aiosqlite: ## Run tests with aiosqlite backend (mirrors CI)
 	@echo "  ✓ Creating backend-specific coverage config"
 	@printf '[run]\nsource = src\nbranch = true\nomit =\n    */tests/*\n    */conftest.py\n    */__pycache__/*\n    src/shared_context_server/scripts/dev.py\n    src/shared_context_server/scripts/dev_with_websocket.py\n    src/shared_context_server/websocket_server.py\n    src/shared_context_server/database_sqlalchemy.py\n\n[report]\nfail_under = 85\n' > .coveragerc.backend
 	@start_time=$$(date +%s); \
+	echo "Running: USE_SQLALCHEMY=false uv run pytest --cov=src --cov-config=.coveragerc.backend -q --maxfail=3 --tb=short"; \
 	if USE_SQLALCHEMY=false uv run pytest --cov=src --cov-config=.coveragerc.backend -q --maxfail=3 --tb=short; then \
 		end_time=$$(date +%s); \
 		duration=$$((end_time - start_time)); \
@@ -35,9 +37,10 @@ test-aiosqlite: ## Run tests with aiosqlite backend (mirrors CI)
 	fi
 	@rm -f .coveragerc.backend
 
-test-sqlalchemy: ## Run tests with SQLAlchemy backend (mirrors CI)
+test-sqlalchemy: ## Run tests with SQLAlchemy backend
 	@echo "🔧 Testing SQLAlchemy backend..."
 	@start_time=$$(date +%s); \
+	echo "Running: USE_SQLALCHEMY=true uv run pytest --cov=src -q --maxfail=3 --tb=short"; \
 	if USE_SQLALCHEMY=true uv run pytest --cov=src -q --maxfail=3 --tb=short; then \
 		end_time=$$(date +%s); \
 		duration=$$((end_time - start_time)); \
@@ -46,6 +49,27 @@ test-sqlalchemy: ## Run tests with SQLAlchemy backend (mirrors CI)
 		echo "❌ SQLAlchemy backend tests failed"; \
 		exit 1; \
 	fi
+
+test-backend: ## Run tests with both backends locally
+	@echo "🔧 Testing both database backends..."
+	@echo "================================================"
+	@set -e; \
+	echo "1/2 aiosqlite backend..."; \
+	if ! make test-aiosqlite; then \
+		echo "❌ aiosqlite backend tests failed"; \
+		exit 1; \
+	fi; \
+	echo; \
+	echo "2/2 SQLAlchemy backend..."; \
+	if ! make test-sqlalchemy; then \
+		echo "❌ SQLAlchemy backend tests failed"; \
+		exit 1; \
+	fi; \
+	echo; \
+	echo "================================================"; \
+	echo "✅ All backend tests passed! 🎉"; \
+	echo "   • aiosqlite backend: ✓"; \
+	echo "   • SQLAlchemy backend: ✓"
 
 ci: ## Run full CI matrix locally (both backends + quality checks)
 	@echo "🚀 Running complete CI matrix locally..."
@@ -68,26 +92,30 @@ ci: ## Run full CI matrix locally (both backends + quality checks)
 	echo; \
 	echo "3/5 Smoke tests..."; \
 	echo "  → aiosqlite smoke test..."; \
+	echo "    Running: USE_SQLALCHEMY=false API_KEY=\"test-api-key\" DATABASE_URL=\"sqlite:///./test_smoke.db\" ENVIRONMENT=\"development\" JWT_SECRET_KEY=\"test-jwt-secret-key\" uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1"; \
 	if ! USE_SQLALCHEMY=false API_KEY="test-api-key" DATABASE_URL="sqlite:///./test_smoke.db" ENVIRONMENT="development" JWT_SECRET_KEY="test-jwt-secret-key" uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1; then \
 		echo "❌ aiosqlite smoke test failed"; \
 		exit 1; \
 	fi; \
-	echo "  → SQLAlchemy smoke test..."; \
-	if ! USE_SQLALCHEMY=true API_KEY="test-api-key" DATABASE_URL="sqlite:///./test_smoke.db" ENVIRONMENT="development" JWT_SECRET_KEY="test-jwt-secret-key" uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1; then \
+	echo "  → SQLAlchemy smoke test (with CI env)..."; \
+	echo "    Running: CI=true GITHUB_ACTIONS=true USE_SQLALCHEMY=true API_KEY=\"test-api-key\" DATABASE_URL=\"sqlite:///:memory:\" ENVIRONMENT=\"testing\" JWT_SECRET_KEY=\"test-jwt-secret-key\" uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1"; \
+	if ! CI=true GITHUB_ACTIONS=true USE_SQLALCHEMY=true API_KEY="test-api-key" DATABASE_URL="sqlite:///:memory:" ENVIRONMENT="testing" JWT_SECRET_KEY="test-jwt-secret-key" uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1; then \
 		echo "❌ SQLAlchemy smoke test failed"; \
 		exit 1; \
 	fi; \
 	rm -f test_smoke.db; \
 	echo "  ✓ Smoke tests passed"; \
 	echo; \
-	echo "4/5 aiosqlite backend..."; \
-	if ! make test-aiosqlite; then \
+	echo "4/5 aiosqlite backend (CI env)..."; \
+	echo "    Running: CI=true GITHUB_ACTIONS=true DATABASE_URL=\"sqlite:///:memory:\" ENVIRONMENT=\"testing\" USE_SQLALCHEMY=false uv run pytest --cov=src -q --maxfail=3 --tb=short"; \
+	if ! CI=true GITHUB_ACTIONS=true DATABASE_URL="sqlite:///:memory:" ENVIRONMENT="testing" USE_SQLALCHEMY=false uv run pytest --cov=src -q --maxfail=3 --tb=short; then \
 		echo "❌ aiosqlite backend tests failed"; \
 		exit 1; \
 	fi; \
 	echo; \
-	echo "5/5 SQLAlchemy backend..."; \
-	if ! make test-sqlalchemy; then \
+	echo "5/5 SQLAlchemy backend (CI env)..."; \
+	echo "    Running: CI=true GITHUB_ACTIONS=true DATABASE_URL=\"sqlite:///:memory:\" ENVIRONMENT=\"testing\" USE_SQLALCHEMY=true uv run pytest --cov=src -q --maxfail=3 --tb=short"; \
+	if ! CI=true GITHUB_ACTIONS=true DATABASE_URL="sqlite:///:memory:" ENVIRONMENT="testing" USE_SQLALCHEMY=true uv run pytest --cov=src -q --maxfail=3 --tb=short; then \
 		echo "❌ SQLAlchemy backend tests failed"; \
 		exit 1; \
 	fi; \
@@ -104,18 +132,23 @@ ci: ## Run full CI matrix locally (both backends + quality checks)
 	echo "Ready for CI! 🚀"
 
 format: ## Format files using ruff
+	@echo "Running: uv run ruff format"
 	uv run ruff format
 
 lint: ## Run linting checks
+	@echo "Running: uv run ruff check --fix"
 	uv run ruff check --fix
 
 type: ## Run type checking
+	@echo "Running: uv run mypy src"
 	uv run mypy src
 
 pre-commit: ## Run pre-commit hooks on all files
+	@echo "Running: uv run pre-commit run --show-diff-on-failure"
 	uv run pre-commit run --show-diff-on-failure
 
 quality: format lint type ## Run all quality checks (mirrors CI)
+	@echo "Running: uv run pip-audit"
 	uv run pip-audit
 
 clean: ## Clean caches and temporary files

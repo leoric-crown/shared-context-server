@@ -642,7 +642,12 @@ class SecureTokenManager:
 
         # Store in database with transaction safety
         async with get_db_connection() as conn:
-            await conn.execute("BEGIN IMMEDIATE")
+            # Check if this is SQLAlchemy backend (which handles transactions automatically)
+            is_sqlalchemy = hasattr(conn, "engine") and hasattr(conn, "conn")
+
+            if not is_sqlalchemy:
+                await conn.execute("BEGIN IMMEDIATE")
+
             try:
                 await conn.execute(
                     """
@@ -656,9 +661,12 @@ class SecureTokenManager:
                         datetime.now(timezone.utc) + timedelta(hours=1),
                     ),
                 )
-                await conn.commit()
+
+                if not is_sqlalchemy:
+                    await conn.commit()
             except Exception:
-                await conn.rollback()
+                if not is_sqlalchemy:
+                    await conn.rollback()
                 raise
 
         logger.info(f"Created protected token for agent {agent_id}")
@@ -686,10 +694,15 @@ class SecureTokenManager:
         # Then delete old token (if this fails, old token expires naturally)
         try:
             async with get_db_connection() as conn:
+                # Check if this is SQLAlchemy backend (which handles transactions automatically)
+                is_sqlalchemy = hasattr(conn, "engine") and hasattr(conn, "conn")
+
                 await conn.execute(
                     "DELETE FROM secure_tokens WHERE token_id = ?", (current_token,)
                 )
-                await conn.commit()
+
+                if not is_sqlalchemy:
+                    await conn.commit()
         except Exception:
             # Cleanup failed but new token is valid - acceptable degradation
             logger.warning(

@@ -255,6 +255,10 @@ class SQLAlchemyConnectionWrapper:
         try:
             # Apply all PRAGMA settings
             for pragma in _SQLITE_PRAGMAS:
+                # Skip PRAGMAs that can't be changed in transaction context
+                if "transaction" in pragma.lower():
+                    logger.debug(f"Skipping transaction-sensitive PRAGMA: {pragma}")
+                    continue
                 await self.conn.execute(text(pragma))
 
             # Validate critical settings
@@ -484,12 +488,46 @@ class SimpleSQLAlchemyManager:
             return
 
         if self.db_type == "sqlite":
-            # Use existing DatabaseManager for SQLite to preserve all optimizations
-            db_path = self.database_url[len("sqlite+aiosqlite:///") :]
-            from .database import DatabaseManager
+            # Check if this is an in-memory database which can't use file-based DatabaseManager
+            if ":memory:" in self.database_url:
+                # For in-memory databases, use the existing PostgreSQL/MySQL schema loading logic
+                schema_sql = self._load_schema_file()
+                async with self.engine.connect() as conn, conn.begin():
+                    # Split schema into individual statements for execution
+                    statements = []
+                    current_statement = []
 
-            temp_manager = DatabaseManager(db_path)
-            await temp_manager.initialize()
+                    for line in schema_sql.split("\n"):
+                        line = line.strip()
+                        if not line or line.startswith("--"):
+                            continue
+
+                        current_statement.append(line)
+
+                        # Check for statement endings (semicolon not inside function/trigger)
+                        if line.endswith(";") and not self._is_inside_function_block(
+                            current_statement
+                        ):
+                            statements.append("\n".join(current_statement))
+                            current_statement = []
+
+                    # Execute each statement
+                    for statement in statements:
+                        if statement.strip():
+                            try:
+                                await conn.execute(text(statement))
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to execute statement (continuing): {e}"
+                                )
+                                # Continue with other statements, some might be idempotent
+            else:
+                # Use existing DatabaseManager for file-based SQLite to preserve all optimizations
+                db_path = self.database_url[len("sqlite+aiosqlite:///") :]
+                from .database import DatabaseManager
+
+                temp_manager = DatabaseManager(db_path)
+                await temp_manager.initialize()
         else:
             # Initialize PostgreSQL/MySQL with database-specific schema
             try:

@@ -5,13 +5,18 @@ Tests the FastMCP server with Web UI routes, database integration,
 and WebSocket functionality.
 """
 
+import sys
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import httpx
 import pytest
 
 from shared_context_server.database import initialize_database
-from shared_context_server.server import mcp
+from shared_context_server.server import add_message, create_session, mcp
+
+sys.path.append(str(Path(__file__).parent))
+from conftest import MockContext, call_fastmcp_tool
 
 
 @pytest.fixture
@@ -136,35 +141,31 @@ async def test_web_ui_navigation_structure(test_client: httpx.AsyncClient):
 
 @pytest.mark.asyncio
 async def test_session_view_structure(test_client: httpx.AsyncClient):
-    """Test session view HTML structure for any session."""
-    # Try to get any existing session from dashboard first
-    dashboard_response = await test_client.get("/ui/")
-    dashboard_content = dashboard_response.text
+    """Test session view HTML structure by creating a test session."""
+    # Create a test session
+    ctx = MockContext(session_id="webui_test", agent_id="test_agent")
+    session_result = await call_fastmcp_tool(
+        create_session, ctx, purpose="Web UI integration test session"
+    )
+    session_id = session_result["session_id"]
 
-    # Look for a session link in the dashboard
-    import re
-
-    session_links = re.findall(
-        r"/ui/sessions/(session_[a-f0-9]{16})", dashboard_content
+    # Add a test message to make the session visible
+    await call_fastmcp_tool(
+        add_message, ctx, session_id=session_id, content="Test message for UI"
     )
 
-    if session_links:
-        # Test first found session
-        session_id = session_links[0]
-        response = await test_client.get(f"/ui/sessions/{session_id}")
+    # Test the session view
+    response = await test_client.get(f"/ui/sessions/{session_id}")
 
-        assert response.status_code == 200
-        content = response.text
+    assert response.status_code == 200
+    content = response.text
 
-        # Check session view structure
-        assert "session-view" in content
-        assert "breadcrumb" in content
-        assert "session-info" in content
-        assert "messages-container" in content
-        assert "Session:" in content
-    else:
-        # No sessions exist, skip this test
-        pytest.skip("No existing sessions found for testing session view structure")
+    # Check session view structure
+    assert "session-view" in content
+    assert "breadcrumb" in content
+    assert "session-info" in content
+    assert "messages-container" in content
+    assert "Session:" in content
 
 
 @pytest.mark.asyncio

@@ -202,8 +202,12 @@ class TestDatabaseManagerSchemaRecovery:
         assert str(db_manager2.database_path).endswith("another_test.db")
 
     @patch("shared_context_server.database.aiosqlite.connect")
-    async def test_get_connection_wal_mode_failure(self, mock_connect):
+    @patch("shared_context_server.database._is_ci_environment")
+    async def test_get_connection_wal_mode_failure(self, mock_is_ci, mock_connect):
         """Test database connection when WAL mode setting fails."""
+        # Mock non-CI environment so WAL mode is strictly required
+        mock_is_ci.return_value = False
+
         # Mock connection that fails WAL mode check
         mock_conn = AsyncMock()
         mock_cursor = AsyncMock()
@@ -218,7 +222,7 @@ class TestDatabaseManagerSchemaRecovery:
 
         db_manager = DatabaseManager("test.db")
 
-        # Should raise error when WAL mode is not enabled
+        # Should raise error when WAL mode is not enabled (in non-CI environment)
         with pytest.raises(
             DatabaseConnectionError,
             match="Connection failed: PRAGMA application failed: Failed to enable WAL mode, got: delete",
