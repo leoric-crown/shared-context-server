@@ -2,11 +2,19 @@
 
 **Document Type**: Product Requirement Prompt
 **Created**: 2025-01-13
-**Planning Source**: Analysis of SQLAlchemy wrapper limitations and multi-database research
+**Updated**: 2025-01-13 (KISS/YAGNI Refinement)
+**Planning Source**: Analysis of SQLAlchemy wrapper limitations, multi-database research, and expert agent consultation
 **Status**: Implementation Ready
 **Priority**: Medium - Production Scaling Enablement
-**Estimated Effort**: 6-8 hours
-**Complexity Level**: Moderate - Database-agnostic architecture with schema translation
+**Estimated Effort**: 4-6 hours (reduced via KISS principles)
+**Complexity Level**: Low - Simplified URL-based detection with separate schema files
+
+## KISS/YAGNI Refinement Summary
+
+**Expert Agent Consultation Results**:
+- **Developer Agent**: Identified schema translation as biggest complexity risk; recommended URL-based detection and separate schema files
+- **Tester Agent**: Proposed layered testing strategy avoiding 3x test explosion; 25 targeted tests per database vs 493x3 full matrix
+- **Key Simplifications**: Avoid schema translation systems, complex dialect management, and testing complexity explosion
 
 ---
 
@@ -36,11 +44,11 @@
 - **MySQL**: `pool_recycle=3600` for connection timeout handling, `charset=utf8mb4`
 - **SQLite**: `NullPool` for single-threaded access, existing PRAGMA optimizations
 
-**Schema Translation Requirements**:
-- **AUTOINCREMENT → SERIAL**: PostgreSQL uses SERIAL, MySQL uses AUTO_INCREMENT
-- **TEXT → VARCHAR**: PostgreSQL prefers VARCHAR(255), MySQL has TEXT limitations
-- **JSON Support**: PostgreSQL JSONB, MySQL JSON type, SQLite TEXT with validation
-- **Constraints**: Foreign key support varies, CHECK constraints need translation
+**Schema Management Approach (KISS Principle)**:
+- **No Schema Translation**: Maintain separate schema files per database to avoid complexity
+- **database.sql**: Current SQLite schema (unchanged)
+- **database_postgresql.sql**: Native PostgreSQL schema with SERIAL, JSONB, proper constraints
+- **database_mysql.sql**: Native MySQL schema with AUTO_INCREMENT, JSON type, InnoDB engine
 
 ### Architectural Integration Points
 
@@ -57,46 +65,37 @@
 
 ---
 
-## Implementation Specification
+## Implementation Specification (KISS Approach)
 
 ### Core Requirements
 
-**Primary Implementation**: Extend existing SQLAlchemy wrapper with database-agnostic initialization, schema translation, and optimized configurations per database type.
+**Primary Implementation**: Extend existing SimpleSQLAlchemyManager with URL-based database detection and separate schema files per database. No complex dialect management or schema translation systems.
 
-### Database Dialect Detection & Management
+### Simplified Database Detection
 
+**URL-Based Detection in SimpleSQLAlchemyManager**:
 ```python
-# src/shared_context_server/database_dialect.py
-from enum import Enum
-from typing import Dict, Any
-from urllib.parse import urlparse
-
-class DatabaseDialect(Enum):
-    SQLITE = "sqlite"
-    POSTGRESQL = "postgresql"
-    MYSQL = "mysql"
-
-class DatabaseDialectManager:
-    """Database-agnostic configuration and schema management."""
-
-    def __init__(self, database_url: str):
+# Enhanced database_sqlalchemy.py (no new files needed)
+class SimpleSQLAlchemyManager:
+    def __init__(self, database_url: str = "sqlite+aiosqlite:///./chat_history.db"):
         self.database_url = database_url
-        self.dialect = self._detect_dialect(database_url)
 
-    def _detect_dialect(self, url: str) -> DatabaseDialect:
-        """Auto-detect database type from SQLAlchemy URL."""
-        parsed = urlparse(url)
-        if parsed.scheme.startswith('sqlite'):
-            return DatabaseDialect.SQLITE
-        elif parsed.scheme.startswith('postgresql'):
-            return DatabaseDialect.POSTGRESQL
-        elif parsed.scheme.startswith('mysql'):
-            return DatabaseDialect.MYSQL
+        # Simple URL-based detection (no complex enum or manager classes)
+        if database_url.startswith("sqlite+aiosqlite://"):
+            self.db_type = "sqlite"
+        elif database_url.startswith("postgresql+asyncpg://"):
+            self.db_type = "postgresql"
+        elif database_url.startswith("mysql+aiomysql://"):
+            self.db_type = "mysql"
         else:
-            raise ValueError(f"Unsupported database dialect: {parsed.scheme}")
+            raise ValueError(f"Unsupported database URL: {database_url}")
 
-    def get_engine_config(self) -> Dict[str, Any]:
-        """Return optimized engine configuration per database type."""
+        # Database-specific engine configuration
+        engine_config = self._get_engine_config()
+        self.engine = create_async_engine(database_url, **engine_config)
+
+    def _get_engine_config(self) -> dict:
+        """Return engine configuration per database type."""
 
     def get_schema_template(self) -> str:
         """Return database-specific schema with proper data types."""
@@ -259,45 +258,49 @@ class DatabaseConfig(BaseModel):
 
 ## Quality Requirements
 
-### Testing Strategy
+### Testing Strategy (Layered Approach - KISS Principle)
 
-**Multi-Database Testing**:
+**Layer 1: Comprehensive Business Logic (SQLite Only)**:
+- **Keep existing 493 tests running against SQLite** (unchanged)
+- Validates all API endpoints, session management, message handling, search functionality
+- SQLite remains primary validation database - fast, no external dependencies
+
+**Layer 2: Database-Specific Differences (~25 tests per database)**:
 ```python
-# tests/unit/test_multi_database_support.py
-@pytest.mark.parametrize("database_url", [
-    "sqlite+aiosqlite:///./test.db",
-    "postgresql+asyncpg://test:test@localhost:5432/test",
-    "mysql+aiomysql://test:test@localhost:3306/test"
-])
-async def test_database_operations_compatibility(database_url):
-    """Verify all database operations work identically across backends."""
-    with patch.dict(os.environ, {"DATABASE_URL": database_url, "USE_SQLALCHEMY": "true"}):
-        # Test session creation, message operations, memory operations
-        # Verify identical behavior across all database types
+# tests/database_specific/test_postgresql_basics.py
+async def test_postgresql_connection():
+    """Test PostgreSQL-specific connection handling."""
+
+async def test_postgresql_schema_creation():
+    """Test PostgreSQL schema with SERIAL, JSONB constraints."""
+
+async def test_postgresql_transaction_behavior():
+    """Test PostgreSQL isolation levels and deadlock handling."""
+
+# tests/database_specific/test_mysql_basics.py
+async def test_mysql_connection():
+    """Test MySQL-specific connection and charset handling."""
+
+async def test_mysql_schema_creation():
+    """Test MySQL schema with AUTO_INCREMENT, JSON type."""
 ```
 
-**Schema Translation Testing**:
+**Layer 3: Feature Flag Rollback Testing**:
 ```python
-async def test_schema_translation():
-    """Verify schema translation produces valid SQL for each database."""
-    sqlite_schema = load_schema_file("database.sql")
+# tests/test_backend_switching.py
+async def test_feature_flag_rollback():
+    """Ensure USE_SQLALCHEMY=false still works reliably."""
 
-    # Test PostgreSQL translation
-    pg_manager = DatabaseDialectManager("postgresql+asyncpg://...")
-    pg_schema = pg_manager.translate_schema(sqlite_schema)
-    assert "SERIAL PRIMARY KEY" in pg_schema
-    assert "AUTOINCREMENT" not in pg_schema
-
-    # Test MySQL translation
-    mysql_manager = DatabaseDialectManager("mysql+aiomysql://...")
-    mysql_schema = mysql_manager.translate_schema(sqlite_schema)
-    assert "AUTO_INCREMENT" in mysql_schema
+async def test_database_url_switching():
+    """Test graceful backend switching via URL changes."""
 ```
 
-**Performance Testing**:
-- Connection pool efficiency across database types
-- Query performance with prepared statements (PostgreSQL)
-- Transaction handling consistency across dialects
+**Testing Numbers (YAGNI Principle)**:
+- **SQLite Tests**: 493 (existing) - comprehensive business logic
+- **PostgreSQL Specific**: ~25 tests - connection, schema, dialect differences
+- **MySQL Specific**: ~25 tests - connection, schema, dialect differences
+- **Feature Flag Tests**: ~10 tests - backend switching validation
+- **Total**: ~553 tests (13% increase) instead of 1,479 tests (300% explosion)
 
 ### Documentation Requirements
 
@@ -337,59 +340,61 @@ export USE_SQLALCHEMY=false  # or true for SQLAlchemy backend
 
 ## Coordination Strategy
 
-### Recommended Approach: Developer Agent Implementation
+### Recommended Approach: Developer Agent Implementation (KISS Validated)
 
-**Justification**: Moderate complexity task with clear technical requirements and well-defined integration points. Database dialect detection and schema translation are established patterns with comprehensive research backing.
+**Justification**: Low complexity task with simplified requirements after KISS/YAGNI analysis. URL-based detection and separate schema files eliminate complex dialect management.
 
-**Why Not Task-Coordinator**:
-- Clear implementation scope (4 new files, 2 modified files)
-- Well-researched technical specifications with proven patterns
-- Existing SQLAlchemy wrapper provides solid foundation
-- Risk contained by feature flag and comprehensive testing
+**Expert Agent Validation**:
+- **Developer Agent**: Confirmed URL-based detection is minimal approach; separate schema files avoid translation complexity
+- **Tester Agent**: Validated layered testing prevents CI explosion; targets 25 tests per database vs 493x3 matrix
 
-### Implementation Phases
+**Implementation Scope (Simplified)**:
+- **Files to Create**: 3 schema files + ~60 targeted tests
+- **Files to Modify**: 1 file (database_sqlalchemy.py)
+- **No Complex Systems**: No dialect managers, translation systems, or migration frameworks
 
-#### Phase 1: Database Dialect Management (3-4 hours)
-**Scope**: Create database-agnostic configuration and schema translation system
+### Implementation Phases (KISS Approach)
 
-**Key Deliverables**:
-- `src/shared_context_server/database_dialect.py` with dialect detection and configuration
-- Schema translation functions for PostgreSQL and MySQL
-- Database-specific engine configuration generators
-- Unit tests for dialect detection and schema translation
-
-**Technical Focus**:
-- URL parsing for automatic dialect detection
-- Schema translation with proper data type mapping
-- Engine configuration optimization per database type
-
-#### Phase 2: Enhanced SQLAlchemy Manager (2-3 hours)
-**Scope**: Extend SimpleSQLAlchemyManager with multi-database support
+#### Phase 1: Minimal Schema Creation (2-3 hours)
+**Scope**: Create separate schema files per database (no translation complexity)
 
 **Key Deliverables**:
-- Enhanced `initialize()` method with dialect-aware schema handling
-- Database-specific initialization methods for PostgreSQL and MySQL
-- Connection management with optimized configurations
-- Integration testing with actual database connections
+- `database_postgresql.sql` - Native PostgreSQL schema with SERIAL, JSONB
+- `database_mysql.sql` - Native MySQL schema with AUTO_INCREMENT, JSON type
+- Database-specific schema loading logic in SimpleSQLAlchemyManager
 
 **Technical Focus**:
+- No schema translation systems - maintain separate files
+- PostgreSQL optimizations: SERIAL, JSONB, proper constraints
+- MySQL optimizations: InnoDB engine, charset=utf8mb4
+
+#### Phase 2: Enhanced SQLAlchemy Manager (1-2 hours)
+**Scope**: Extend SimpleSQLAlchemyManager with URL-based detection
+
+**Key Deliverables**:
+- URL-based database detection in existing `__init__()` method
+- Database-specific `_load_schema_file()` method
+- Database-specific engine configurations
+- Enhanced `initialize()` method with per-database schema loading
+
+**Technical Focus**:
+- Simple URL parsing (no complex dialect classes)
 - Preserve existing SQLite functionality completely
-- Add PostgreSQL and MySQL initialization without breaking changes
-- Maintain interface compatibility with existing wrapper
+- Add PostgreSQL/MySQL initialization without breaking changes
 
-#### Phase 3: Testing & Validation (1-2 hours)
-**Scope**: Comprehensive testing and documentation
+#### Phase 3: Targeted Testing (1-2 hours)
+**Scope**: Layered testing approach focusing on database differences
 
 **Key Deliverables**:
-- Multi-database compatibility tests
-- Schema translation validation tests
-- Performance benchmarking across database types
-- Environment configuration documentation updates
+- `tests/database_specific/test_postgresql_basics.py` (~15 tests)
+- `tests/database_specific/test_mysql_basics.py` (~15 tests)
+- `tests/test_backend_switching.py` (~10 tests)
+- Optional Docker setup for local database testing
 
 **Technical Focus**:
-- Verify all 493 existing tests pass with new database backends
-- Validate schema translation produces working databases
-- Document deployment patterns for each database type
+- Focus on connection, schema creation, dialect differences only
+- Avoid duplicating business logic tests (493 SQLite tests cover that)
+- Feature flag rollback validation
 
 ### Risk Mitigation
 
@@ -493,26 +498,29 @@ uv run pytest tests/ -x --tb=short                     # Full regression testing
 - **Performance Scaling**: Optimized connection pooling and database-specific configurations
 - **Development Flexibility**: Choice of database backend based on deployment needs
 
-### Future Enhancements (If Needed)
+### Future Enhancements (YAGNI - Only If Actually Needed)
 
-- **Additional Database Support**: Oracle, SQL Server via additional dialect managers
-- **Advanced PostgreSQL Features**: JSONB optimization, full-text search, partitioning
-- **Connection Pool Monitoring**: Metrics collection and performance analysis
-- **Schema Migration Tools**: Version-controlled schema evolution across database types
+- **Additional Database Support**: Other databases only if deployment requirements emerge
+- **Performance Optimization**: Database-specific tuning only if performance issues arise
+- **Schema Migration Tools**: Only if schema versioning becomes necessary
+- **Connection Pool Monitoring**: Only if scaling issues emerge
 
-### Explicit Non-Goals
+### Explicit Non-Goals (KISS Boundaries)
 
-- ❌ **ORM Migration**: Keep using raw SQL for simplicity and performance
-- ❌ **Complex Migration Tools**: Basic schema translation sufficient for current needs
-- ❌ **Multi-Database Sessions**: Single database per deployment, no cross-database operations
-- ❌ **Database Abstraction Layer**: SQLAlchemy Core provides sufficient abstraction
+- ❌ **Schema Translation Systems**: Avoid complex dialect translation - use separate schema files
+- ❌ **Complex Dialect Management**: No enum classes or manager hierarchies - URL-based detection only
+- ❌ **Migration Frameworks**: No Alembic or version management until actually needed
+- ❌ **Performance Over-Engineering**: SQLAlchemy defaults sufficient until scaling issues appear
+- ❌ **Multi-Database Testing**: No 3x test explosion - targeted testing per database only
+- ❌ **Development Environment Burden**: Optional PostgreSQL/MySQL setup only
 
 ---
 
 **Document Metadata**:
-- **Research Sources**: SQLAlchemy 2.0 documentation, asyncpg/aiomysql best practices, schema migration patterns
-- **Architectural Validation**: Builds on proven PRP-009 SQLAlchemy wrapper foundation
-- **Risk Level**: Low (feature flag protection, comprehensive testing, backward compatibility)
-- **Value Proposition**: Production database support with zero code changes and optimal performance
+- **Research Sources**: SQLAlchemy 2.0 docs, expert agent consultation (developer + tester), KISS/YAGNI analysis
+- **Architectural Validation**: Builds on proven PRP-009 foundation with simplified approach
+- **Risk Level**: Very Low (feature flag protection, separate schema files, layered testing)
+- **Value Proposition**: Production database support with minimal complexity and zero-risk rollback
+- **Effort Reduction**: 4-6 hours (down from 6-8) via complexity elimination
 
-**Next Step**: Implement with developer agent using research-backed specifications and validated integration patterns.
+**Next Step**: Implement with developer agent using simplified KISS approach - URL detection + separate schema files + targeted testing.
