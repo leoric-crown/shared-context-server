@@ -129,11 +129,95 @@ if MCPSOCK_AVAILABLE:
             logger.exception(f"Failed to get session info for {session_id}")
             return {"error": str(e), "session_id": session_id}
 
-    # Register WebSocket endpoint with FastAPI
-    @websocket_app.websocket("/ws/{session_id}")
-    async def websocket_endpoint(websocket: WebSocket, session_id: str):
-        """Main WebSocket endpoint using mcpsock."""
+    # Register MCP WebSocket endpoint for AI agents
+    @websocket_app.websocket("/mcp/{session_id}")
+    async def mcp_websocket_endpoint(websocket: WebSocket, session_id: str):
+        """MCP WebSocket endpoint for AI agents using mcpsock."""
         await ws_router.handle_websocket(websocket, session_id=session_id)
+
+    # Register plain WebSocket endpoint for Web UI
+    @websocket_app.websocket("/ws/{session_id}")
+    async def web_ui_websocket_endpoint(websocket: WebSocket, session_id: str):
+        """Plain WebSocket endpoint for Web UI real-time updates."""
+        import json
+
+        await websocket.accept()
+
+        try:
+            # Add to websocket manager without calling accept again
+            websocket_manager.active_connections.setdefault(session_id, set()).add(
+                websocket
+            )
+            logger.info(f"Web UI WebSocket client connected to session: {session_id}")
+
+            # Keep connection alive and handle messages
+            try:
+                while True:
+                    data = await websocket.receive_text()
+
+                    # Handle JSON messages from web UI
+                    try:
+                        message = json.loads(data)
+                        message_type = message.get("type")
+
+                        if message_type == "subscribe":
+                            await websocket.send_json(
+                                {
+                                    "type": "subscribed",
+                                    "session_id": session_id,
+                                    "status": "success",
+                                }
+                            )
+                        elif message_type == "ping":
+                            await websocket.send_json({"type": "pong"})
+                        else:
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "message": f"Unknown message type: {message_type}",
+                                }
+                            )
+
+                    except json.JSONDecodeError:
+                        # Handle plain text messages for backward compatibility
+                        if data == "ping":
+                            await websocket.send_text("pong")
+                        elif data.startswith("subscribe:"):
+                            await websocket.send_json(
+                                {
+                                    "type": "subscribed",
+                                    "session_id": session_id,
+                                    "status": "success",
+                                }
+                            )
+                        else:
+                            await websocket.send_json(
+                                {"type": "error", "message": "Unknown command"}
+                            )
+
+            except WebSocketDisconnect:
+                pass  # Client disconnected normally
+
+        except Exception:
+            logger.exception("Web UI WebSocket error occurred")
+        finally:
+            websocket_manager.disconnect(websocket, session_id)
+            logger.info(
+                f"Web UI WebSocket client disconnected from session: {session_id}"
+            )
+
+    @websocket_app.post("/broadcast/{session_id}")
+    async def trigger_broadcast(
+        session_id: str, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """HTTP endpoint to trigger WebSocket broadcast from MCP server."""
+        try:
+            await websocket_manager.broadcast_to_session(session_id, request)
+            logger.debug(f"Successfully broadcasted to session {session_id}")
+            return {"success": True, "session_id": session_id}
+        except Exception as e:
+            logger.warning(f"Failed to broadcast to session {session_id}: {e}")
+            return {"success": False, "error": str(e)}
 
     @websocket_app.get("/health")
     async def websocket_health():
@@ -141,11 +225,18 @@ if MCPSOCK_AVAILABLE:
         return {
             "status": "healthy",
             "websocket_support": True,
+            "endpoints": {
+                "web_ui": "/ws/{session_id}",
+                "mcp_agents": "/mcp/{session_id}",
+                "broadcast": "/broadcast/{session_id}",
+            },
             "mcpsock_version": "0.1.5",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    logger.info("WebSocket server configured with mcpsock integration")
+    logger.info(
+        "WebSocket server configured with dual support: Web UI (/ws/) + MCP agents (/mcp/)"
+    )
 
 else:
     # Fallback WebSocket server without mcpsock
@@ -157,8 +248,10 @@ else:
         await websocket.accept()
 
         try:
-            # Add to existing websocket manager
-            await websocket_manager.connect(websocket, session_id)
+            # Add to websocket manager without calling accept again
+            websocket_manager.active_connections.setdefault(session_id, set()).add(
+                websocket
+            )
             logger.info(f"WebSocket client connected to session: {session_id}")
 
             # Keep connection alive and handle messages
@@ -188,12 +281,29 @@ else:
             websocket_manager.disconnect(websocket, session_id)
             logger.info(f"WebSocket client disconnected from session: {session_id}")
 
+    @websocket_app.post("/broadcast/{session_id}")
+    async def trigger_broadcast_fallback(
+        session_id: str, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """HTTP endpoint to trigger WebSocket broadcast from MCP server (fallback mode)."""
+        try:
+            await websocket_manager.broadcast_to_session(session_id, request)
+            logger.debug(f"Successfully broadcasted to session {session_id}")
+            return {"success": True, "session_id": session_id}
+        except Exception as e:
+            logger.warning(f"Failed to broadcast to session {session_id}: {e}")
+            return {"success": False, "error": str(e)}
+
     @websocket_app.get("/health")
     async def websocket_health_fallback():
         """Health check for fallback WebSocket server."""
         return {
             "status": "healthy",
             "websocket_support": True,
+            "endpoints": {
+                "web_ui": "/ws/{session_id}",
+                "broadcast": "/broadcast/{session_id}",
+            },
             "mcpsock_available": False,
             "mode": "fallback",
             "timestamp": datetime.now(timezone.utc).isoformat(),

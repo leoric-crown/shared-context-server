@@ -28,12 +28,12 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 import aiosqlite
+import httpx
 from fastmcp import Context, FastMCP
 from fastmcp.resources import Resource
 from pydantic import AnyUrl, Field
 from rapidfuzz import fuzz, process
-from starlette.responses import HTMLResponse, JSONResponse
-from starlette.staticfiles import StaticFiles
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.templating import Jinja2Templates
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -42,6 +42,7 @@ from .auth import (
     auth_manager,
     validate_agent_context_or_error,
 )
+from .config import get_config
 from .database import get_db_connection, initialize_database
 from .models import (
     parse_mcp_metadata,
@@ -169,6 +170,25 @@ class WebSocketManager:
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager()
+
+
+async def _notify_websocket_server(
+    session_id: str, message_data: dict[str, Any]
+) -> None:
+    """Notify WebSocket server of new message via HTTP bridge."""
+    try:
+        config = get_config()
+        ws_host = config.mcp_server.websocket_host
+        ws_port = config.mcp_server.websocket_port
+
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.post(
+                f"http://{ws_host}:{ws_port}/broadcast/{session_id}", json=message_data
+            )
+            response.raise_for_status()
+            logger.debug(f"WebSocket broadcast triggered for session {session_id}")
+    except Exception as e:
+        logger.debug(f"WebSocket broadcast failed (non-critical): {e}")
 
 
 # ============================================================================
@@ -355,11 +375,26 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         websocket_manager.disconnect(websocket, session_id)
 
 
-# Mount static files for CSS, JS, and assets
-try:
-    mcp.mount(StaticFiles(directory=str(static_dir)), "/ui/static")  # type: ignore[arg-type]
-except Exception as e:
-    logger.warning(f"Failed to mount static files: {e}")
+# Serve static files for CSS, JS, and assets
+@mcp.custom_route("/ui/static/css/style.css", methods=["GET"])
+async def serve_css(_request: Request) -> Response:
+    """Serve CSS file for the Web UI."""
+    css_file = static_dir / "css" / "style.css"
+    if css_file.exists():
+        return FileResponse(css_file, media_type="text/css")
+    return Response("CSS Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/js/app.js", methods=["GET"])
+async def serve_js(_request: Request) -> Response:
+    """Serve JavaScript file for the Web UI."""
+    js_file = static_dir / "js" / "app.js"
+    if js_file.exists():
+        return FileResponse(js_file, media_type="application/javascript")
+    return Response("JS Not Found", status_code=404)
+
+
+# Note: WebSocket connections are handled by the separate WebSocket server on port 8080
 
 # ============================================================================
 # REAL-TIME WEBSOCKET SUPPORT USING MCPSOCK
@@ -1004,21 +1039,22 @@ async def add_message(
 
             # Send real-time message update via WebSocket
             try:
-                await websocket_manager.broadcast_to_session(
-                    session_id,
-                    {
-                        "type": "new_message",
-                        "data": {
-                            "id": message_id,
-                            "sender": agent_id,
-                            "sender_type": agent_type,
-                            "content": content,
-                            "visibility": visibility,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "metadata": metadata or {},
-                        },
+                message_data = {
+                    "type": "new_message",
+                    "data": {
+                        "id": message_id,
+                        "sender": agent_id,
+                        "sender_type": agent_type,
+                        "content": content,
+                        "visibility": visibility,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "metadata": metadata or {},
                     },
-                )
+                }
+                await websocket_manager.broadcast_to_session(session_id, message_data)
+
+                # HTTP bridge notification to WebSocket server
+                await _notify_websocket_server(session_id, message_data)
             except Exception as e:
                 logger.warning(f"Failed to send WebSocket message notification: {e}")
 

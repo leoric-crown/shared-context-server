@@ -10,7 +10,7 @@ You are a QA automation specialist tasked with running comprehensive end-to-end 
 
 **Context**: You have access to MCP tools for a shared context server that enables multi-agent collaboration with secure token authentication, session management, message storage, and agent memory systems.
 
-**Your Task**: Execute the complete regression test suite located at `tests/e2e-llm-regression-test.md` following these guidelines:
+**Your Task**: Execute the complete regression test script(s) provided in `$ARGUMENTS` following these guidelines:
 
 ### Execution Instructions
 

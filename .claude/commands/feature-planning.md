@@ -130,11 +130,11 @@ Initiates a collaborative, multi-phase process to define, research, and plan any
     - Find patterns we can reuse or extend simply
     - Identify existing tools that solve part of the problem
 
-2.  **Focused External Research** (only if needed):
+2.  **Focused External Research** (always):
 
-    - **crawl4ai**: Official documentation for established simple patterns
     - **octocode**: Look for minimal, proven implementations that follow good practices
     - **brave-search**: Industry-standard simple solutions with quality considerations
+    - **Ref**: Fetch documentation for relevant frameworks and technologies
     - **Balance**: Simple solutions that maintain security, performance, and maintainability
 
 3.  **Simplicity-Focused Bundle**: Consolidate findings emphasizing:

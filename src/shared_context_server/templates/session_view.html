@@ -109,8 +109,11 @@ const maxReconnectAttempts = 5;
 // WebSocket connection management
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ui/ws/{{ session_id }}`;
+    const wsHost = window.location.hostname;
+    const wsPort = '8081'; // WebSocket server port (separate from HTTP server)
+    const wsUrl = `${protocol}//${wsHost}:${wsPort}/ws/{{ session_id }}`;
 
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
     websocket = new WebSocket(wsUrl);
 
     websocket.onopen = function(event) {

@@ -301,10 +301,10 @@ function connectWebSocket(sessionId) {
         return; // Already connected
     }
 
-    // Use different port for WebSocket server (8080)
+    // Connect to WebSocket server on port 8080
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.hostname;
-    const wsPort = '8080'; // WebSocket server port
+    const wsPort = '8081'; // WebSocket server port
     const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/${sessionId}`;
 
     console.log(`Connecting to WebSocket: ${wsUrl}`);
