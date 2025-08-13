@@ -26,7 +26,7 @@
 -- ============================================================================
 
 -- Sessions table: Manages shared context workspaces
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     purpose TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -42,7 +42,7 @@ CREATE TABLE sessions (
 );
 
 -- Messages table: Stores all agent communications
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     sender TEXT NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE messages (
 );
 
 -- Agent memory table: Private persistent storage
-CREATE TABLE agent_memory (
+CREATE TABLE IF NOT EXISTS agent_memory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id TEXT NOT NULL,
     session_id TEXT,  -- NULL for global memory
@@ -87,7 +87,7 @@ CREATE TABLE agent_memory (
 );
 
 -- Audit log table: Security and debugging
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     event_type TEXT NOT NULL,
@@ -110,14 +110,14 @@ CREATE TABLE audit_log (
 -- Fix: DEFAULT CURRENT_TIMESTAMP doesn't update on UPDATE operations
 -- These triggers ensure updated_at fields are maintained automatically
 
-CREATE TRIGGER sessions_updated_at_trigger
+CREATE TRIGGER IF NOT EXISTS sessions_updated_at_trigger
     AFTER UPDATE ON sessions
     FOR EACH ROW
 BEGIN
     UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
-CREATE TRIGGER agent_memory_updated_at_trigger
+CREATE TRIGGER IF NOT EXISTS agent_memory_updated_at_trigger
     AFTER UPDATE ON agent_memory
     FOR EACH ROW
 BEGIN
@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- ============================================================================
 -- Protected token storage with Fernet encryption for JWT hiding
 
-CREATE TABLE secure_tokens (
+CREATE TABLE IF NOT EXISTS secure_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_id TEXT UNIQUE NOT NULL,
     encrypted_jwt BLOB NOT NULL,

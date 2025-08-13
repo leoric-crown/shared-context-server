@@ -29,25 +29,36 @@ async def temp_database():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         temp_path = f.name
 
-    # Initialize the database and reset global manager
+    # Initialize the database and reset global managers
     with patch.dict(os.environ, {"DATABASE_PATH": temp_path}):
-        # Clear global database manager to force reinitialization
+        # Clear both global database managers to force reinitialization
         import shared_context_server.database as db_module
 
         db_module._db_manager = None
+        # Reset SQLAlchemy manager for USE_SQLALCHEMY=true tests
+        if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
+            with contextlib.suppress(Exception):
+                await db_module._sqlalchemy_manager.close()
+            db_module._sqlalchemy_manager = None
 
         db_manager = DatabaseManager(temp_path)
         await db_manager.initialize()
         yield temp_path
 
-    # Cleanup
+    # Cleanup - close SQLAlchemy manager if it exists
+    import shared_context_server.database as db_module
+
+    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
+        with contextlib.suppress(Exception):
+            await db_module._sqlalchemy_manager.close()
+
+    # Cleanup temp file
     with contextlib.suppress(FileNotFoundError):
         Path(temp_path).unlink()
 
-    # Reset global manager after test
-    import shared_context_server.database as db_module
-
+    # Reset both global managers after test
     db_module._db_manager = None
+    db_module._sqlalchemy_manager = None
 
 
 @pytest.fixture
@@ -376,6 +387,7 @@ class TestJWTExposurePrevention:
                 (protected_token,),
             )
             row = await cursor.fetchone()
+            assert row is not None, f"Token {protected_token} not found in database"
             encrypted_data = row[0]
 
             # Encrypted data should not contain raw JWT

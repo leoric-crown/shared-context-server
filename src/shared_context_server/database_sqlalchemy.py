@@ -33,6 +33,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _raise_foreign_keys_error(value: int) -> None:
+    """Raise a foreign keys configuration error."""
+    raise RuntimeError(f"Expected foreign_keys=1, got {value}")
+
+
+def _raise_journal_mode_error(mode: str) -> None:
+    """Raise a journal mode configuration error."""
+    raise RuntimeError(f"Expected journal_mode=wal, got {mode}")
+
+
+# SQLite PRAGMA settings (matching database.py for interface compatibility)
+_SQLITE_PRAGMAS = [
+    "PRAGMA foreign_keys = ON;",  # Critical: Enable foreign key constraints
+    "PRAGMA journal_mode = WAL;",  # Write-Ahead Logging for concurrency
+    "PRAGMA synchronous = NORMAL;",  # Balance performance and safety
+    "PRAGMA cache_size = -8000;",  # 8MB cache per connection
+    "PRAGMA temp_store = MEMORY;",  # Use memory for temporary tables
+    "PRAGMA mmap_size = 268435456;",  # 256MB memory mapping (was 30GB)
+    "PRAGMA busy_timeout = 5000;",  # 5 second timeout for busy database
+    "PRAGMA optimize;",  # Enable query optimizer
+]
+
+
 class CompatibleRow:
     """
     Row class that supports both index and key access for compatibility.
@@ -156,6 +179,7 @@ class SQLAlchemyConnectionWrapper:
         self.conn = conn
         self.row_factory = None  # Compatibility with aiosqlite.Row assignment
         self.db_type = db_type
+        self._pragmas_applied = False
 
     def _convert_params(
         self, query: str, params: tuple[Any, ...] = ()
@@ -209,6 +233,37 @@ class SQLAlchemyConnectionWrapper:
 
         return converted_query, named_params
 
+    async def _apply_pragmas(self) -> None:
+        """
+        Apply SQLite PRAGMA settings to ensure interface compatibility.
+
+        Only applies to SQLite connections and only once per connection.
+        """
+        if self.db_type != "sqlite" or self._pragmas_applied:
+            return
+
+        try:
+            # Apply all PRAGMA settings
+            for pragma in _SQLITE_PRAGMAS:
+                await self.conn.execute(text(pragma))
+
+            # Validate critical settings
+            result = await self.conn.execute(text("PRAGMA foreign_keys;"))
+            row = result.fetchone()
+            if row and row[0] != 1:
+                _raise_foreign_keys_error(row[0])
+
+            result = await self.conn.execute(text("PRAGMA journal_mode;"))
+            row = result.fetchone()
+            if row and row[0].lower() != "wal":
+                _raise_journal_mode_error(row[0])
+
+            self._pragmas_applied = True
+
+        except Exception as e:
+            logger.exception("Failed to apply SQLite PRAGMA settings")
+            raise RuntimeError(f"PRAGMA application failed: {e}") from e
+
     async def execute(
         self, query: str, params: tuple[Any, ...] = ()
     ) -> SQLAlchemyCursorWrapper:
@@ -223,6 +278,9 @@ class SQLAlchemyConnectionWrapper:
             SQLAlchemyCursorWrapper compatible with aiosqlite cursor
         """
         try:
+            # Apply PRAGMA settings if not already applied (SQLite only)
+            await self._apply_pragmas()
+
             # Convert parameters from aiosqlite format to SQLAlchemy format
             converted_query, named_params = self._convert_params(query, params)
 
@@ -304,6 +362,13 @@ class SimpleSQLAlchemyManager:
         """
         self.database_url = database_url
 
+        # Extract database path for interface compatibility
+        if database_url.startswith("sqlite+aiosqlite:///"):
+            self.database_path = Path(database_url[20:]).resolve()
+        else:
+            # For non-SQLite databases, use a dummy path
+            self.database_path = Path("./non_sqlite_database")
+
         # Simple URL-based detection (KISS principle) - case insensitive
         url_lower = database_url.lower()
         if url_lower.startswith("sqlite+aiosqlite://"):
@@ -319,6 +384,7 @@ class SimpleSQLAlchemyManager:
         engine_config = self._get_engine_config()
         self.engine = create_async_engine(database_url, **engine_config)
         self.is_initialized = False
+        self._connection_count = 0
 
     def _get_engine_config(self) -> dict[str, Any]:
         """Return database-specific engine configuration."""
@@ -370,7 +436,7 @@ class SimpleSQLAlchemyManager:
             return project_root / "database_mysql.sql"
         raise ValueError(f"No schema file for database type: {self.db_type}")
 
-    async def _load_schema_file(self) -> str:
+    def _load_schema_file(self) -> str:
         """Load the appropriate schema file for the database type."""
         schema_file = self._get_schema_file_path()
 
@@ -396,7 +462,7 @@ class SimpleSQLAlchemyManager:
         else:
             # Initialize PostgreSQL/MySQL with database-specific schema
             try:
-                schema_sql = await self._load_schema_file()
+                schema_sql = self._load_schema_file()
 
                 # Execute schema using SQLAlchemy connection
                 async with self.engine.connect() as conn, conn.begin():
@@ -468,13 +534,37 @@ class SimpleSQLAlchemyManager:
             SQLAlchemyConnectionWrapper: Connection compatible with aiosqlite.Connection
         """
         try:
+            self._connection_count += 1
             async with self.engine.connect() as conn, conn.begin():
                 wrapper = SQLAlchemyConnectionWrapper(self.engine, conn, self.db_type)
                 yield wrapper
         except Exception as e:
             logger.exception("SQLAlchemy connection failed")
             raise RuntimeError(f"Database connection failed: {e}") from e
+        finally:
+            self._connection_count = max(0, self._connection_count - 1)
 
     async def close(self) -> None:
         """Close the engine and all connections."""
         await self.engine.dispose()
+
+    def get_stats(self) -> dict[str, Any]:
+        """
+        Get database manager statistics.
+
+        Returns:
+            Dict with current statistics
+        """
+        return {
+            "database_path": str(self.database_path),
+            "is_initialized": self.is_initialized,
+            "connection_count": self._connection_count,
+            "database_exists": self.database_path.exists()
+            if self.db_type == "sqlite"
+            else True,
+            "database_size_mb": (
+                self.database_path.stat().st_size / 1024 / 1024
+                if self.db_type == "sqlite" and self.database_path.exists()
+                else 0
+            ),
+        }

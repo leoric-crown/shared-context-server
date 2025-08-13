@@ -43,17 +43,9 @@ class DatabaseTestManager:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             temp_full_path = f.name
 
-        # For SQLAlchemy, use relative path to avoid directory creation issues
-        if os.getenv("USE_SQLALCHEMY", "false").lower() == "true":
-            # Use just the filename relative to tmpdir to avoid absolute path issues
-            from pathlib import Path
-
-            self.temp_db_path = Path(temp_full_path).name
-            # Store the full path for cleanup
-            self._full_temp_path = temp_full_path
-        else:
-            self.temp_db_path = temp_full_path
-            self._full_temp_path = temp_full_path
+        # Use full temp path for both backends
+        self.temp_db_path = temp_full_path
+        self._full_temp_path = temp_full_path
 
         # Determine backend
         if self.backend == "auto":
@@ -62,11 +54,18 @@ class DatabaseTestManager:
 
         # Create appropriate database manager
         if self.backend == "sqlalchemy":
-            database_url = f"sqlite+aiosqlite:///{self.temp_db_path}"
-        else:
-            database_url = f"sqlite:///{self.temp_db_path}"
+            # Import SQLAlchemy manager for SQLAlchemy mode
+            from src.shared_context_server.database_sqlalchemy import (
+                SimpleSQLAlchemyManager,
+            )
 
-        self.db_manager = DatabaseManager(database_url)
+            database_url = f"sqlite+aiosqlite:///{self.temp_db_path}"
+            self.db_manager = SimpleSQLAlchemyManager(database_url)
+        else:
+            # Use regular DatabaseManager for aiosqlite mode
+            database_url = f"sqlite:///{self.temp_db_path}"
+            self.db_manager = DatabaseManager(database_url)
+
         await self.db_manager.initialize()
 
         # Store original global managers for restoration
@@ -492,3 +491,23 @@ async def assert_message_exists(conn, session_id: str, content: str) -> None:
     )
     count = (await cursor.fetchone())[0]
     assert count == 1, f"Message '{content}' not found in session {session_id}"
+
+
+def is_sqlalchemy_backend() -> bool:
+    """
+    Check if tests are running with SQLAlchemy backend.
+
+    Returns:
+        True if USE_SQLALCHEMY=true, False otherwise
+    """
+    return os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
+
+
+def is_aiosqlite_backend() -> bool:
+    """
+    Check if tests are running with aiosqlite backend.
+
+    Returns:
+        True if USE_SQLALCHEMY=false or not set, False otherwise
+    """
+    return not is_sqlalchemy_backend()
