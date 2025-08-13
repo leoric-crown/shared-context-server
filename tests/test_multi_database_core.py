@@ -14,6 +14,8 @@ from shared_context_server.database_sqlalchemy import (
     SQLAlchemyConnectionWrapper,
 )
 
+pytestmark = pytest.mark.sqlalchemy
+
 
 class TestMultiDatabaseCore:
     """Test core multi-database functionality."""

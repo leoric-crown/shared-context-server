@@ -257,6 +257,8 @@ markers = [
     "flaky: marks tests as potentially flaky",
     "database: marks tests that require database access",
     "memory: marks tests related to memory operations",
+    "sqlalchemy: marks tests that require SQLAlchemy backend (USE_SQLALCHEMY=true)",
+    "aiosqlite: marks tests specific to aiosqlite backend (USE_SQLALCHEMY=false)",
 ]
 norecursedirs = [".git", ".tox", "dist", "build", "south_migrations"]
 

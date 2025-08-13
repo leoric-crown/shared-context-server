@@ -14,6 +14,8 @@ import pytest
 from shared_context_server.database import get_db_connection
 from shared_context_server.database_sqlalchemy import SimpleSQLAlchemyManager
 
+pytestmark = pytest.mark.sqlalchemy
+
 
 @contextmanager
 def isolated_database_backend(use_sqlalchemy: bool, test_name: str = "test"):

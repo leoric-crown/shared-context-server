@@ -41,8 +41,35 @@ jobs:
       - name: Security audit
         run: uv run pip-audit
 
+      - name: Configure coverage for backend
+        run: |
+          if [ "${{ matrix.backend }}" = "aiosqlite" ]; then
+            # Create temporary coverage config excluding SQLAlchemy
+            cat > .coveragerc.backend << 'EOF'
+          [run]
+          source = src
+          branch = true
+          omit =
+              */tests/*
+              */conftest.py
+              */__pycache__/*
+              src/shared_context_server/scripts/dev.py
+              src/shared_context_server/scripts/dev_with_websocket.py
+              src/shared_context_server/websocket_server.py
+              src/shared_context_server/database_sqlalchemy.py
+
+          [report]
+          fail_under = 85
+          EOF
+          fi
+
       - name: Test with coverage (${{ matrix.backend }} backend)
-        run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
+        run: |
+          if [ "${{ matrix.backend }}" = "aiosqlite" ]; then
+            uv run pytest --cov=src --cov-config=.coveragerc.backend --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
+          else
+            uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
+          fi
         env:
           USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' && 'true' || 'false' }}
 
@@ -78,7 +105,7 @@ jobs:
         run: uv sync --dev
 
       - name: WAL/Schema smoke test (${{ matrix.backend }} backend)
-        run: uv run pytest tests/test_smoke.py -v
+        run: uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1
         env:
           API_KEY: "test-api-key-for-ci-smoke-test"
           DATABASE_URL: "sqlite:///./test_smoke.db"
