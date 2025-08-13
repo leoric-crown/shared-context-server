@@ -363,7 +363,7 @@ class SimpleSQLAlchemyManager:
         project_root = current_dir.parent.parent
 
         if self.db_type == "sqlite":
-            return project_root / "database.sql"
+            return project_root / "database_sqlite.sql"
         if self.db_type == "postgresql":
             return project_root / "database_postgresql.sql"
         if self.db_type == "mysql":

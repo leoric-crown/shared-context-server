@@ -182,7 +182,7 @@ class TestBackendSwitching:
         # Test SQLite
         sqlite_manager = SimpleSQLAlchemyManager("sqlite+aiosqlite:///./test.db")
         sqlite_schema_path = sqlite_manager._get_schema_file_path()
-        assert sqlite_schema_path.name == "database.sql"
+        assert sqlite_schema_path.name == "database_sqlite.sql"
 
         # Test PostgreSQL
         pg_manager = SimpleSQLAlchemyManager(

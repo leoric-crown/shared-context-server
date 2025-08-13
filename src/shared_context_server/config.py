@@ -99,6 +99,22 @@ class DatabaseConfig(BaseSettings):
         default=2, json_schema_extra={"env": "DATABASE_MIN_CONNECTIONS"}
     )
 
+    # Database-specific pool sizes
+    postgresql_pool_size: int = Field(
+        default=20, json_schema_extra={"env": "POSTGRESQL_POOL_SIZE"}
+    )
+    mysql_pool_size: int = Field(
+        default=10, json_schema_extra={"env": "MYSQL_POOL_SIZE"}
+    )
+    sqlite_pool_size: int = Field(
+        default=5, json_schema_extra={"env": "SQLITE_POOL_SIZE"}
+    )
+
+    # Query logging
+    enable_query_logging: bool = Field(
+        default=False, json_schema_extra={"env": "ENABLE_QUERY_LOGGING"}
+    )
+
     # Retention policies
     audit_log_retention_days: int = Field(
         default=30, json_schema_extra={"env": "AUDIT_LOG_RETENTION_DAYS"}

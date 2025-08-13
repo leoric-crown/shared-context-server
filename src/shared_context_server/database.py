@@ -229,7 +229,7 @@ class DatabaseManager:
         """
         Load database schema file from multiple possible locations.
 
-        Tries to find database.sql in:
+        Tries to find database_sqlite.sql in:
         1. Project root (development environment)
         2. Package installation directory (pip installed)
         3. Site-packages root (wheel installation)
@@ -245,12 +245,12 @@ class DatabaseManager:
         # Location 1: Project root (development)
         project_root = current_file.parent.parent.parent
         schema_paths = [
-            project_root / "database.sql",
+            project_root / "database_sqlite.sql",
             # Location 2: Package directory (installed package)
-            current_file.parent / "database.sql",
+            current_file.parent / "database_sqlite.sql",
             # Location 3: Site-packages root (wheel installation)
             Path(current_file.parts[0]).joinpath(*current_file.parts[1:-3])
-            / "database.sql",
+            / "database_sqlite.sql",
         ]
 
         # Additional location: Check based on Python path
@@ -259,7 +259,7 @@ class DatabaseManager:
 
             schema_paths.extend(
                 [
-                    Path(site_pkg) / "database.sql"
+                    Path(site_pkg) / "database_sqlite.sql"
                     for site_pkg in sys.path
                     if "site-packages" in site_pkg
                 ]

@@ -89,14 +89,18 @@ build-backend = "hatchling.build"
 packages = ["src/shared_context_server"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"database.sql" = "database.sql"
+"database_sqlite.sql" = "database_sqlite.sql"
+"database_mysql.sql" = "database_mysql.sql"
+"database_postgresql.sql" = "database_postgresql.sql"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/tests",
     "/docs",
-    "/database.sql",
+    "/database_sqlite.sql",
+    "/database_mysql.sql",
+    "/database_postgresql.sql",
     "LICENSE",
     "README.md",
     "CHANGELOG.md",

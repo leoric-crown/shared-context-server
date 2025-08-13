@@ -128,7 +128,7 @@ class TestMultiDatabaseCore:
 
         # SQLite
         sqlite_manager = SimpleSQLAlchemyManager("sqlite+aiosqlite:///./test.db")
-        assert sqlite_manager._get_schema_file_path().name == "database.sql"
+        assert sqlite_manager._get_schema_file_path().name == "database_sqlite.sql"
 
         # PostgreSQL
         pg_manager = SimpleSQLAlchemyManager(
@@ -149,7 +149,7 @@ class TestMultiDatabaseCore:
 
         # All database types should have their schema files
         for url, expected_file in [
-            ("sqlite+aiosqlite:///./test.db", "database.sql"),
+            ("sqlite+aiosqlite:///./test.db", "database_sqlite.sql"),
             (
                 "postgresql+asyncpg://user:pass@localhost:5432/db",
                 "database_postgresql.sql",
@@ -277,7 +277,7 @@ class TestSchemaContent:
         current_dir = Path(__file__).parent.parent
 
         # Read all schema files
-        sqlite_schema = (current_dir / "database.sql").read_text()
+        sqlite_schema = (current_dir / "database_sqlite.sql").read_text()
         pg_schema = (current_dir / "database_postgresql.sql").read_text()
         mysql_schema = (current_dir / "database_mysql.sql").read_text()
 
