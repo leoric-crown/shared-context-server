@@ -14,6 +14,7 @@
 - [ ] **Session Management UI** with visibility controls
 - [ ] **Message Viewer** with search and filtering
 - [ ] **Testing Suite** for web UI components
+- [✅] **Dual Database Backend Support** (aiosqlite + SQLAlchemy)
 
 ### Quick Implementation Guide
 
@@ -74,16 +75,22 @@ async def dashboard(request: Request) -> HTMLResponse:
 @mcp.custom_route("/ui/sessions/{session_id}", methods=["GET"])
 async def session_view(request: Request, session_id: str) -> HTMLResponse:
     """View individual session messages"""
-    # Get session data using existing database patterns from server.py
+    # Use unified database connection (supports both aiosqlite and SQLAlchemy)
     async with get_db_connection() as conn:
-        conn.row_factory = aiosqlite.Row
+        # Set row factory for dict-like access (works with both backends)
+        if hasattr(conn, 'row_factory'):
+            import aiosqlite
+            conn.row_factory = aiosqlite.Row
+
         cursor = await conn.execute(
             """SELECT * FROM messages
                WHERE session_id = ?
                ORDER BY timestamp ASC""",
             (session_id,)
         )
-        messages = [dict(row) for row in await cursor.fetchall()]
+        # Convert to dict format (compatible with both backends)
+        raw_messages = await cursor.fetchall()
+        messages = [dict(row) for row in raw_messages]
 
     return templates.TemplateResponse("session.html", {
         "request": request,
@@ -1020,6 +1027,29 @@ WEB_UI_CONFIG = {
 }
 ```
 
+### Database Backend Configuration
+
+The web UI automatically adapts to either database backend:
+
+```bash
+# Environment variables for database backend selection
+USE_SQLALCHEMY=false          # Default: aiosqlite backend
+DATABASE_PATH="./chat_history.db"  # For aiosqlite
+DATABASE_URL="sqlite+aiosqlite:///./chat_history.db"  # For SQLAlchemy
+
+# Production PostgreSQL with SQLAlchemy (future)
+USE_SQLALCHEMY=true
+DATABASE_URL="postgresql+asyncpg://user:pass@localhost/shared_context"
+DATABASE_MAX_CONNECTIONS=20
+DATABASE_MIN_CONNECTIONS=2
+```
+
+**Key Benefits:**
+- **Zero Code Changes**: Web UI works identically with both backends
+- **Unified Interface**: `get_db_connection()` abstracts backend differences
+- **Future-Ready**: PostgreSQL support via SQLAlchemy when needed
+- **Rollback Safety**: Set `USE_SQLALCHEMY=false` to revert instantly
+
 ### Performance Optimization
 
 ```python
@@ -1065,9 +1095,11 @@ class WebSocketConnectionPool:
 - **Tool Integration**: Web UI displays results from MCP tool operations
 
 ### Database Integration
+- **Dual Backend Support**: Automatically works with both aiosqlite and SQLAlchemy backends via `get_db_connection()`
 - **Read-Only Access**: Web UI primarily reads from existing database schema
-- **No Schema Changes**: Uses existing `chat_history` table structure
-- **Concurrent Access**: SQLite WAL mode supports concurrent web and MCP access
+- **No Schema Changes**: Uses existing `messages` and `sessions` table structure
+- **Concurrent Access**: SQLite WAL mode (aiosqlite) or connection pooling (SQLAlchemy) supports concurrent web and MCP access
+- **Backend Selection**: Controlled by `USE_SQLALCHEMY` environment variable (defaults to aiosqlite)
 
 ### Authentication Integration
 - **Separate Systems**: Web auth independent of MCP JWT tokens

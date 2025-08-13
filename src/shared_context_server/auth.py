@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 import jwt
 from fastmcp import Context
+from fastmcp.server.dependencies import get_http_request
 
 from .database import get_db_connection
 from .models import create_error_response
@@ -368,14 +369,14 @@ def validate_api_key_header(ctx: Context) -> bool:
         # Try various header extraction methods for MCP context
         api_key = None
 
-        if hasattr(ctx, "get_http_request"):
-            try:
-                http_request = ctx.get_http_request()
-                if http_request and hasattr(http_request, "headers"):
-                    headers = http_request.headers
-                    api_key = headers.get("x-api-key") or headers.get("X-API-Key")
-            except Exception:
-                pass
+        # Use the new FastMCP 2.x API to get HTTP request
+        try:
+            http_request = get_http_request()
+            if http_request and hasattr(http_request, "headers"):
+                headers = http_request.headers
+                api_key = headers.get("x-api-key") or headers.get("X-API-Key")
+        except Exception:
+            pass
 
         if not api_key and hasattr(ctx, "headers"):
             ctx_headers = getattr(ctx, "headers", {})

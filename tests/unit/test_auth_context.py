@@ -134,13 +134,15 @@ class TestValidateAPIKeyHeader:
         with patch.dict(os.environ, {"API_KEY": "valid_key"}):
             ctx = MockContext()
 
-            # Mock get_http_request method
+            # Mock the new get_http_request function from fastmcp.server.dependencies
             mock_request = type("MockRequest", (), {})()
             mock_request.headers = {"X-API-Key": "valid_key"}
-            ctx.get_http_request = lambda: mock_request
 
-            result = validate_api_key_header(ctx)
-            assert result is True
+            with patch(
+                "shared_context_server.auth.get_http_request", return_value=mock_request
+            ):
+                result = validate_api_key_header(ctx)
+                assert result is True
 
     async def test_validate_api_key_header_meta(self):
         """Test API key header extraction via meta."""
