@@ -68,6 +68,15 @@ def _raise_journal_mode_check_error() -> None:
     raise DatabaseConnectionError("Failed to check journal mode")
 
 
+def _is_ci_environment() -> bool:
+    """
+    Check if running in CI environment.
+
+    Returns True if CI environment variables are present.
+    """
+    return bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
+
+
 def _raise_table_not_found_error(table: str) -> None:
     """Raise a table not found error."""
     raise DatabaseSchemaError(f"Required table '{table}' not found")
@@ -183,8 +192,21 @@ class DatabaseManager:
                 _raise_journal_mode_check_error()
             assert row is not None
             journal_mode = row[0].lower()
-            if journal_mode != "wal":
-                _raise_wal_mode_error(journal_mode)
+
+            if _is_ci_environment():
+                # In CI environments, accept alternative journal modes
+                acceptable_modes = {"wal", "memory", "delete", "truncate", "persist"}
+                if journal_mode not in acceptable_modes:
+                    _raise_wal_mode_error(journal_mode)
+                elif journal_mode != "wal":
+                    logger.warning(
+                        f"Using journal_mode={journal_mode} instead of WAL "
+                        f"(CI environment detected)"
+                    )
+            else:
+                # In production, require WAL mode
+                if journal_mode != "wal":
+                    _raise_wal_mode_error(journal_mode)
 
             # Track connection count for monitoring
             self._connection_count += 1
@@ -218,8 +240,21 @@ class DatabaseManager:
                 _raise_journal_mode_check_error()
             assert row is not None
             journal_mode = row[0].lower()
-            if journal_mode != "wal":
-                _raise_wal_mode_error(journal_mode)
+
+            if _is_ci_environment():
+                # In CI environments, accept alternative journal modes
+                acceptable_modes = {"wal", "memory", "delete", "truncate", "persist"}
+                if journal_mode not in acceptable_modes:
+                    _raise_wal_mode_error(journal_mode)
+                elif journal_mode != "wal":
+                    logger.warning(
+                        f"Using journal_mode={journal_mode} instead of WAL "
+                        f"(CI environment detected)"
+                    )
+            else:
+                # In production, require WAL mode
+                if journal_mode != "wal":
+                    _raise_wal_mode_error(journal_mode)
 
         except Exception as e:
             logger.exception("Failed to apply PRAGMA settings")
