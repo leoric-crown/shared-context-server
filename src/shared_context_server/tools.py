@@ -105,6 +105,13 @@ TOOL_REGISTRY: dict[str, ToolMetadata] = {
         tags=["server", "health", "status", "info"],
         requires_auth=False,
     ),
+    "get_usage_guidance": ToolMetadata(
+        name="get_usage_guidance",
+        category=ToolCategory.SERVER_UTILITIES,
+        description="Get contextual operational guidance based on JWT access level",
+        tags=["guidance", "permissions", "operations", "security"],
+        requires_auth=True,
+    ),
 }
 
 # ============================================================================

@@ -71,7 +71,7 @@ class DatabaseConfig(BaseSettings):
 
     # Backend selection
     use_sqlalchemy: bool = Field(
-        default=False,
+        default=True,
         json_schema_extra={"env": "USE_SQLALCHEMY"},
         description="Enable SQLAlchemy backend for future PostgreSQL support",
     )
