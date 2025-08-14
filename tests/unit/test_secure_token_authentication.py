@@ -17,7 +17,6 @@ import pytest
 
 from shared_context_server.auth import SecureTokenManager, get_secure_token_manager
 from shared_context_server.database import (
-    DatabaseManager,
     _is_ci_environment,
     get_db_connection,
 )
@@ -42,8 +41,11 @@ async def temp_database():
                 await db_module._sqlalchemy_manager.close()
             db_module._sqlalchemy_manager = None
 
-        db_manager = DatabaseManager(temp_path)
-        await db_manager.initialize()
+        # Use the same backend initialization logic as get_db_connection()
+        from shared_context_server.database import initialize_database
+
+        await initialize_database()
+
         yield temp_path
 
     # Cleanup - close SQLAlchemy manager if it exists

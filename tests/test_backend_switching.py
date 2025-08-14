@@ -45,7 +45,12 @@ def isolated_database_backend(use_sqlalchemy: bool, test_name: str = "test"):
             "DATABASE_PATH": temp_db_path,
         }
 
-        with patch.dict(os.environ, env_vars):
+        with (
+            patch.dict(os.environ, env_vars),
+            patch("shared_context_server.config.get_database_config") as mock_config,
+        ):
+            # Force fallback to environment variables by making config fail
+            mock_config.side_effect = Exception("Forced fallback to env vars")
             yield
     finally:
         # Restore original state

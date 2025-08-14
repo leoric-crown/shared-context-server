@@ -14,4 +14,12 @@ display all timestamps in webui in local time, not utc
 can we also show more precision? 2 decimals on seconds?
 
 can we also realtime update the number of active session in dashboard?
-this might require some actual state management, so we may want to consider moving away from this prototype with raw html and css and to using a proper web frontend framework
+this might(?) require some actual state management, so we may want to consider moving away from this prototype with raw html and css and to using a proper web frontend framework
+
+we'll also want basic CRUD for sessions and messages directly from WebUI
+being able to edit messages posted by AI to fix mistakes on the fly without stopping it could be useful?
+
+This will probably require we set up integration with auth so that webui is properly authenticated with
+admin role and privileges
+
+we need to think of edge cases (like very long messages) and how to handle them

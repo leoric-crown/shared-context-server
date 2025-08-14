@@ -59,7 +59,19 @@ docker run -d --name shared-context-server -p 23456:23456 \
 # Connect with Claude Code
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
 claude mcp list  # Should show: ✓ Connected
+
+# View the dashboard
+open http://localhost:23456/ui/  # Real-time session monitoring
 ```
+
+### 📊 Web Dashboard (MVP)
+Real-time monitoring interface for agent collaboration:
+- **Live session overview** with active agent counts
+- **Real-time message streaming** without page refreshes
+- **Session isolation visualization** to track multi-agent workflows
+- **Performance monitoring** for collaboration efficiency
+
+💡 **Perfect for**: Monitoring agent handoffs, debugging collaboration flows, and demonstrating multi-agent coordination to stakeholders.
 
 ---
 
