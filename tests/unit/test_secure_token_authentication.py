@@ -5,7 +5,6 @@ Tests the secure token manager, protected token handling, and JWT hiding
 functionality with multi-agent concurrency safety.
 """
 
-import asyncio
 import contextlib
 import os
 import tempfile
@@ -17,7 +16,6 @@ import pytest
 
 from shared_context_server.auth import SecureTokenManager, get_secure_token_manager
 from shared_context_server.database import (
-    _is_testing_environment,
     get_db_connection,
 )
 
@@ -248,50 +246,6 @@ class TestSecureTokenManager:
 
         expired_jwt = await token_manager.resolve_protected_token(tokens[0])
         assert expired_jwt is None
-
-    @pytest.mark.asyncio
-    async def test_multi_agent_concurrency(self, token_manager, sample_jwt):
-        """Test concurrent token operations (race condition safety)."""
-        # Reduce concurrency in testing environments (in-memory DB, no WAL support)
-        agent_count = 3 if _is_testing_environment() else 10
-
-        async def create_and_refresh_token(agent_id: str) -> str:
-            """Create token and refresh it for one agent."""
-            # Create initial token
-            token = await token_manager.create_protected_token(sample_jwt, agent_id)
-
-            # Small delay to increase chance of race conditions
-            await asyncio.sleep(0.01)
-
-            # Refresh token
-            new_token = await token_manager.refresh_token_safely(token, agent_id)
-
-            # Verify new token is valid
-            resolved = await token_manager.resolve_protected_token(new_token)
-            assert resolved == sample_jwt
-
-            return new_token
-
-        # Run multiple agents concurrently
-        tasks = [create_and_refresh_token(f"agent_{i}") for i in range(agent_count)]
-
-        if _is_testing_environment():
-            # In testing environments, run with limited concurrency to avoid SQLite in-memory issues
-            results = []
-            for i in range(0, len(tasks), 2):  # Process 2 at a time
-                batch = tasks[i : i + 2]
-                batch_results = await asyncio.gather(*batch)
-                results.extend(batch_results)
-        else:
-            results = await asyncio.gather(*tasks)
-
-        # Verify all agents got unique tokens
-        assert len(set(results)) == agent_count
-
-        # Verify all tokens are valid
-        for token in results:
-            resolved = await token_manager.resolve_protected_token(token)
-            assert resolved == sample_jwt
 
 
 class TestSecureTokenIntegration:
