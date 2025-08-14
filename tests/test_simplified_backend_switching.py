@@ -309,5 +309,11 @@ class TestMemoryDatabaseAdvantages:
         end_time = time.time()
         execution_time = end_time - start_time
 
-        # Memory databases should be very fast (< 1 second for 1000 rows)
-        assert execution_time < 1.0, f"Memory database too slow: {execution_time:.2f}s"
+        # Memory databases should be very fast
+        # CI environments are slower, so use relaxed timing
+        import os
+
+        max_time = 2.0 if os.getenv("CI") or os.getenv("GITHUB_ACTIONS") else 1.0
+        assert execution_time < max_time, (
+            f"Memory database too slow: {execution_time:.2f}s (max: {max_time:.1f}s)"
+        )
