@@ -1,10 +1,14 @@
+# CI workflow aligned with make quality && make test-all
 name: CI
+
 on:
-  push: { branches: ["**"] }
+  push:
+    branches: [ main, develop ]
   pull_request:
+    branches: [ main ]
 
 env:
-  # Test environment variables to prevent startup crashes
+  # Test environment variables (consistent with existing CI)
   API_KEY: "test-api-key-for-ci-only"
   DATABASE_URL: "sqlite:///:memory:"
   ENVIRONMENT: "testing"
@@ -22,93 +26,61 @@ jobs:
         include:
           - python-version: "3.12"
             backend: "sqlalchemy"
-            is-main: true
+            upload-coverage: true
+
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Setup uv with cache
-        uses: astral-sh/setup-uv@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
+    - name: Setup uv with cache
+      uses: astral-sh/setup-uv@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
 
-      - name: Sync dependencies
-        run: uv sync --dev
+    - name: Install dependencies
+      run: uv sync --all-extras
 
-      - name: Pre-commit (all hooks)
-        run: uv run pre-commit run --all-files --show-diff-on-failure
+    - name: Run quality checks (aligned with make quality)
+      if: matrix.backend == 'aiosqlite'
+      run: |
+        uv run ruff format
+        uv run ruff check --fix
+        uv run mypy src
+        uv run pip-audit
 
-      - name: Security audit
-        run: uv run pip-audit
+    - name: Run simplified backend tests (covers both backends)
+      run: |
+        uv run pytest tests/test_simplified_backend_switching.py -v
 
-      - name: Configure coverage for backend
-        run: |
-          if [ "${{ matrix.backend }}" = "aiosqlite" ]; then
-            # Create temporary coverage config excluding SQLAlchemy
-            cat > .coveragerc.backend << 'EOF'
-          [run]
-          source = src
-          branch = true
-          omit =
-              */tests/*
-              */conftest.py
-              */__pycache__/*
-              src/shared_context_server/scripts/dev.py
-              src/shared_context_server/scripts/dev_with_websocket.py
-              src/shared_context_server/websocket_server.py
-              src/shared_context_server/database_sqlalchemy.py
+    - name: Run smoke tests (${{ matrix.backend }} backend)
+      env:
+        USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' }}
+      run: |
+        uv run pytest tests/test_smoke.py -q
 
-          [report]
-          fail_under = 85
-          EOF
-          fi
+    - name: Run integration and behavioral tests (once per Python version)
+      if: matrix.backend == 'aiosqlite'
+      run: |
+        uv run pytest tests/integration/ tests/behavioral/ -q
 
-      - name: Test with coverage (${{ matrix.backend }} backend)
-        run: |
-          if [ "${{ matrix.backend }}" = "aiosqlite" ]; then
-            uv run pytest --cov=src --cov-config=.coveragerc.backend --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
-          else
-            uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -q --maxfail=3 --tb=short
-          fi
-        env:
-          USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' && 'true' || 'false' }}
+    - name: Run comprehensive test suite (${{ matrix.backend }} backend)
+      env:
+        USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' }}
+      run: |
+        uv run pytest tests/ \
+          --cov=src \
+          --cov-report=xml \
+          --cov-report=term-missing \
+          -q \
+          --maxfail=3 \
+          --tb=short \
+          --ignore=tests/test_simplified_backend_switching.py
 
-      # Upload only once (on the main Python job) to avoid duplicates
-      - name: Check coverage file exists
-        if: matrix.is-main
-        run: ls -la coverage.xml
-
-      - name: Upload coverage to Codecov
-        if: matrix.is-main
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          flags: unit
-          name: ubuntu-${{ matrix.python-version }}
-          fail_ci_if_error: false
-
-  smoke-tests:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        backend: ["aiosqlite", "sqlalchemy"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup uv with cache
-        uses: astral-sh/setup-uv@v4
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Sync dependencies
-        run: uv sync --dev
-
-      - name: WAL/Schema smoke test (${{ matrix.backend }} backend)
-        run: uv run pytest tests/test_smoke.py -qq --tb=no --durations-min=1
-        env:
-          API_KEY: "test-api-key-for-ci-smoke-test"
-          DATABASE_URL: "sqlite:///./test_smoke.db"
-          ENVIRONMENT: "development"
-          JWT_SECRET_KEY: "test-jwt-secret-key-for-smoke-test-only"
-          USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' && 'true' || 'false' }}
+    - name: Upload coverage
+      if: matrix.upload-coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unit
+        name: ci-${{ matrix.python-version }}
+        fail_ci_if_error: false

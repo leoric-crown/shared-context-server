@@ -21,7 +21,10 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    import aiosqlite
 
 import jwt
 from fastmcp import Context
@@ -683,35 +686,103 @@ class SecureTokenManager:
         Returns:
             New protected token ID
         """
-        # Get current JWT
-        jwt = await self.resolve_protected_token(current_token)
-        if not jwt:
+
+        # Helper function to handle token validation errors
+        async def _handle_token_error(
+            conn: aiosqlite.Connection, is_sqlalchemy: bool
+        ) -> None:
+            """Handle token validation error with proper rollback."""
+            if not is_sqlalchemy:
+                await conn.rollback()
             raise ValueError("Token invalid or expired")
 
-        # Create new token first (atomic operation)
-        new_token = await self.create_protected_token(jwt, agent_id)
-
-        # Then delete old token (if this fails, old token expires naturally)
+        # Perform the entire refresh operation in a single transaction to prevent race conditions
         try:
             async with get_db_connection() as conn:
                 # Check if this is SQLAlchemy backend (which handles transactions automatically)
                 is_sqlalchemy = hasattr(conn, "engine") and hasattr(conn, "conn")
 
-                await conn.execute(
-                    "DELETE FROM secure_tokens WHERE token_id = ?", (current_token,)
-                )
-
                 if not is_sqlalchemy:
-                    await conn.commit()
-        except Exception:
-            # Cleanup failed but new token is valid - acceptable degradation
-            logger.warning(
-                f"Failed to cleanup old token {current_token}, will expire naturally"
-            )
-            pass
+                    await conn.execute("BEGIN IMMEDIATE")
 
-        logger.info(f"Refreshed protected token for agent {agent_id}")
-        return new_token
+                try:
+                    # First, get and validate the current token within the transaction
+                    cursor = await conn.execute(
+                        """
+                        SELECT encrypted_jwt, expires_at FROM secure_tokens
+                        WHERE token_id = ?
+                        """,
+                        (current_token,),
+                    )
+
+                    row = await cursor.fetchone()
+                    if not row:
+                        await _handle_token_error(conn, is_sqlalchemy)
+
+                    # Type assertion for mypy - we know row is not None here
+                    assert row is not None
+
+                    # Check expiration - handle both string and datetime objects
+                    expires_at_raw = row[1]
+                    if isinstance(expires_at_raw, str):
+                        expires_at = datetime.fromisoformat(expires_at_raw)
+                    else:
+                        expires_at = expires_at_raw
+
+                    if expires_at <= datetime.now(timezone.utc):
+                        await _handle_token_error(conn, is_sqlalchemy)
+
+                    # Decrypt JWT within transaction
+                    try:
+                        jwt_token = self.fernet.decrypt(row[0]).decode()
+                    except Exception as err:
+                        if not is_sqlalchemy:
+                            await conn.rollback()
+                        raise ValueError("Token invalid or expired") from err
+
+                    # Generate new token ID
+                    new_token_id = f"sct_{self._uuid.uuid4()}"
+                    encrypted_jwt = self.fernet.encrypt(jwt_token.encode())
+
+                    # Insert new token and delete old token atomically
+                    await conn.execute(
+                        """
+                        INSERT INTO secure_tokens (token_id, encrypted_jwt, agent_id, expires_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            new_token_id,
+                            encrypted_jwt,
+                            agent_id,
+                            datetime.now(timezone.utc) + timedelta(hours=1),
+                        ),
+                    )
+
+                    await conn.execute(
+                        "DELETE FROM secure_tokens WHERE token_id = ?", (current_token,)
+                    )
+
+                    if not is_sqlalchemy:
+                        await conn.commit()
+
+                    logger.info(f"Refreshed protected token for agent {agent_id}")
+                    return new_token_id
+
+                except ValueError:
+                    # Re-raise ValueError for invalid/expired tokens
+                    if not is_sqlalchemy:
+                        await conn.rollback()
+                    raise
+                except Exception:
+                    if not is_sqlalchemy:
+                        await conn.rollback()
+                    raise
+        except ValueError:
+            # Re-raise ValueError so tests can catch it properly
+            raise
+        except Exception as err:
+            # For any other exceptions, wrap them appropriately
+            raise ValueError("Token invalid or expired") from err
 
     async def resolve_protected_token(self, token_id: str) -> str | None:
         """
