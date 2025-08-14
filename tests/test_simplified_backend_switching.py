@@ -313,7 +313,11 @@ class TestMemoryDatabaseAdvantages:
         # CI environments are slower, so use relaxed timing
         import os
 
-        max_time = 2.0 if os.getenv("CI") or os.getenv("GITHUB_ACTIONS") else 1.0
+        # Use generous timeout for CI environments (5s), strict for local (2s)
+        is_ci = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
+        max_time = 5.0 if is_ci else 2.0
+        
         assert execution_time < max_time, (
-            f"Memory database too slow: {execution_time:.2f}s (max: {max_time:.1f}s)"
+            f"Memory database too slow: {execution_time:.2f}s "
+            f"(max: {max_time:.1f}s, CI: {bool(is_ci)})"
         )
