@@ -596,13 +596,13 @@ async def cleanup_background_tasks():
     yield  # Let the test run
 
     # Use the enhanced cleanup utilities
-    # Skip asyncio cleanup in Python 3.10 due to event loop closure issues in CI
-    import sys
+    # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
+    import os
 
-    if sys.version_info >= (3, 11):
-        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=2.0)
+    if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+        cancelled_tasks = 0  # Skip asyncio cleanup in CI environments
     else:
-        cancelled_tasks = 0  # Skip cleanup for Python 3.10
+        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=2.0)
 
     cleaned_threads = cleanup_threads_with_timeout(timeout=1.0)
     cleaned_observers = cleanup_observers()
