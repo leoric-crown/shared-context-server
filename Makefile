@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-aiosqlite test-sqlalchemy ci format lint type pre-commit quality clean docker
+.PHONY: help install dev test test-aiosqlite test-sqlalchemy test-backend test-all ci format lint type pre-commit quality clean docker
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -70,6 +70,21 @@ test-backend: ## Run tests with both backends locally
 	echo "✅ All backend tests passed! 🎉"; \
 	echo "   • aiosqlite backend: ✓"; \
 	echo "   • SQLAlchemy backend: ✓"
+
+test-all: ## Run all test variations quietly (unit, integration, behavioral, both backends)
+	@echo "🧪 Running all test variations..."
+	@start=$$(date +%s); \
+	echo "1/4 aiosqlite backend..."; \
+	USE_SQLALCHEMY=false uv run pytest -qq --tb=no --disable-warnings >/dev/null 2>&1 && echo "  ✓ aiosqlite" || echo "  ❌ aiosqlite"; \
+	echo "2/4 SQLAlchemy backend..."; \
+	USE_SQLALCHEMY=true uv run pytest -qq --tb=no --disable-warnings >/dev/null 2>&1 && echo "  ✓ SQLAlchemy" || echo "  ❌ SQLAlchemy"; \
+	echo "3/4 aiosqlite smoke test..."; \
+	USE_SQLALCHEMY=false API_KEY="test-api-key" DATABASE_URL="sqlite:///./test_smoke.db" ENVIRONMENT="development" JWT_SECRET_KEY="test-jwt-secret-key" uv run pytest tests/test_smoke.py -qq --tb=no --disable-warnings >/dev/null 2>&1 && echo "  ✓ aiosqlite smoke" || echo "  ❌ aiosqlite smoke"; \
+	echo "4/4 SQLAlchemy smoke test..."; \
+	USE_SQLALCHEMY=true API_KEY="test-api-key" DATABASE_URL="sqlite:///:memory:" ENVIRONMENT="testing" JWT_SECRET_KEY="test-jwt-secret-key" uv run pytest tests/test_smoke.py -qq --tb=no --disable-warnings >/dev/null 2>&1 && echo "  ✓ SQLAlchemy smoke" || echo "  ❌ SQLAlchemy smoke"; \
+	end=$$(date +%s); \
+	duration=$$((end - start)); \
+	echo "✅ Test variations completed in $${duration}s"
 
 ci: ## Run full CI matrix locally (both backends + quality checks)
 	@echo "🚀 Running complete CI matrix locally..."

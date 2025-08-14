@@ -449,7 +449,8 @@ class TestConfigurationInheritanceAndOverrides:
                 ]  # Could be default or from file
                 assert config.mcp_server.mcp_server_name is not None
         finally:
-            Path(env_file_path).unlink(missing_ok=True)
+            # No cleanup needed for memory database
+            pass
 
 
 class TestConfigurationUtilityFunctions:

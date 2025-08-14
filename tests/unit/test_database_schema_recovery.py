@@ -5,8 +5,6 @@ This test module focuses on improving coverage for database connection managemen
 schema recovery, and error handling paths that weren't covered in basic tests.
 """
 
-import tempfile
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -63,12 +61,12 @@ class TestDatabaseManagerSchemaRecovery:
     async def test_validate_schema_with_recovery_secure_tokens_missing(self):
         """Test schema recovery when secure_tokens table is missing."""
         # Create a temporary database
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-            temp_db_path = temp_db.name
+        # Using memory database (no file needed)
+        memory_db_url = "sqlite:///:memory:"
 
         try:
             # Create database manager
-            db_manager = DatabaseManager(temp_db_path)
+            db_manager = DatabaseManager(memory_db_url)
 
             # Initialize the database first to create the connection
             await db_manager.initialize()
@@ -101,16 +99,16 @@ class TestDatabaseManagerSchemaRecovery:
                 assert call_count == 2
 
         finally:
-            # Clean up temporary database
-            Path(temp_db_path).unlink(missing_ok=True)
+            # No cleanup needed for memory database
+            pass
 
     async def test_validate_schema_with_recovery_other_error(self):
         """Test schema recovery with non-secure_tokens error."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-            temp_db_path = temp_db.name
+        # Using memory database (no file needed)
+        memory_db_url = "sqlite:///:memory:"
 
         try:
-            db_manager = DatabaseManager(temp_db_path)
+            db_manager = DatabaseManager(memory_db_url)
             await db_manager.initialize()
 
             # Mock validate_schema to fail with different error
@@ -135,15 +133,16 @@ class TestDatabaseManagerSchemaRecovery:
                     await db_manager._validate_schema_with_recovery(conn)
 
         finally:
-            Path(temp_db_path).unlink(missing_ok=True)
+            # No cleanup needed for memory database
+            pass
 
     async def test_validate_schema_with_recovery_recovery_fails(self):
         """Test schema recovery when recovery itself fails."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-            temp_db_path = temp_db.name
+        # Using memory database (no file needed)
+        memory_db_url = "sqlite:///:memory:"
 
         try:
-            db_manager = DatabaseManager(temp_db_path)
+            db_manager = DatabaseManager(memory_db_url)
 
             # Mock validate_schema to always fail with secure_tokens error
             async def mock_validate_schema(conn):
@@ -166,7 +165,8 @@ class TestDatabaseManagerSchemaRecovery:
                         await db_manager._validate_schema_with_recovery(conn)
 
         finally:
-            Path(temp_db_path).unlink(missing_ok=True)
+            # No cleanup needed for memory database
+            pass
 
     async def test_database_manager_invalid_path(self):
         """Test DatabaseManager with invalid database path."""
@@ -202,7 +202,7 @@ class TestDatabaseManagerSchemaRecovery:
         assert str(db_manager2.database_path).endswith("another_test.db")
 
     @patch("shared_context_server.database.aiosqlite.connect")
-    @patch("shared_context_server.database._is_ci_environment")
+    @patch("shared_context_server.database._is_testing_environment")
     async def test_get_connection_wal_mode_failure(self, mock_is_ci, mock_connect):
         """Test database connection when WAL mode setting fails."""
         # Mock non-CI environment so WAL mode is strictly required
@@ -257,11 +257,11 @@ class TestDatabaseManagerSchemaRecovery:
 
     async def test_load_schema_file_not_found(self):
         """Test schema file loading when file is not found."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-            temp_db_path = temp_db.name
+        # Using memory database (no file needed)
+        memory_db_url = "sqlite:///:memory:"
 
         try:
-            db_manager = DatabaseManager(temp_db_path)
+            db_manager = DatabaseManager(memory_db_url)
 
             # Mock Path.exists to always return False
             with (
@@ -274,7 +274,8 @@ class TestDatabaseManagerSchemaRecovery:
                 db_manager._load_schema_file()
 
         finally:
-            Path(temp_db_path).unlink(missing_ok=True)
+            # No cleanup needed for memory database
+            pass
 
     async def test_health_check_success(self, isolated_db):
         """Test health_check function returns healthy status with working database."""

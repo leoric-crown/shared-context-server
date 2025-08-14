@@ -22,7 +22,7 @@ class TestSessionLifecycle:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             yield server
 
     async def test_session_complete_lifecycle(self, server_with_db, test_db_manager):

@@ -10,19 +10,16 @@ Includes industry-standard background task cleanup for asyncio test environments
 
 import asyncio
 import inspect
-import tempfile
 import threading
 import time
 import weakref
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic.fields import FieldInfo
 
 from shared_context_server.auth import AuthInfo
-from shared_context_server.database import DatabaseManager
 
 pytest_plugins = ["tests.fixtures.database"]
 
@@ -365,38 +362,29 @@ async def test_db_manager():
 
     This fixture provides a real database with the complete schema applied,
     ensuring tests work with actual database constraints and behaviors.
-    Each test gets a clean database state.
+    Each test gets a clean database state with no file I/O complexity.
 
     Yields:
-        DatabaseManager: Initialized database manager with applied schema
+        TestDatabaseManager: Initialized database manager with applied schema
     """
-    # Create temporary database file for this test
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-        temp_db_path = temp_db.name
+    from shared_context_server.database_testing import TestDatabaseManager
 
-    try:
-        # Create database manager with temporary database
-        db_manager = DatabaseManager(f"sqlite:///{temp_db_path}")
+    # Create in-memory database manager (no files, no cleanup needed)
+    db_manager = TestDatabaseManager("sqlite:///:memory:")
 
-        # Initialize database with schema
-        await db_manager.initialize()
+    # Initialize database with schema
+    await db_manager.initialize()
 
-        # Verify schema is correctly applied
-        async with db_manager.get_connection() as conn:
-            # Quick validation that our schema version is correct
-            cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
-            version = await cursor.fetchone()
-            assert version and version[0] == 3, (
-                f"Expected schema version 3, got {version[0] if version else None}"
-            )
+    # Verify schema is correctly applied
+    async with db_manager.get_connection() as conn:
+        cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
+        version = await cursor.fetchone()
+        assert version and version[0] == 3, (
+            f"Expected schema version 3, got {version[0] if version else None}"
+        )
 
-        yield db_manager
-
-    finally:
-        # Clean up temporary database file
-        temp_path = Path(temp_db_path)
-        if temp_path.exists():
-            temp_path.unlink()
+    yield db_manager
+    # No cleanup needed - memory database automatically cleaned up
 
 
 @pytest.fixture(scope="function")
@@ -523,54 +511,58 @@ async def seed_test_data(test_db_connection):
 # =============================================================================
 
 
-def patch_database_connection(test_db_manager):
+def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
     """
-    Create a comprehensive patcher for all get_db_connection function usages.
+    Create a unified patcher for all database connections that works with any backend.
 
     This patches the source function in the database module to ensure
-    all imports and usages get the test database connection.
+    all imports and usages get the test database connection from the specified backend.
 
     Args:
-        test_db_manager: The test database manager to use
+        test_db_manager: The test database manager to use (optional, will create one if None)
+        backend: Database backend to use ("aiosqlite" or "sqlalchemy")
 
     Returns:
         unittest.mock.patch context manager
     """
     from unittest.mock import patch
 
+    from shared_context_server.database_testing import get_test_db_connection
+
     @asynccontextmanager
     async def mock_get_db_connection():
-        async with test_db_manager.get_connection() as conn:
-            yield conn
+        if test_db_manager:
+            # Use provided test manager
+            async with test_db_manager.get_connection() as conn:
+                yield conn
+        else:
+            # Use unified test database with specified backend
+            async with get_test_db_connection(backend) as conn:
+                yield conn
 
-    # Patch the source function in database module (most comprehensive)
-    database_patch = patch(
-        "shared_context_server.database.get_db_connection", mock_get_db_connection
-    )
-
-    # Also patch the imported references for extra safety
-    server_patch = patch(
-        "shared_context_server.server.get_db_connection", mock_get_db_connection
-    )
-    auth_patch = patch(
-        "shared_context_server.auth.get_db_connection", mock_get_db_connection
-    )
+    # Patch all the places where get_db_connection is used
+    patches = [
+        patch(
+            "shared_context_server.database.get_db_connection", mock_get_db_connection
+        ),
+        patch("shared_context_server.server.get_db_connection", mock_get_db_connection),
+        patch("shared_context_server.auth.get_db_connection", mock_get_db_connection),
+    ]
 
     # Return a context manager that applies all patches
     from contextlib import ExitStack
 
-    class MultiPatch:
+    class UnifiedDatabasePatch:
         def __enter__(self):
             self.stack = ExitStack()
-            self.stack.enter_context(database_patch)  # Primary patch
-            self.stack.enter_context(server_patch)  # Safety patch
-            self.stack.enter_context(auth_patch)  # Safety patch
+            for patch_obj in patches:
+                self.stack.enter_context(patch_obj)
             return self
 
         def __exit__(self, *args):
             self.stack.__exit__(*args)
 
-    return MultiPatch()
+    return UnifiedDatabasePatch()
 
 
 # Example usage patterns for common tools:

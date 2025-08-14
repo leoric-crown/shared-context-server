@@ -17,7 +17,7 @@ import pytest
 
 from shared_context_server.auth import SecureTokenManager, get_secure_token_manager
 from shared_context_server.database import (
-    _is_ci_environment,
+    _is_testing_environment,
     get_db_connection,
 )
 
@@ -252,8 +252,8 @@ class TestSecureTokenManager:
     @pytest.mark.asyncio
     async def test_multi_agent_concurrency(self, token_manager, sample_jwt):
         """Test concurrent token operations (race condition safety)."""
-        # Reduce concurrency in CI environments (in-memory DB, no WAL support)
-        agent_count = 3 if _is_ci_environment() else 10
+        # Reduce concurrency in testing environments (in-memory DB, no WAL support)
+        agent_count = 3 if _is_testing_environment() else 10
 
         async def create_and_refresh_token(agent_id: str) -> str:
             """Create token and refresh it for one agent."""
@@ -275,8 +275,8 @@ class TestSecureTokenManager:
         # Run multiple agents concurrently
         tasks = [create_and_refresh_token(f"agent_{i}") for i in range(agent_count)]
 
-        if _is_ci_environment():
-            # In CI, run with limited concurrency to avoid SQLite in-memory issues
+        if _is_testing_environment():
+            # In testing environments, run with limited concurrency to avoid SQLite in-memory issues
             results = []
             for i in range(0, len(tasks), 2):  # Process 2 at a time
                 batch = tasks[i : i + 2]

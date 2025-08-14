@@ -47,18 +47,15 @@ This guide implements comprehensive testing patterns for the Shared Context MCP 
 ### Test Configuration
 
 ```python
-# conftest.py - Modern database testing fixtures
+# conftest.py - Simplified memory-based database testing fixtures
 import inspect
-import os
-import tempfile
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any, AsyncGenerator
 
 import pytest
 from pydantic.fields import FieldInfo
 
-from shared_context_server.database import DatabaseManager
+from shared_context_server.database_testing import TestDatabaseManager, get_test_db_connection
 
 @pytest.fixture(scope="function")
 async def test_db_manager():
@@ -67,34 +64,25 @@ async def test_db_manager():
 
     This fixture provides a real database with the complete schema applied,
     ensuring tests work with actual database constraints and behaviors.
-    Each test gets a clean database state.
+    Each test gets a clean database state with no file I/O complexity.
 
     Yields:
-        DatabaseManager: Initialized database manager with applied schema
+        TestDatabaseManager: Initialized database manager with applied schema
     """
-    # Create temporary database file for this test
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-        temp_db_path = temp_db.name
+    # Create in-memory database manager (no files, no cleanup needed)
+    db_manager = TestDatabaseManager("sqlite:///:memory:")
 
-    try:
-        # Create database manager with temporary database
-        db_manager = DatabaseManager(f"sqlite:///{temp_db_path}")
+    # Initialize database with schema
+    await db_manager.initialize()
 
-        # Initialize database with schema
-        await db_manager.initialize()
+    # Verify schema is correctly applied
+    async with db_manager.get_connection() as conn:
+        cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
+        version = await cursor.fetchone()
+        assert version and version[0] == 3, f"Expected schema version 3, got {version[0] if version else None}"
 
-        # Verify schema is correctly applied
-        async with db_manager.get_connection() as conn:
-            cursor = await conn.execute("SELECT MAX(version) FROM schema_version")
-            version = await cursor.fetchone()
-            assert version and version[0] == 2, f"Expected schema version 2, got {version[0] if version else None}"
-
-        yield db_manager
-
-    finally:
-        # Clean up temporary database file
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
+    yield db_manager
+    # No cleanup needed - memory database automatically cleaned up
 
 @pytest.fixture(scope="function")
 async def test_db_connection(test_db_manager):

@@ -16,7 +16,7 @@ class TestAuthenticationSecurity:
         """Test that agent contexts maintain proper isolation."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # Create two agents with different authentication contexts
             agent_1_ctx = MockContext(
                 session_id="auth_test", agent_id="authenticated_agent_1"
@@ -70,7 +70,7 @@ class TestAuthenticationSecurity:
         """Test that permission boundaries are properly enforced."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # Create read-only agent
             readonly_ctx = MockContext(
                 session_id="perm_test", agent_id="readonly_agent"
@@ -139,7 +139,7 @@ class TestAuthenticationSecurity:
         """Test that unauthenticated agents have limited access."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # Create unauthenticated context
             unauth_ctx = MockContext(session_id="unauth_test", agent_id="unknown")
             unauth_ctx._auth_info = AuthInfo(
@@ -195,7 +195,7 @@ class TestAuthenticationSecurity:
         """Test that agent identity remains consistent across operations."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # Create consistent agent context
             agent_ctx = MockContext(
                 session_id="consistency_test", agent_id="consistent_agent"
@@ -260,7 +260,7 @@ class TestAuthenticationSecurity:
         """Test that session-based agent_id fallback doesn't create cross-contamination."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # Create contexts that might use session-based fallback
             session_id = "fallback_isolation_test"
 
@@ -313,7 +313,7 @@ class TestAuthenticationSecurity:
         """Test isolation between JWT-authenticated and fallback agent identification."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        with patch_database_connection(test_db_manager, backend="aiosqlite"):
             # JWT authenticated agent
             jwt_ctx = MockContext(session_id="jwt_fallback_test", agent_id="jwt_agent")
             jwt_ctx._auth_info = AuthInfo(

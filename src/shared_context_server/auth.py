@@ -739,8 +739,13 @@ class SecureTokenManager:
             if not row:
                 return None
 
-            # Check expiration
-            expires_at = datetime.fromisoformat(row[1])
+            # Check expiration - handle both string (manual parsing) and datetime (adapter converted)
+            expires_at_raw = row[1]
+            if isinstance(expires_at_raw, str):
+                expires_at = datetime.fromisoformat(expires_at_raw)
+            else:
+                # Already a datetime object (from datetime adapter)
+                expires_at = expires_at_raw
             if expires_at <= datetime.now(timezone.utc):
                 return None
 
@@ -796,7 +801,11 @@ class SecureTokenManager:
                         "agent_type": jwt_result.get("agent_type", "unknown"),
                         "permissions": jwt_result.get("permissions", ["read"]),
                         "stored_agent_id": row[1],  # Cross-check with stored value
-                        "token_expired": datetime.fromisoformat(row[2])
+                        "token_expired": (
+                            datetime.fromisoformat(row[2])
+                            if isinstance(row[2], str)
+                            else row[2]
+                        )
                         <= datetime.now(timezone.utc),
                         "original_token": token_id,
                     }

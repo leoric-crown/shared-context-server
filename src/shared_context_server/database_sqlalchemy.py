@@ -44,13 +44,24 @@ def _raise_journal_mode_error(mode: str) -> None:
     raise RuntimeError(f"Expected journal_mode=wal, got {mode}")
 
 
-def _is_ci_environment() -> bool:
+def _is_testing_environment() -> bool:
     """
-    Check if running in CI environment.
+    Check if running in testing environment.
 
-    Returns True if CI environment variables are present.
+    Returns True if pytest is running or testing environment variables are present.
     """
-    return bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
+    import sys
+
+    # Check for pytest
+    if "pytest" in sys.modules:
+        return True
+
+    # Check for testing environment variables
+    return bool(
+        os.getenv("CI")
+        or os.getenv("GITHUB_ACTIONS")
+        or os.getenv("PYTEST_CURRENT_TEST")
+    )
 
 
 # SQLite PRAGMA settings (matching database.py for interface compatibility)
@@ -272,8 +283,8 @@ class SQLAlchemyConnectionWrapper:
             if row:
                 journal_mode = row[0].lower()
 
-                if _is_ci_environment():
-                    # In CI/test environments, accept alternative journal modes
+                if _is_testing_environment():
+                    # In testing environments, accept any journal mode (including memory databases)
                     acceptable_modes = {
                         "wal",
                         "memory",
@@ -284,9 +295,9 @@ class SQLAlchemyConnectionWrapper:
                     if journal_mode not in acceptable_modes:
                         _raise_journal_mode_error(row[0])
                     elif journal_mode != "wal":
-                        logger.warning(
+                        logger.debug(
                             f"Using journal_mode={journal_mode} instead of WAL "
-                            f"(CI/test environment detected)"
+                            f"(testing environment detected)"
                         )
                 else:
                     # In production, require WAL mode

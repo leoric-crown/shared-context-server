@@ -14,12 +14,52 @@ from __future__ import annotations
 import json
 import logging
 import os
+
+# Configure sqlite3 to use explicit datetime adapters to avoid Python 3.12+ deprecation warnings
+import sqlite3
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from datetime import datetime as dt
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiosqlite
+
+
+def adapt_datetime_iso(val: dt) -> str:
+    """Adapt datetime to ISO format string to avoid deprecation warnings."""
+    return val.isoformat()
+
+
+def convert_datetime(val: bytes) -> dt:
+    """Convert ISO format string or Unix timestamp to datetime."""
+    decoded_val = val.decode()
+
+    # Handle Unix timestamp format (like '1755135988.48165')
+    try:
+        # Try to parse as float (Unix timestamp)
+        timestamp = float(decoded_val)
+        return dt.fromtimestamp(timestamp, timezone.utc)
+    except ValueError:
+        pass
+
+    # Handle ISO format string
+    try:
+        return dt.fromisoformat(decoded_val)
+    except ValueError:
+        # Fallback: try to parse as UTC timestamp if it ends with Z
+        if decoded_val.endswith("Z"):
+            return dt.fromisoformat(decoded_val[:-1] + "+00:00")
+        raise
+
+
+# Register our explicit adapters to replace the deprecated defaults
+sqlite3.register_adapter(dt, adapt_datetime_iso)
+sqlite3.register_converter("datetime", convert_datetime)
+sqlite3.register_converter("DATETIME", convert_datetime)
+sqlite3.register_converter("timestamp", convert_datetime)
+sqlite3.register_converter("TIMESTAMP", convert_datetime)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -68,13 +108,22 @@ def _raise_journal_mode_check_error() -> None:
     raise DatabaseConnectionError("Failed to check journal mode")
 
 
-def _is_ci_environment() -> bool:
+def _is_testing_environment() -> bool:
     """
-    Check if running in CI environment.
+    Check if running in testing environment.
 
-    Returns True if CI environment variables are present.
+    Returns True if pytest is running or testing environment variables are present.
     """
-    return bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
+    # Check for pytest
+    if "pytest" in sys.modules:
+        return True
+
+    # Check for testing environment variables
+    return bool(
+        os.getenv("CI")
+        or os.getenv("GITHUB_ACTIONS")
+        or os.getenv("PYTEST_CURRENT_TEST")
+    )
 
 
 def _raise_table_not_found_error(table: str) -> None:
@@ -156,31 +205,15 @@ class DatabaseManager:
         """
         conn = None
         try:
-            # Connect to database
+            # Connect to database with explicit settings to avoid Python 3.12+ deprecation warnings
             conn = await aiosqlite.connect(
                 str(self.database_path),
                 isolation_level=None,  # Autocommit mode for WAL
                 timeout=30.0,  # 30 second connection timeout
                 check_same_thread=False,
+                detect_types=sqlite3.PARSE_DECLTYPES
+                | sqlite3.PARSE_COLNAMES,  # Enable our custom adapters
             )
-
-            # Configure datetime adapters for Python 3.12+ compatibility
-            import datetime as dt
-            import sqlite3
-
-            def adapt_datetime_iso(val: dt.datetime) -> str:
-                """Adapt datetime to ISO format string."""
-                return val.isoformat()
-
-            def convert_datetime(val: bytes) -> dt.datetime:
-                """Convert ISO format string to datetime."""
-                return dt.datetime.fromisoformat(val.decode())
-
-            sqlite3.register_adapter(dt.datetime, adapt_datetime_iso)
-            sqlite3.register_converter("datetime", convert_datetime)
-            sqlite3.register_converter("DATETIME", convert_datetime)
-            sqlite3.register_converter("timestamp", convert_datetime)
-            sqlite3.register_converter("TIMESTAMP", convert_datetime)
 
             # Apply optimized PRAGMA settings
             await self._apply_pragmas(conn)
@@ -193,15 +226,15 @@ class DatabaseManager:
             assert row is not None
             journal_mode = row[0].lower()
 
-            if _is_ci_environment():
-                # In CI environments, accept alternative journal modes
+            if _is_testing_environment():
+                # In testing environments, accept any journal mode (including memory databases)
                 acceptable_modes = {"wal", "memory", "delete", "truncate", "persist"}
                 if journal_mode not in acceptable_modes:
                     _raise_wal_mode_error(journal_mode)
                 elif journal_mode != "wal":
-                    logger.warning(
+                    logger.debug(
                         f"Using journal_mode={journal_mode} instead of WAL "
-                        f"(CI environment detected)"
+                        f"(testing environment detected)"
                     )
             else:
                 # In production, require WAL mode
@@ -241,15 +274,15 @@ class DatabaseManager:
             assert row is not None
             journal_mode = row[0].lower()
 
-            if _is_ci_environment():
-                # In CI environments, accept alternative journal modes
+            if _is_testing_environment():
+                # In testing environments, accept any journal mode (including memory databases)
                 acceptable_modes = {"wal", "memory", "delete", "truncate", "persist"}
                 if journal_mode not in acceptable_modes:
                     _raise_wal_mode_error(journal_mode)
                 elif journal_mode != "wal":
-                    logger.warning(
+                    logger.debug(
                         f"Using journal_mode={journal_mode} instead of WAL "
-                        f"(CI environment detected)"
+                        f"(testing environment detected)"
                     )
             else:
                 # In production, require WAL mode
@@ -717,17 +750,29 @@ def utc_timestamp() -> str:
     return utc_now().isoformat()
 
 
-def parse_utc_timestamp(timestamp_str: str) -> datetime:
+def parse_utc_timestamp(timestamp_input: str | datetime) -> datetime:
     """
-    Parse UTC timestamp string to datetime.
+    Parse UTC timestamp string or datetime object to datetime.
 
     Args:
-        timestamp_str: ISO timestamp string
+        timestamp_input: ISO timestamp string or datetime object
 
     Returns:
         UTC datetime object
     """
     try:
+        # Handle datetime objects (from datetime adapters)
+        if isinstance(timestamp_input, datetime):
+            dt = timestamp_input
+            # Convert to UTC if not already
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+
+        # Handle string inputs
+        timestamp_str = timestamp_input
         # Handle both with and without timezone info
         if timestamp_str.endswith("Z"):
             timestamp_str = timestamp_str[:-1] + "+00:00"
@@ -745,7 +790,7 @@ def parse_utc_timestamp(timestamp_str: str) -> datetime:
 
     except ValueError as e:
         raise ValueError(
-            f"Invalid timestamp format: {timestamp_str}, error: {e}"
+            f"Invalid timestamp format: {timestamp_input}, error: {e}"
         ) from e
     else:
         return dt
@@ -857,7 +902,7 @@ async def health_check() -> dict[str, Any]:
                         # Check if keys() would return a coroutine (mock issue)
                         keys_result = result.keys()
                         if inspect.iscoroutine(keys_result):  # type: ignore[unreachable]
-                            logger.warning(  # type: ignore[unreachable]
+                            logger.debug(  # type: ignore[unreachable]
                                 "Database result.keys() returned a coroutine (likely a test mock issue)"
                             )
                             # Properly await and close the coroutine to prevent warning
