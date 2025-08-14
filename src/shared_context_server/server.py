@@ -1148,17 +1148,23 @@ async def get_messages(
                 elif visibility_filter == "admin_only" and has_admin_permission:
                     where_conditions.append("visibility = 'admin_only'")
             else:
-                # Default visibility rules: public + own private/agent_only + admin_only (if admin)
-                visibility_conditions = [
-                    "visibility = 'public'",
-                    "(visibility = 'private' AND sender = ?)",
-                    "(visibility = 'agent_only' AND sender = ?)",
-                ]
-                params.extend([agent_id, agent_id])
-
-                # Add admin_only messages if agent has admin permission
+                # Admin gets unrestricted access to all messages
                 if has_admin_permission:
-                    visibility_conditions.append("visibility = 'admin_only'")
+                    visibility_conditions = [
+                        "visibility = 'public'",
+                        "visibility = 'private'",  # ADMIN: All private messages
+                        "visibility = 'agent_only'",  # ADMIN: All agent_only messages
+                        "visibility = 'admin_only'",  # ADMIN: All admin_only messages
+                    ]
+                    # No sender restrictions for admin - they can read all messages
+                else:
+                    # Default visibility rules for non-admin: public + own private/agent_only
+                    visibility_conditions = [
+                        "visibility = 'public'",
+                        "(visibility = 'private' AND sender = ?)",
+                        "(visibility = 'agent_only' AND sender = ?)",
+                    ]
+                    params.extend([agent_id, agent_id])
 
                 visibility_clause = f"({' OR '.join(visibility_conditions)})"
                 where_conditions.append(visibility_clause)
@@ -1304,20 +1310,23 @@ async def search_context(
                 has_admin_permission = "admin" in agent_context.get("permissions", [])
 
                 if has_admin_permission:
+                    # ADMIN: Unrestricted access to all messages
                     where_conditions.append("""
                         (visibility = 'public' OR
-                         (visibility = 'private' AND sender = ?) OR
-                         (visibility = 'agent_only' AND sender = ?) OR
+                         visibility = 'private' OR
+                         visibility = 'agent_only' OR
                          visibility = 'admin_only')
                     """)
+                    # No sender restrictions for admin
                 else:
+                    # Non-admin: Limited to public + own private/agent_only
                     where_conditions.append("""
                         (visibility = 'public' OR
                          (visibility = 'private' AND sender = ?) OR
                          (visibility = 'agent_only' AND sender = ?))
                     """)
-                params.append(agent_id)
-                params.append(agent_id)
+                    params.append(agent_id)
+                    params.append(agent_id)
 
             cursor = await conn.execute(
                 f"""
