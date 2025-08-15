@@ -12,7 +12,6 @@ from pathlib import Path
 import httpx
 import pytest
 
-from shared_context_server.database import initialize_database
 from shared_context_server.server import add_message, create_session, mcp
 
 sys.path.append(str(Path(__file__).parent))
@@ -20,16 +19,18 @@ from conftest import MockContext, call_fastmcp_tool
 
 
 @pytest.fixture
-async def test_client() -> AsyncGenerator[httpx.AsyncClient, None]:
+async def test_client(isolated_db) -> AsyncGenerator[httpx.AsyncClient, None]:
     """Create test client for Web UI endpoints."""
-    # Initialize database for testing
-    await initialize_database()
+    # Use isolated test database instead of production database
+    from tests.fixtures.database import patch_database_for_test
 
-    # Create test client with FastMCP HTTP app
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=mcp.http_app()), base_url="http://testserver"
-    ) as client:
-        yield client
+    with patch_database_for_test(isolated_db):
+        # Create test client with FastMCP HTTP app
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mcp.http_app()),
+            base_url="http://testserver",
+        ) as client:
+            yield client
 
 
 @pytest.mark.asyncio

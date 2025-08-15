@@ -486,16 +486,18 @@ class TestConfigurationUtilityFunctions:
 
     def test_get_database_url_with_database_path(self):
         """Test get_database_url when only DATABASE_PATH is set."""
-        with patch.dict(
-            os.environ,
-            {"API_KEY": "test-key", "DATABASE_PATH": "./custom_path.db"},
-            clear=True,
-        ):
-            # Force reload to pick up new environment
-            reload_config()
-            url = get_database_url()
-            assert url.startswith("sqlite:///")
-            assert url.endswith("custom_path.db")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_db_path = str(Path(tmpdir) / "custom_path.db")
+            with patch.dict(
+                os.environ,
+                {"API_KEY": "test-key", "DATABASE_PATH": custom_db_path},
+                clear=True,
+            ):
+                # Force reload to pick up new environment
+                reload_config()
+                url = get_database_url()
+                assert url.startswith("sqlite:///")
+                assert url.endswith("custom_path.db")
 
     def test_convenience_config_functions(self):
         """Test convenience functions for accessing config sections."""

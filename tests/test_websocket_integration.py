@@ -11,7 +11,6 @@ import pytest
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
-from shared_context_server.database import initialize_database
 from shared_context_server.websocket_server import websocket_app
 
 try:
@@ -30,16 +29,17 @@ except ImportError:
 
 
 @pytest.fixture
-async def websocket_client() -> AsyncGenerator[AsyncClient, None]:
+async def websocket_client(isolated_db) -> AsyncGenerator[AsyncClient, None]:
     """Create test client for WebSocket server."""
-    # Initialize database for testing
-    await initialize_database()
+    # Use isolated test database instead of production database
+    from tests.fixtures.database import patch_database_for_test
 
-    # Create test client with WebSocket app
-    async with AsyncClient(
-        transport=ASGITransport(app=websocket_app), base_url="http://testserver"
-    ) as client:
-        yield client
+    with patch_database_for_test(isolated_db):
+        # Create test client with WebSocket app
+        async with AsyncClient(
+            transport=ASGITransport(app=websocket_app), base_url="http://testserver"
+        ) as client:
+            yield client
 
 
 @pytest.mark.asyncio

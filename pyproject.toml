@@ -255,6 +255,7 @@ markers = [
     "performance: marks tests as performance tests",
     "behavioral: marks tests as behavioral/end-to-end tests",
     "flaky: marks tests as potentially flaky",
+    "no_websocket_mock: marks tests to skip the global WebSocket notification mock",
     "database: marks tests that require database access",
     "memory: marks tests related to memory operations",
     "sqlalchemy: marks tests that require SQLAlchemy backend (USE_SQLALCHEMY=true)",

@@ -165,16 +165,25 @@ def test_phase2_server_creation():
 
 
 @pytest.mark.asyncio
-async def test_phase2_database_schema():
+async def test_phase2_database_schema(isolated_db):
     """Test that Phase 2 database schema includes all required tables."""
-    from shared_context_server.database import initialize_database
+    from tests.fixtures.database import patch_database_for_test
 
-    # This should run without errors
-    try:
-        await initialize_database()
+    # Use isolated test database instead of production database
+    with patch_database_for_test(isolated_db):
+        # Test that database is properly initialized with schema
+        async with isolated_db.get_connection() as conn:
+            # Check that required tables exist
+            cursor = await conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+            tables = [row[0] for row in await cursor.fetchall()]
+
+            required_tables = ["sessions", "messages", "agent_memory", "schema_version"]
+            for table in required_tables:
+                assert table in tables, f"Required table '{table}' not found"
+
         print("✅ Phase 2 database schema initialization successful")
-    except Exception as e:
-        pytest.fail(f"Database initialization failed: {e}")
 
 
 def test_rapidfuzz_performance_integration():

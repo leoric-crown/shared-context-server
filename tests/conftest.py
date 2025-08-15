@@ -674,6 +674,30 @@ async def reset_global_singletons():
         pass
 
 
+@pytest.fixture(autouse=True)
+async def mock_websocket_notifications(request):
+    """
+    Mock WebSocket server notifications to prevent tests from making HTTP requests
+    to the production dev server during testing.
+
+    This prevents WebSocket broadcast messages from appearing in dev server logs
+    when tests run that trigger add_message operations.
+
+    Tests can be excluded from this mock by using the 'no_websocket_mock' marker.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    # Check if test is marked to skip websocket mocking
+    if request.node.get_closest_marker("no_websocket_mock"):
+        yield  # Skip mocking for this test
+    else:
+        with patch(
+            "shared_context_server.server._notify_websocket_server",
+            new_callable=AsyncMock,
+        ):
+            yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 async def cleanup_on_session_finish():
     """

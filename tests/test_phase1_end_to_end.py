@@ -15,7 +15,6 @@ import pytest
 sys.path.append(str(Path(__file__).parent))
 from conftest import MockContext, call_fastmcp_tool
 
-from shared_context_server.database import initialize_database
 from shared_context_server.server import (
     add_message,
     create_session,
@@ -29,99 +28,100 @@ class TestPhase1EndToEnd:
     """End-to-end tests for Phase 1 implementation."""
 
     @pytest.mark.asyncio
-    async def test_complete_phase1_workflow(self):
+    async def test_complete_phase1_workflow(self, isolated_db):
         """Test the complete Phase 1 workflow end-to-end."""
 
-        # Initialize database
-        await initialize_database()
+        # Use isolated test database instead of production database
+        from tests.fixtures.database import patch_database_for_test
 
-        # Mock agent context
-        mock_context = MockContext("test_session", "test_agent")
+        with patch_database_for_test(isolated_db):
+            # Mock agent context
+            mock_context = MockContext("test_session", "test_agent")
 
-        # Step 1: Create a session
-        session_result = await call_fastmcp_tool(
-            create_session,
-            mock_context,
-            purpose="Phase 1 end-to-end test",
-            metadata={"test": True, "phase": 1},
-        )
+            # Step 1: Create a session
+            session_result = await call_fastmcp_tool(
+                create_session,
+                mock_context,
+                purpose="Phase 1 end-to-end test",
+                metadata={"test": True, "phase": 1},
+            )
 
-        print(f"Session result: {session_result}")
-        assert session_result["success"] is True
-        assert "session_id" in session_result
-        assert session_result["created_by"] == "test_agent"
+            print(f"Session result: {session_result}")
+            assert session_result["success"] is True
+            assert "session_id" in session_result
+            assert session_result["created_by"] == "test_agent"
 
-        session_id = session_result["session_id"]
+            session_id = session_result["session_id"]
 
-        # Step 2: Add a public message
-        public_message = await call_fastmcp_tool(
-            add_message,
-            mock_context,
-            session_id=session_id,
-            content="This is a public test message",
-            visibility="public",
-            metadata={"message_type": "test"},
-        )
+            # Step 2: Add a public message
+            public_message = await call_fastmcp_tool(
+                add_message,
+                mock_context,
+                session_id=session_id,
+                content="This is a public test message",
+                visibility="public",
+                metadata={"message_type": "test"},
+            )
 
-        print(f"Public message result: {public_message}")
-        assert public_message["success"] is True
-        assert "message_id" in public_message
+            print(f"Public message result: {public_message}")
+            assert public_message["success"] is True
+            assert "message_id" in public_message
 
-        # Step 3: Add a private message
-        private_message = await call_fastmcp_tool(
-            add_message,
-            mock_context,
-            session_id=session_id,
-            content="This is a private test message",
-            visibility="private",
-            metadata={"confidential": True},
-        )
+            # Step 3: Add a private message
+            private_message = await call_fastmcp_tool(
+                add_message,
+                mock_context,
+                session_id=session_id,
+                content="This is a private test message",
+                visibility="private",
+                metadata={"confidential": True},
+            )
 
-        print(f"Private message result: {private_message}")
-        assert private_message["success"] is True
+            print(f"Private message result: {private_message}")
+            assert private_message["success"] is True
 
-        # Step 4: Retrieve session information
-        session_info = await call_fastmcp_tool(
-            get_session, mock_context, session_id=session_id
-        )
+            # Step 4: Retrieve session information
+            session_info = await call_fastmcp_tool(
+                get_session, mock_context, session_id=session_id
+            )
 
-        print(f"Session info: {session_info}")
-        assert session_info["success"] is True
-        assert session_info["session"]["id"] == session_id
-        assert session_info["session"]["purpose"] == "Phase 1 end-to-end test"
-        assert (
-            len(session_info["messages"]) == 2
-        )  # Should see both messages (same agent)
+            print(f"Session info: {session_info}")
+            assert session_info["success"] is True
+            assert session_info["session"]["id"] == session_id
+            assert session_info["session"]["purpose"] == "Phase 1 end-to-end test"
+            assert (
+                len(session_info["messages"]) == 2
+            )  # Should see both messages (same agent)
 
-        # Step 5: Retrieve messages with pagination
-        messages_result = await call_fastmcp_tool(
-            get_messages, mock_context, session_id=session_id, limit=10, offset=0
-        )
+            # Step 5: Retrieve messages with pagination
+            messages_result = await call_fastmcp_tool(
+                get_messages, mock_context, session_id=session_id, limit=10, offset=0
+            )
 
-        print(f"Messages result: {messages_result}")
-        assert messages_result["success"] is True
-        assert messages_result["count"] == 2
-        assert messages_result["has_more"] is False
+            print(f"Messages result: {messages_result}")
+            assert messages_result["success"] is True
+            assert messages_result["count"] == 2
+            assert messages_result["has_more"] is False
 
-        # Verify message content
-        message_contents = [msg["content"] for msg in messages_result["messages"]]
-        assert "This is a public test message" in message_contents
-        assert "This is a private test message" in message_contents
+            # Verify message content
+            message_contents = [msg["content"] for msg in messages_result["messages"]]
+            assert "This is a public test message" in message_contents
+            assert "This is a private test message" in message_contents
 
-        # Step 6: Test visibility filtering
-        public_only = await call_fastmcp_tool(
-            get_messages,
-            mock_context,
-            session_id=session_id,
-            visibility_filter="public",
-        )
+            # Step 6: Test visibility filtering
+            public_only = await call_fastmcp_tool(
+                get_messages,
+                mock_context,
+                session_id=session_id,
+                visibility_filter="public",
+            )
 
-        print(f"Public only result: {public_only}")
-        assert public_only["success"] is True
-        assert len(public_only["messages"]) == 1
-        assert public_only["messages"][0]["visibility"] == "public"
+            print(f"Public only result: {public_only}")
+            assert public_only["success"] is True
+            assert len(public_only["messages"]) == 1
+            assert public_only["messages"][0]["visibility"] == "public"
 
-        print("✅ Phase 1 end-to-end test completed successfully!")
+            print("✅ Phase 1 end-to-end test completed successfully!")
 
     @pytest.mark.asyncio
     async def test_error_scenarios(self):
@@ -173,66 +173,68 @@ class TestPhase1EndToEnd:
         print("✅ Error scenarios test completed successfully!")
 
     @pytest.mark.asyncio
-    async def test_multi_agent_visibility(self):
+    async def test_multi_agent_visibility(self, isolated_db):
         """Test message visibility between different agents."""
 
-        await initialize_database()
+        # Use isolated test database instead of production database
+        from tests.fixtures.database import patch_database_for_test
 
-        # Agent 1 creates session and messages
-        agent1_context = MockContext("visibility_session", "agent_alice")
+        with patch_database_for_test(isolated_db):
+            # Agent 1 creates session and messages
+            agent1_context = MockContext("visibility_session", "agent_alice")
 
-        session_result = await call_fastmcp_tool(
-            create_session, agent1_context, purpose="Multi-agent visibility test"
-        )
-        session_id = session_result["session_id"]
+            session_result = await call_fastmcp_tool(
+                create_session, agent1_context, purpose="Multi-agent visibility test"
+            )
+            session_id = session_result["session_id"]
 
-        # Alice adds public and private messages
-        await call_fastmcp_tool(
-            add_message,
-            agent1_context,
-            session_id=session_id,
-            content="Alice public message",
-            visibility="public",
-        )
+            # Alice adds public and private messages
+            await call_fastmcp_tool(
+                add_message,
+                agent1_context,
+                session_id=session_id,
+                content="Alice public message",
+                visibility="public",
+            )
 
-        await call_fastmcp_tool(
-            add_message,
-            agent1_context,
-            session_id=session_id,
-            content="Alice private message",
-            visibility="private",
-        )
+            await call_fastmcp_tool(
+                add_message,
+                agent1_context,
+                session_id=session_id,
+                content="Alice private message",
+                visibility="private",
+            )
 
-        # Agent 2 tries to access messages
-        agent2_context = MockContext("visibility_session", "agent_bob")
+            # Agent 2 tries to access messages
+            agent2_context = MockContext("visibility_session", "agent_bob")
 
-        messages_result = await call_fastmcp_tool(
-            get_messages, agent2_context, session_id=session_id
-        )
+            messages_result = await call_fastmcp_tool(
+                get_messages, agent2_context, session_id=session_id
+            )
 
-        # Bob should only see Alice's public message
-        assert messages_result["success"] is True
-        assert len(messages_result["messages"]) == 1
-        assert messages_result["messages"][0]["content"] == "Alice public message"
-        assert messages_result["messages"][0]["visibility"] == "public"
+            # Bob should only see Alice's public message
+            assert messages_result["success"] is True
+            assert len(messages_result["messages"]) == 1
+            assert messages_result["messages"][0]["content"] == "Alice public message"
+            assert messages_result["messages"][0]["visibility"] == "public"
 
-        # Verify Bob cannot see Alice's private message
-        message_contents = [msg["content"] for msg in messages_result["messages"]]
-        assert "Alice private message" not in message_contents
+            # Verify Bob cannot see Alice's private message
+            message_contents = [msg["content"] for msg in messages_result["messages"]]
+            assert "Alice private message" not in message_contents
 
-        # Agent 1 should see both messages
-        alice_view = await call_fastmcp_tool(
-            get_messages, agent1_context, session_id=session_id
-        )
+            # Agent 1 should see both messages
+            alice_view = await call_fastmcp_tool(
+                get_messages, agent1_context, session_id=session_id
+            )
 
-        assert alice_view["success"] is True
-        assert len(alice_view["messages"]) == 2
+            assert alice_view["success"] is True
+            assert len(alice_view["messages"]) == 2
 
-        alice_contents = [msg["content"] for msg in alice_view["messages"]]
-        assert "Alice public message" in alice_contents
-        assert "Alice private message" in alice_contents
+            alice_contents = [msg["content"] for msg in alice_view["messages"]]
+            assert "Alice public message" in alice_contents
+            assert "Alice private message" in alice_contents
 
-        print("✅ Multi-agent visibility test completed successfully!")
+            print("✅ Multi-agent visibility test completed successfully!")
 
     def test_server_configuration(self):
         """Test server configuration and setup."""

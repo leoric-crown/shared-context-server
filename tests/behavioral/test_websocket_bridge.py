@@ -56,6 +56,7 @@ class TestWebSocketBridgeSimplified:
             mock_broadcast.assert_called_once_with("test-session-123", test_message)
 
     @pytest.mark.asyncio
+    @pytest.mark.no_websocket_mock
     async def test_http_notification_function(self, test_agent):
         """Test the HTTP notification function directly."""
         test_message_data = {
@@ -68,6 +69,9 @@ class TestWebSocketBridgeSimplified:
             },
         }
 
+        # Import the original function to test it directly (bypassing global mock)
+        from shared_context_server.server import _notify_websocket_server
+
         # Mock httpx client
         with patch(
             "shared_context_server.server.httpx.AsyncClient"
@@ -78,10 +82,8 @@ class TestWebSocketBridgeSimplified:
             mock_client.post.return_value = mock_response
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Call the notification function
-            await server._notify_websocket_server(
-                "test-session-http", test_message_data
-            )
+            # Call the notification function directly (bypassing global mock)
+            await _notify_websocket_server("test-session-http", test_message_data)
 
             # Verify HTTP client was used correctly
             mock_client.post.assert_called_once()
