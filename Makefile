@@ -33,7 +33,7 @@ test: ## Run tests with coverage
 test-quick: ## Run tests without coverage (faster)
 	@echo "⚡ Running tests without coverage tracking..."
 	@start=$$(date +%s); \
-	if uv run pytest -n 0 -x --tb=short; then \
+	if uv run pytest -x --tb=short; then \
 		end=$$(date +%s); \
 		duration=$$((end - start)); \
 		echo "✅ Quick tests completed ($${duration}s)"; \
@@ -63,11 +63,11 @@ test-backend: ## Test both database backends
 	@start=$$(date +%s); \
 	aio_status="❌"; sql_status="❌"; \
 	echo "  → Testing aiosqlite backend..."; \
-	if USE_SQLALCHEMY=false uv run pytest -n 0 -q --maxfail=3; then \
+	if USE_SQLALCHEMY=false uv run pytest -q --maxfail=3; then \
 		aio_status="✅"; \
 	fi; \
 	echo "  → Testing SQLAlchemy backend..."; \
-	if USE_SQLALCHEMY=true uv run pytest -n 0 -q --maxfail=3; then \
+	if USE_SQLALCHEMY=true uv run pytest -q --maxfail=3; then \
 		sql_status="✅"; \
 	fi; \
 	end=$$(date +%s); \
