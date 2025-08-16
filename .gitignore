@@ -1,6 +1,7 @@
 .kiro/
 .DS_Store
 .playwright-mcp
+postgresql
 
 # Python
 __pycache__/

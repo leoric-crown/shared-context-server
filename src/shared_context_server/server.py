@@ -334,11 +334,16 @@ async def dashboard(request: Request) -> HTMLResponse:
             if hasattr(conn, "row_factory"):
                 conn.row_factory = aiosqlite.Row
 
-            # Get active sessions with message counts
+            # Get active sessions with message counts and memory counts
             cursor = await conn.execute("""
-                SELECT s.*, COUNT(m.id) as message_count, MAX(m.timestamp) as last_activity
+                SELECT s.*,
+                       COUNT(DISTINCT m.id) as message_count,
+                       COUNT(DISTINCT am.id) as memory_count,
+                       MAX(m.timestamp) as last_activity
                 FROM sessions s
                 LEFT JOIN messages m ON s.id = m.session_id
+                LEFT JOIN agent_memory am ON s.id = am.session_id
+                    AND (am.expires_at IS NULL OR am.expires_at > datetime('now'))
                 WHERE s.is_active = 1
                 GROUP BY s.id
                 ORDER BY last_activity DESC, s.created_at DESC
