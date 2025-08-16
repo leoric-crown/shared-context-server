@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 
 # Copy only package configuration files first (for better caching)
-COPY pyproject.toml README.md LICENSE database.sql ./
+COPY pyproject.toml README.md LICENSE database_*.sql ./
 COPY src/ ./src/
 
 # Install build tools and create wheel
@@ -69,15 +69,15 @@ USER appuser
 VOLUME ["/app/data"]
 
 # Configure container
-EXPOSE 23456
+EXPOSE 23456 34567
 
-# Health check
+# Health check - verify both HTTP and WebSocket servers
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:23456/health || exit 1
+    CMD curl -f http://localhost:23456/health && curl -f http://localhost:34567/health || exit 1
 
 # Default environment variables (can be overridden)
 ENV DATABASE_PATH=/app/data/chat_history.db \
     LOG_LEVEL=INFO
 
-# Default command - HTTP transport for multi-client access
+# Default command - HTTP transport with WebSocket support
 CMD ["shared-context-server", "--transport", "http", "--host", "0.0.0.0", "--port", "23456"]

@@ -320,15 +320,27 @@ else:
 async def start_websocket_server(host: str = "127.0.0.1", port: int = 8080):
     """Start the WebSocket server."""
     logger.info(f"Starting WebSocket server on {host}:{port}")
-    config = uvicorn.Config(
-        app=websocket_app,
-        host=host,
-        port=port,
-        log_level="info",
-        access_log=False,  # Reduce log noise
-    )
-    server = uvicorn.Server(config)
-    await server.serve()
+    try:
+        config = uvicorn.Config(
+            app=websocket_app,
+            host=host,
+            port=port,
+            log_level="info",
+            access_log=False,  # Reduce log noise
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
+    except OSError as e:
+        if e.errno == 48:  # Address already in use
+            logger.exception(
+                f"Port {port} is already in use. Please check for other services using this port."
+            )
+        else:
+            logger.exception(f"Failed to bind to {host}:{port}")
+        raise
+    except Exception:
+        logger.exception("WebSocket server failed to start")
+        raise
 
 
 def run_websocket_server(host: str = "127.0.0.1", port: int = 8080):

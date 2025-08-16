@@ -1,12 +1,9 @@
-# Shared Context MCP Server - Docker Compose Configuration
-# Provides easy multi-client setup with persistent database storage
+# Shared Context MCP Server - Development Configuration
+# Provides development environment with hot reload and shared database
 
 services:
   shared-context-server:
-    # Option 1: Use pre-built image from GitHub Container Registry (recommended)
-    # image: ghcr.io/leoric-crown/shared-context-server:latest
-
-    # Option 2: Build locally from source (development)
+    # Build locally from source for development
     build:
       context: .
       dockerfile: Dockerfile
@@ -16,11 +13,15 @@ services:
       - "${HTTP_PORT:-23456}:23456"
       - "${WEBSOCKET_PORT:-34567}:${WEBSOCKET_PORT:-34567}"
     volumes:
-      - shared-context-data:/app/data
+      # Development: Share database with host for easy access
+      - ./:/app/host
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      # Logs
       - shared-context-logs:/app/logs
     environment:
-      # Database configuration
-      - DATABASE_PATH=/app/data/chat_history.db
+      # Database configuration - shared with host
+      - DATABASE_PATH=/app/host/chat_history.db
 
       # Security configuration
       - API_KEY=${API_KEY:-dev-key-please-change}
@@ -29,7 +30,8 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
 
       # Server configuration
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MCP_TRANSPORT=http
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - HTTP_PORT=23456
       - HTTP_HOST=0.0.0.0
       - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
@@ -39,35 +41,36 @@ services:
       - WEBSOCKET_HOST=0.0.0.0
       - WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
 
-      # Environment configuration
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - DEBUG=${DEBUG:-false}
+      # Development environment
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - PYTHONPATH=/app/src
+
+    # Use development server with hot reload
+    command: ["python", "-m", "shared_context_server.scripts.dev"]
 
     healthcheck:
       test: ["CMD", "sh", "-c", "curl -f http://localhost:23456/health && curl -f http://localhost:34567/health"]
-      interval: 300s
+      interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
-    # Resource limits (adjust as needed)
+    # Resource limits (generous for development)
     deploy:
       resources:
         limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
 
 volumes:
-  # Persistent storage for database
-  shared-context-data:
-    driver: local
-
   # Optional: Persistent storage for logs
   shared-context-logs:
     driver: local
 
 # Networks (using default bridge network for simplicity)
 # All MCP clients connect to http://localhost:23456/mcp/
+# Hot reload enabled - server restarts on file changes

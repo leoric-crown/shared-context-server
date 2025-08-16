@@ -10,6 +10,7 @@ management for system deployment.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
@@ -86,7 +87,7 @@ class ProductionServer:
             sys.exit(1)
 
     async def start_http_server(self, host: str, port: int) -> None:
-        """Start server with HTTP transport."""
+        """Start server with HTTP transport and WebSocket server."""
         logger.info(f"Starting Shared Context MCP Server (HTTP) on {host}:{port}")
 
         if not SERVER_AVAILABLE:
@@ -97,14 +98,51 @@ class ProductionServer:
             # Initialize server components
             await initialize_server()
 
+            # Import config after server initialization
+            from ..config import get_config
+
+            config = get_config()
+
+            # Start WebSocket server if enabled
+            websocket_task = None
+            if config.mcp_server.websocket_enabled:
+                ws_host = config.mcp_server.websocket_host
+                ws_port = config.mcp_server.websocket_port
+                logger.info(f"Starting WebSocket server on ws://{ws_host}:{ws_port}")
+
+                try:
+                    from ..websocket_server import start_websocket_server
+
+                    websocket_task = asyncio.create_task(
+                        start_websocket_server(host=ws_host, port=ws_port)
+                    )
+                except ImportError:
+                    logger.warning("WebSocket server dependencies not available")
+                except Exception:
+                    logger.exception("Failed to start WebSocket server")
+            else:
+                logger.info(
+                    "WebSocket server disabled via config (WEBSOCKET_ENABLED=false)"
+                )
+
             # Use FastMCP's native Streamable HTTP transport
             # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
             # Configure uvicorn to use the modern websockets Sans-I/O implementation
             # to avoid deprecation warnings from the legacy websockets API
             uvicorn_config = {"ws": "websockets-sansio"}
-            await server.run_http_async(
-                host=host, port=port, uvicorn_config=uvicorn_config
-            )
+
+            # Run HTTP server (this will block)
+            try:
+                await server.run_http_async(
+                    host=host, port=port, uvicorn_config=uvicorn_config
+                )
+            finally:
+                # Clean up WebSocket server if it was started
+                if websocket_task and not websocket_task.done():
+                    logger.info("Stopping WebSocket server...")
+                    websocket_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await websocket_task
 
         except ImportError:
             logger.exception(

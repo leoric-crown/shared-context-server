@@ -325,6 +325,10 @@ async def dashboard(request: Request) -> HTMLResponse:
     Main dashboard displaying active sessions with real-time updates.
     """
     try:
+        from .config import get_config
+
+        config = get_config()
+
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
@@ -346,7 +350,12 @@ async def dashboard(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "dashboard.html",
-            {"request": request, "sessions": sessions, "total_sessions": len(sessions)},
+            {
+                "request": request,
+                "sessions": sessions,
+                "total_sessions": len(sessions),
+                "websocket_port": config.mcp_server.websocket_port,
+            },
         )
 
     except Exception as e:
@@ -375,6 +384,10 @@ async def session_view(request: Request) -> HTMLResponse:
     session_id = request.path_params["session_id"]
 
     try:
+        from .config import get_config
+
+        config = get_config()
+
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
@@ -413,6 +426,7 @@ async def session_view(request: Request) -> HTMLResponse:
                 "session": dict(session),
                 "messages": messages,
                 "session_id": session_id,
+                "websocket_port": config.mcp_server.websocket_port,
             },
         )
 
@@ -423,6 +437,23 @@ async def session_view(request: Request) -> HTMLResponse:
             f"<html><body><h1>Session View Error</h1><p>Type: {type(e).__name__}</p><p>Error: {e}</p></body></html>",
             status_code=500,
         )
+
+
+@mcp.custom_route("/ui/config", methods=["GET"])
+async def ui_config(_request: Request) -> JSONResponse:
+    """
+    Frontend configuration endpoint for WebSocket port and other settings.
+    """
+    from .config import get_config
+
+    config = get_config()
+
+    return JSONResponse(
+        {
+            "websocket_port": config.mcp_server.websocket_port,
+            "websocket_host": config.mcp_server.websocket_host,
+        }
+    )
 
 
 async def websocket_endpoint(websocket: WebSocket) -> None:

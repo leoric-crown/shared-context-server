@@ -110,7 +110,7 @@ const maxReconnectAttempts = 5;
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.hostname;
-    const wsPort = '8081'; // WebSocket server port (separate from HTTP server)
+    const wsPort = '{{ websocket_port }}'; // WebSocket server port from config
     const wsUrl = `${protocol}//${wsHost}:${wsPort}/ws/{{ session_id }}`;
 
     console.log(`Connecting to WebSocket: ${wsUrl}`);

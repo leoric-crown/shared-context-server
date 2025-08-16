@@ -8,25 +8,35 @@ services:
       dockerfile: Dockerfile
       target: runtime
 
+    # Use development server with hot reload
+    command: ["python", "-m", "shared_context_server.scripts.dev"]
+
     # Development environment variables
     environment:
+      - MCP_TRANSPORT=http
       - DEBUG=true
       - LOG_LEVEL=DEBUG
       - ENVIRONMENT=development
       - DEV_RESET_DATABASE_ON_START=false
       - ENABLE_PERFORMANCE_MONITORING=true
+      - PYTHONPATH=/app/src
       - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
-    # Mount source code for development (optional hot reload)
+      # WebSocket configuration for development
+      - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
+      - WEBSOCKET_HOST=0.0.0.0
+      - WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
+
+    # Mount source code for development (hot reload)
     volumes:
       - shared-context-data:/app/data
       - shared-context-logs:/app/logs
-      # Uncomment for development with code changes:
-      # - ./src:/app/src:ro
+      # Source code mounting for hot reload
+      - ./src:/app/src:ro
 
     # Development health check (more frequent)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:23456/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:23456/health && curl -f http://localhost:34567/health"]
       interval: 300s
       timeout: 10s
       retries: 3

@@ -1,5 +1,5 @@
 .kiro/
-PHASE_4*.md
+.DS_Store
 
 # Python
 __pycache__/

@@ -1,274 +1,126 @@
-# Docker Multi-Client Setup Guide
+# Docker Setup Guide
 
-Run the Shared Context MCP Server as a persistent Docker container that multiple MCP clients can connect to simultaneously.
+## Quick Start
 
-## Quick Start (30 seconds)
-
+**Default (Production-like):**
 ```bash
-# 1. Clone and enter directory
-git clone <repository-url>
-cd shared-context-server
-
-# 2. Generate secure keys
+git clone <repository-url> && cd shared-context-server
 echo "API_KEY=$(openssl rand -base64 32)" > .env
-echo "JWT_SECRET_KEY=$(openssl rand -base64 32)" >> .env
-echo "JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> .env
-
-# 3. Start the server
 docker compose up -d
-
-# 4. Configure any MCP client (example with Claude)
 docker exec shared-context-server shared-context-server client-config claude
-
-# Output: claude mcp add shared-context-server "mcp-proxy --transport=streamablehttp http://localhost:23456/mcp/"
 ```
 
-## Server Management
-
-### Start/Stop/Restart
+**Development (Hot Reload):**
 ```bash
-# Start server
-docker compose up -d
-
-# Stop server
-docker compose down
-
-# Restart server
-docker compose restart
-
-# View logs
-docker compose logs -f
-
-# Check status
-docker exec shared-context-server shared-context-server status
+git clone <repository-url> && cd shared-context-server
+echo "API_KEY=$(openssl rand -base64 32)" > .env
+make docker
 ```
 
-### Health Monitoring
+## Commands
+
 ```bash
-# Check if server is running
-curl http://localhost:23456/health
+# Default setup
+docker compose up -d                    # Start
+docker compose down                     # Stop
+docker compose logs -f                  # View logs
 
-# View server status
+# Development setup
+make docker                            # Start with hot reload
+docker compose -f docker-compose.dev.yml down  # Stop
+
+# Health checks
+curl http://localhost:23456/health      # HTTP server
+curl http://localhost:34567/health      # WebSocket server
 docker exec shared-context-server shared-context-server status
-
-# Monitor container health
-docker ps | grep shared-context-server
 ```
 
 ## Client Configuration
 
-### Supported MCP Clients
-
-Get configuration for your MCP client:
-
 ```bash
-# Claude Code/Desktop
+# Get client-specific config
 docker exec shared-context-server shared-context-server client-config claude
-
-# Cursor
 docker exec shared-context-server shared-context-server client-config cursor
 
-# Windsurf
-docker exec shared-context-server shared-context-server client-config windsurf
-
-# VS Code
-docker exec shared-context-server shared-context-server client-config vscode
-
-# Generic client
-docker exec shared-context-server shared-context-server client-config generic
+# Manual setup
+# MCP: http://localhost:23456/mcp/
+# WebSocket: ws://localhost:34567
+# Command: mcp-proxy --transport=streamablehttp http://localhost:23456/mcp/
 ```
-
-### Manual Configuration
-
-All clients connect to the same endpoint:
-- **Server URL**: `http://localhost:23456/mcp/`
-- **Command**: `mcp-proxy --transport=streamablehttp http://localhost:23456/mcp/`
 
 ## Configuration
 
-### Environment Variables
-
-Copy and customize the environment file:
+**Required:**
 ```bash
-cp .env.docker .env
-```
-
-Essential variables:
-```bash
-# Security (REQUIRED)
 API_KEY=your-secure-32-character-key
+```
 
-# Server settings
+**Optional:**
+```bash
 HTTP_PORT=23456
+WEBSOCKET_PORT=34567
 LOG_LEVEL=INFO
-ENVIRONMENT=production
-
-# Resource limits
 MAX_SESSIONS_PER_AGENT=100
-MAX_MESSAGES_PER_SESSION=10000
 ```
 
-### Production Configuration
+**Setup Comparison:**
+- **Default**: Isolated storage, production-ready, `docker compose up -d`
+- **Development**: Hot reload, shared database, source mounting, `make docker`
 
-For production, use the production compose file:
+## Data Backup
+
+**Default (Docker volumes):**
 ```bash
-# Production deployment
-docker compose -f docker-compose.prod.yml up -d
+docker run --rm -v shared-context-server_shared-context-data:/data \
+  -v $(pwd):/backup alpine tar czf /backup/db-backup.tar.gz -C /data .
 ```
 
-Key production differences:
-- Uses published Docker images
-- Enhanced security settings
-- Resource limits and health checks
-- Structured logging
-- Automatic restarts
-
-## Data Persistence
-
-Database and logs persist in Docker volumes:
-
+**Development (Shared file):**
 ```bash
-# View volumes
-docker volume ls | grep shared-context
-
-# Backup database
-docker run --rm -v shared-context-server_shared-context-data:/data \
-  -v $(pwd):/backup alpine \
-  tar czf /backup/database-backup.tar.gz -C /data .
-
-# Restore database
-docker run --rm -v shared-context-server_shared-context-data:/data \
-  -v $(pwd):/backup alpine \
-  tar xzf /backup/database-backup.tar.gz -C /data
+cp chat_history.db chat_history.db.backup
 ```
-
-## Multi-Platform Support
-
-The Docker image supports multiple architectures:
-- **linux/amd64** - Intel/AMD 64-bit (most servers, Intel Macs)
-- **linux/arm64** - ARM 64-bit (Apple Silicon Macs, ARM servers)
-
-Docker automatically selects the correct architecture.
 
 ## Development
 
-### Hot Reload Development
 ```bash
-# Start with development overrides
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+# Hot reload development
+make docker
 
-# Enable debug logging
-echo "LOG_LEVEL=DEBUG" >> .env
-docker compose restart
-```
-
-### Building Locally
-```bash
-# Build image locally
+# Build locally
 docker compose build
+docker compose -f docker-compose.dev.yml build
 
-# Build with no cache
-docker compose build --no-cache
-
-# Build specific architecture
-docker buildx build --platform linux/amd64 -t shared-context-server:local .
+# Multi-architecture build
+docker buildx build --platform linux/amd64,linux/arm64 .
 ```
 
 ## Troubleshooting
 
-### Server Won't Start
 ```bash
 # Check logs
 docker compose logs shared-context-server
 
-# Common issues:
-# - Port 23456 already in use: Change HTTP_PORT in .env
-# - Invalid API_KEY: Set secure key in .env
-# - Permission issues: Check Docker volume permissions
-```
+# Common fixes:
+# - Port conflicts: Change HTTP_PORT/WEBSOCKET_PORT in .env
+# - Invalid API_KEY: Generate secure key
+# - Reset database: docker volume rm shared-context-server_shared-context-data
+# - Resource issues: docker stats shared-context-server
 
-### Client Connection Issues
-```bash
-# Verify server is accessible
+# Health checks
 curl http://localhost:23456/health
-
-# Check if MCP endpoint is available
+curl http://localhost:34567/health
 curl http://localhost:23456/mcp/
-
-# Common issues:
-# - Firewall blocking port 23456
-# - Wrong host/port in client configuration
-# - Server not running (docker compose ps)
 ```
 
-### Database Issues
+## Advanced
+
 ```bash
-# Reset database (⚠️ deletes all data)
-docker compose down
-docker volume rm shared-context-server_shared-context-data
-docker compose up -d
+# Multiple instances (different ports)
+HTTP_PORT=23457 WEBSOCKET_PORT=34568 docker compose up -d
 
-# Check database file permissions
-docker exec shared-context-server ls -la /app/data/
+# Container-to-container access
+# MCP: http://shared-context-server:23456/mcp/
+# WebSocket: ws://shared-context-server:34567
+
+# Security: Generate secure API_KEY, use HTTPS proxy in production
 ```
-
-### Performance Issues
-```bash
-# Monitor resource usage
-docker stats shared-context-server
-
-# Increase resource limits in docker-compose.yml:
-# deploy:
-#   resources:
-#     limits:
-#       memory: 1G
-#       cpus: '1.0'
-```
-
-## Security
-
-### Production Security Checklist
-- [ ] Generate secure API_KEY (≥32 characters)
-- [ ] Set ENVIRONMENT=production
-- [ ] Use docker-compose.prod.yml
-- [ ] Restrict network access if needed
-- [ ] Regular security updates
-- [ ] Monitor logs for suspicious activity
-
-### Network Security
-```bash
-# Bind to localhost only (default)
-HTTP_HOST=localhost
-
-# Allow network access (⚠️ security risk)
-HTTP_HOST=0.0.0.0
-
-# Use reverse proxy for HTTPS in production
-```
-
-## Advanced Usage
-
-### Multiple Instances
-```bash
-# Default instance runs on port 23456
-# For a second instance, use a different port:
-HTTP_PORT=23457 docker compose up -d
-
-# Configure clients for the second instance
-docker exec shared-context-server shared-context-server client-config claude --port 23457
-```
-
-### Container-to-Container Communication
-```bash
-# Access from another container in same network
-# Use service name: http://shared-context-server:23456/mcp/
-```
-
-### Custom Image
-```bash
-# Build custom image with modifications
-FROM ghcr.io/shared-context-server/server:latest
-# Add custom configuration or tools
-```
-
-This Docker setup provides a robust, production-ready multi-client MCP server with minimal configuration required.

@@ -287,24 +287,33 @@ function registerServiceWorker() {
 // REAL-TIME WEBSOCKET FUNCTIONALITY
 // ============================================================================
 
-function initializeWebSocket() {
+async function initializeWebSocket() {
     // Only initialize WebSocket on session pages
     const sessionMatch = window.location.pathname.match(/\/ui\/sessions\/(.+)$/);
     if (!sessionMatch) return;
 
     const sessionId = sessionMatch[1];
-    connectWebSocket(sessionId);
+    await connectWebSocket(sessionId);
 }
 
-function connectWebSocket(sessionId) {
+async function connectWebSocket(sessionId) {
     if (websocketConnection && websocketConnection.readyState === WebSocket.OPEN) {
         return; // Already connected
     }
 
-    // Connect to WebSocket server on port 8080
+    // Fetch WebSocket configuration from backend
+    let wsPort = '34567'; // Default fallback (matches .env)
+    try {
+        const configResponse = await fetch('/ui/config');
+        const config = await configResponse.json();
+        wsPort = config.websocket_port.toString();
+    } catch (error) {
+        console.warn('Failed to fetch WebSocket config, using default port:', error);
+    }
+
+    // Connect to WebSocket server
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.hostname;
-    const wsPort = '8081'; // WebSocket server port
     const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/${sessionId}`;
 
     console.log(`Connecting to WebSocket: ${wsUrl}`);

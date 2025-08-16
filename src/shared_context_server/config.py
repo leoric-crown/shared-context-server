@@ -176,7 +176,7 @@ class MCPServerConfig(BaseSettings):
         default="127.0.0.1", json_schema_extra={"env": "WEBSOCKET_HOST"}
     )
     websocket_port: int = Field(
-        default=8080, json_schema_extra={"env": "WEBSOCKET_PORT"}
+        default=34567, json_schema_extra={"env": "WEBSOCKET_PORT"}
     )
 
     @field_validator("http_port")

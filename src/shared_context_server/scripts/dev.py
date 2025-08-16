@@ -93,7 +93,6 @@ class DevelopmentServer:
         self.running = False
         self.enable_websocket = enable_websocket
         self._shutdown_event = asyncio.Event()
-        self._websocket_task: asyncio.Task[None] | None = None
 
     async def setup(self) -> None:
         """Setup the development environment."""
@@ -124,21 +123,6 @@ class DevelopmentServer:
             logger.exception("Development setup failed")
             raise
 
-    async def _start_websocket_server(self) -> None:
-        """Start the WebSocket server."""
-        try:
-            from ..websocket_server import start_websocket_server
-
-            assert self.config is not None, "Configuration not initialized"
-            host = self.config.mcp_server.websocket_host
-            port = self.config.mcp_server.websocket_port
-
-            logger.info(f"Starting WebSocket server on ws://{host}:{port}")
-            await start_websocket_server(host=host, port=port)
-        except Exception:
-            logger.exception("WebSocket server failed")
-            raise
-
     async def run(self) -> None:
         """Run the development server."""
         logger.info("Starting Shared Context MCP Development Server...")
@@ -164,28 +148,18 @@ class DevelopmentServer:
             else:
                 logger.info("MCP server running on stdio transport")
 
-            # Start WebSocket server if enabled (both CLI flag and config setting)
-            websocket_enabled = (
-                self.enable_websocket and self.config.mcp_server.websocket_enabled
-            )
-            if websocket_enabled:
+            # WebSocket server is now handled by the production CLI
+            # Development server focuses on hot reload and development features
+            if self.config.mcp_server.websocket_enabled:
                 host = self.config.mcp_server.websocket_host
                 port = self.config.mcp_server.websocket_port
                 logger.info(
-                    f"WebSocket server enabled - starting on ws://{host}:{port}"
-                )
-                self._websocket_task = asyncio.create_task(
-                    self._start_websocket_server()
+                    f"WebSocket server will be started by production CLI on ws://{host}:{port}"
                 )
             else:
-                if not self.enable_websocket:
-                    logger.info(
-                        "WebSocket server disabled via CLI flag (--no-websocket)"
-                    )
-                elif not self.config.mcp_server.websocket_enabled:
-                    logger.info(
-                        "WebSocket server disabled via config (WEBSOCKET_ENABLED=false)"
-                    )
+                logger.info(
+                    "WebSocket server disabled via config (WEBSOCKET_ENABLED=false)"
+                )
 
             # Start the actual FastMCP server with hot reload
             if self.config.mcp_server.mcp_transport == "http":
@@ -426,14 +400,7 @@ class DevelopmentServer:
         self.running = False
 
         try:
-            # Shutdown WebSocket server if running
-            if self._websocket_task and not self._websocket_task.done():
-                logger.info("Shutting down WebSocket server...")
-                self._websocket_task.cancel()
-                try:
-                    await self._websocket_task
-                except asyncio.CancelledError:
-                    logger.info("WebSocket server shutdown complete")
+            # WebSocket server is managed by production CLI, not dev server
 
             if SERVER_AVAILABLE:
                 await shutdown_server()
