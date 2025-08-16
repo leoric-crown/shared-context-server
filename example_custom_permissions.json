@@ -1,0 +1,34 @@
+{
+  "description": "Custom agent permissions configuration example",
+  "version": "1.0.0",
+  "config": {
+    "available_permissions": [
+      "read",
+      "write",
+      "admin",
+      "debug",
+      "analyze"
+    ],
+    "default_permissions": [
+      "read"
+    ],
+    "agent_types": {
+      "data_scientist": {
+        "permissions": ["read", "write", "analyze"],
+        "description": "Data science agent with analysis capabilities"
+      },
+      "support_agent": {
+        "permissions": ["read"],
+        "description": "Customer support agent with read-only access"
+      },
+      "admin": {
+        "permissions": ["read", "write", "admin", "debug", "analyze"],
+        "description": "Administrator with full system access"
+      },
+      "researcher": {
+        "permissions": ["read", "analyze"],
+        "description": "Research agent with read and analysis permissions"
+      }
+    }
+  }
+}

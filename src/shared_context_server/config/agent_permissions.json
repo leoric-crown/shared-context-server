@@ -1,0 +1,50 @@
+{
+  "$schema": "agent_permissions_schema.json",
+  "description": "Agent type permissions configuration for the Shared Context Server",
+  "version": "1.0.0",
+  "config": {
+    "available_permissions": [
+      "read",
+      "write",
+      "admin",
+      "debug"
+    ],
+    "default_permissions": [
+      "read"
+    ],
+    "agent_types": {
+      "claude": {
+        "permissions": ["read", "write"],
+        "description": "Standard Claude agent with read/write access"
+      },
+      "gemini": {
+        "permissions": ["read", "write"],
+        "description": "Standard Gemini agent with read/write access"
+      },
+      "admin": {
+        "permissions": ["read", "write", "admin", "debug"],
+        "description": "Full administrative access with all permissions"
+      },
+      "system": {
+        "permissions": ["read", "write", "admin", "debug"],
+        "description": "System-level administrative access"
+      },
+      "test": {
+        "permissions": ["read", "write", "debug"],
+        "description": "Testing agent with debug capabilities"
+      },
+      "generic": {
+        "permissions": ["read"],
+        "description": "Read-only access for generic agents"
+      },
+      "readonly": {
+        "permissions": ["read"],
+        "description": "Explicitly read-only agent type"
+      },
+      "developer": {
+        "permissions": ["read", "write", "debug"],
+        "description": "Developer agent with debugging capabilities"
+      }
+    }
+  }
+}

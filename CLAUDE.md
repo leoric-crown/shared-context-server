@@ -2,248 +2,227 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The year is 2025.
+## Core Commands
 
-## Repository Overview
-
-This is the **Shared Context Server** project - a centralized memory store enabling multiple AI agents (Claude, Gemini, etc.) to collaborate on complex tasks through shared conversational context. The system implements a RESTful "Context as a Service" pattern following blackboard architecture principles.
-
-## Current Status & Roadmap
-
-**System Readiness**: 5% complete - Fresh repository with comprehensive planning documentation. Ready for MVP implementation phase.
-
-### ✅ Completed Infrastructure
-- **Planning Documentation**: Comprehensive MVP patterns and advanced research documentation
-- **Claude Framework**: Multi-agent coordination system with research-backed customizations
-- **Architecture Design**: RESTful API design with SQLite persistence and async patterns
-- **Research Foundation**: FastAPI best practices, multi-agent patterns, and blackboard architecture analysis
-
-### 🎯 Current Milestone: MVP Implementation
-- **Phase 1**: Core API endpoints (POST /sessions, POST /sessions/{id}/messages, GET /sessions/{id})
-- **Phase 2**: SQLite database schema and async operations with FastAPI + Pydantic validation
-- **Phase 3**: Agent integration patterns and basic authentication for multi-agent access
-
-### 📋 Future Milestones
-- **Production Scale**: PostgreSQL/Redis integration, tiered memory architecture, memory distillation
-- **Advanced Features**: Authentication/authorization (OAuth2), agent role-based access, procedural memory (skills library)
-
-## Context-Enriched Decision Making Protocol
-
-- **Executive Context Authority**: You will maintain decision-making authority based on comprehensive context across all agent interactions and research findings
-- **Research Context Building**: Proactively gather and organize research context (Crawl4AI, Octocode, SequentialThinking, etc.) to inform intelligent coordination decisions
-- **Cross-Agent Context Synthesis**: Integrate findings from agent status reports, research discoveries, and implementation progress to make informed coordination choices
-- **Context-Informed Coordination**: Use enriched context to make intelligent agent selection, workflow routing, and complexity assessment decisions
-- **Citation & Provenance Tracking**: All research includes source URLs, timestamps, and context provenance for transparency and decision justification
-- **Dynamic Context Updates**: Continuously enrich context based on agent findings, user feedback, and implementation discoveries to improve decision quality
-- **Intelligent Decision Making**: Use enriched context to make coordination decisions when possible, escalate to user when context is insufficient
-
-## Environment & Setup
-
-### Prerequisites & Key Dependencies
-- **Python 3.10+** with **uv** (ultra-fast Python package manager) for dependency management
-- **Core Libraries**:
-  - **FastMCP** (MCP server framework for tool definitions and async handlers)
-  - **aiosqlite** (async SQLite operations for non-blocking database access)
-  - **RapidFuzz** (high-performance fuzzy string matching for search)
-  - **Pydantic** (data validation and settings management using type hints)
-  - **httpx** (async HTTP client for agent integration testing)
-
-### Environment Variables
+### Development
 ```bash
-# Essential configuration for shared context server
-DATABASE_URL="sqlite:///./chat_history.db"  # SQLite database path
-API_KEY="your-secure-api-key"               # Authentication for agent access
-LOG_LEVEL="INFO"                            # Logging level (DEBUG, INFO, WARNING, ERROR)
-CORS_ORIGINS="*"                            # CORS origins for web clients
+make dev          # Start development server with hot reload (port 23456)
+make validate     # Validate development environment
 ```
 
-### Setup & Installation
+### Testing
 ```bash
-# Install uv (ultra-fast Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install all dependencies including development tools
-uv sync --all-extras
-
-# Run development server
-uv run python -m shared_context_server.scripts.dev
-
-# Run tests
-uv run pytest tests/ -v
-
-# Run quality checks
-uv run ruff check
-uv run mypy src/
-uv run pre-commit run --all-files
+make test         # Run tests with coverage (target: 84%+)
+make test-quick   # Run tests without coverage (faster)
+make test-backend # Test both database backends (aiosqlite & SQLAlchemy)
+make test-all     # Run comprehensive test matrix
 ```
 
-### Critical Requirements
-- **UTC Timestamps**: System uses UTC throughout for message timestamps and session coordination
-- **File Permissions**: Write access to current directory for SQLite database file creation
-- **Storage**: SQLite database stored in project root (`./chat_history.db`) with automatic schema initialization
-- **Runtime Support**: Python 3.10+ with async/await support for FastMCP and aiosqlite operations
-
-## Core Architecture
-
-### Data Organization
-- **Session-Based Structure**: Complete session isolation with unique session IDs eliminating cross-session interference
-- **Database Schema**: Single `chat_history` table with session_id, sender, content, timestamp fields for efficient querying
-- **Agent Integration**: Smart agent identification and message routing with automatic session management
-
-### Component & Service Systems
-- **Session Manager**: Full session lifecycle management with auto-cleanup and SQLite persistence for message history
-- **Smart Coordination**: HTTP request/response with async patterns, FastAPI automatic validation and error handling
-- **Multi-Agent Integration**: RESTful API endpoints supporting Claude, Gemini, and custom agents with bearer token authentication
-- **Database Operations**: Async SQLite operations with aiosqlite for non-blocking I/O and concurrent agent access
-
-### Data System & Types
-- **Message Format**: JSON entries with `sender`, `content`, `timestamp` fields, supports structured agent responses
-- **Flexible Structure**: session_id (required), sender (required), content (required), timestamp (auto-generated)
-- **Message Categories**: human_input (user messages), agent_response (AI responses), system_status (coordination), tool_output (function results)
-
-## Key API Endpoints
-
-Core RESTful endpoints for agent integration:
-- `POST /sessions` - Creates new session and returns session_id (required for all operations)
-- `POST /sessions/{id}/messages` - Adds message to session with sender and content validation
-- `GET /sessions/{id}` - Retrieves complete message history for session
-- `GET /sessions/{id}/messages?limit=N` - Retrieves recent N messages (pagination support)
-- `DELETE /sessions/{id}` - Cleanup session and associated messages (optional)
-- `GET /health` - Health check endpoint for monitoring
-- `GET /docs` - FastAPI automatic API documentation
-
-## Development Standards & Guidelines
-
-### Core Principles
-- **Component-Centric Design**: All functionality built around unified interactive components with persistent state
-- **Manual-First + Enhancement**: Core workflows work manually; automated assistance is optional and additive
-- **Data Preservation**: Zero-loss data using SQLite persistence with async operations
-- **Progressive Enhancement**: Build core functionality first, add advanced features incrementally
-- **Context-Enriched Executive Authority**: Main Claude maintains decision-making authority using comprehensive context across agent tasks and research findings to make intelligent coordination decisions
-
-### Quality Standards
-- **File Size Limit**: Maximum 500 lines per code file, 1000 lines per test file
-- **UTC Timestamps**: Always use `datetime.now(timezone.utc)` for system operations
-- **Testing**: pytest unit tests required for all new code, behavioral tests for integration
-- **📸 Screenshot Requirements**: Screenshot capture recommended for UI changes with before/after visual validation
-- **Code Quality**: `ruff check` and `mypy` must pass before commits
-- **Component Integration**: Always integrate with Session Manager for state persistence
-- **Service Infrastructure**: Use existing FastMCP server and FastAPI patterns
-
-### Implementation Standards
-- **Follow PRP specifications exactly** - match detailed specifications in `PRPs/` directory
-- **Leverage existing infrastructure** - Session Manager, FastMCP Server, SQLite Database
-- **Agent Coordination**: Use intelligent coordination based on detected scope and complexity, with structured status reporting and escalation triggers for architecture issues, test failures, security concerns, file size violations, dependency conflicts, integration failures
-
-**Comprehensive Standards**: `.claude/development-standards.md`, comprehensive test coverage with pytest
-
-## Testing & Quality Assurance
-
-📋 **Comprehensive Testing**: Multi-layered testing approach with unit, integration, behavioral, and performance tests.
-
-### Testing Requirements
-- **Unit Tests**: Individual component testing with pytest
-- **Integration Tests**: Multi-component workflow testing
-- **Behavioral Tests**: End-to-end agent interaction testing
-- **Performance Tests**: RapidFuzz search and database performance
-
-### Testing Commands
-- `pytest` - Run all tests with default parallel execution (auto-configured)
-- `pytest tests/unit/` - Run only unit tests
-- `pytest tests/integration/` - Run only integration tests
-- `pytest tests/behavioral/` - Run only behavioral/end-to-end tests
-- `pytest -m "not slow"` - Skip slow tests
-- `pytest -n 4` - Run with specific number of parallel workers
-- `pytest --cov=src` - Run with coverage reporting
-- `pytest -k "test_name"` - Run specific test by name pattern
-- `pytest -x` - Stop on first failure
-- `pytest --lf` - Run only last failed tests
-
-### Quality Commands
-- `ruff check` - Code linting and style checks
-- `mypy src/` - Type checking
-- `pre-commit run --all-files` - Run all quality checks
-
-## Hot Reload Development Setup
-
-### Quick Start (30 seconds)
+### Code Quality
 ```bash
-# 1. Start hot reload server
-uv run python -m shared_context_server.scripts.dev
-
-# 2. Configure Claude Code (in another terminal)
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
-
-# 3. Verify connection
-claude mcp list  # Should show: ✓ Connected
-
-# 4. Edit any .py file → server restarts automatically
+make lint         # Run ruff linting with auto-fix
+make format       # Format code with ruff
+make type         # Type checking with mypy
+make quality      # Run all quality checks (format, lint, type, pip-audit)
 ```
 
-### Development Features
-- **🔥 Hot Reload**: Automatic server restart on file changes (1-2 second restart)
-- **📁 File Watching**: Monitors all Python files in `src/shared_context_server/` recursively
-- **🔗 Connection Stability**: MCP clients maintain connection through server restarts
-- **⚡ Fast Development**: Edit → Save → Test cycle with no manual restart needed
-- **🛡️ Transport Bridge**: `mcp-proxy` bridges HTTP ↔ STDIO for client compatibility
+### Docker
+```bash
+make docker       # Full Docker lifecycle: stop → build → up → logs
+```
 
-### Documentation
-- **Complete Guide**: `docs/development.md` - Complete development environment setup and workflows
-- **Troubleshooting**: Common issues and solutions included
+## Architecture Overview
 
-## CLI Commands Available
+### Core Components
 
-### Development Commands
-- **Run Development Server**: `uv run python -m shared_context_server.scripts.dev` - Start the MCP development server with hot reload
-- **Validate Environment**: `uv run python -m shared_context_server.scripts.dev --validate` - Check development environment setup
-- **Server Info**: `uv run python -m shared_context_server.scripts.dev --info` - Display server configuration and status
-- **Install Dependencies**: `uv sync --all-extras` - Install all project dependencies including dev tools
-- **Run Tests**: `uv run pytest` - Execute full test suite with parallel execution (auto-configured)
+**src/shared_context_server/**
+- `server.py` - FastMCP server with 15+ tools for multi-agent collaboration
+- `database.py` & `database_sqlalchemy.py` - Dual backend system (aiosqlite/SQLAlchemy)
+- `auth.py` - JWT authentication, role-based access control, audit logging
+- `models.py` - Pydantic models for validation and serialization
+- `tools.py` - MCP tools registry and metadata
+- `websocket_server.py` - WebSocket support for real-time updates
+- `scripts/dev.py` - Development server with hot reload
 
-### Quality Assurance Commands
-- **Lint Code**: `uv run ruff check` - Run linting checks on codebase
-- **Format Code**: `uv run ruff format` - Auto-format code to standards
-- **Type Check**: `uv run mypy src/` - Run type checking on source code
-- **Pre-commit Hooks**: `uv run pre-commit run --all-files` - Run all quality checks
-- **Test Coverage**: `uv run pytest tests/ --cov=src --cov-report=html` - Generate test coverage report
+### Database Backends
 
-### Development Tools
-- **Database Reset**: Environment variable `DEV_RESET_DATABASE_ON_START=true` - Reset database on server start
-- **Debug Mode**: Environment variable `DEBUG=true` - Enable detailed logging
-- Use `uv run python -m shared_context_server.scripts.dev --help` for detailed command information
+The system supports two interchangeable backends:
+- **aiosqlite** (default): Direct async SQLite, optimized for development
+- **SQLAlchemy**: Future-ready for PostgreSQL/MySQL migration
 
----
+Switch backends via environment variable:
+```bash
+USE_SQLALCHEMY=true make test  # Test with SQLAlchemy
+USE_SQLALCHEMY=false make test # Test with aiosqlite (default)
+```
 
-## References
+### MCP Tools Architecture
 
-### Agent System
-- `.claude/agents/developer.md` - Research-first implementation (MCP tools)
-- `.claude/agents/tester.md` - Modern testing (behavioral, pytest)
-- `.claude/agents/refactor.md` - Safety-first refactoring specialist
-- `.claude/agents/docs.md` - User-focused documentation
-- `.claude/agents/task-coordinator.md` - Multi-phase orchestration
+Tools are organized by category:
+- **Session Management**: create_session, get_session, add_message, get_messages
+- **Search**: search_context (RapidFuzz), search_by_sender, search_by_timerange
+- **Agent Memory**: set_memory, get_memory, list_memory (with TTL support)
+- **Admin**: get_performance_metrics, get_usage_guidance
 
-### Tech Guides
-- `.claude/tech-guides/core-architecture.md` - Foundational system design, database schema, and MCP resource models
-- `.claude/tech-guides/framework-integration.md` - FastMCP server implementation patterns and tool definitions
-- `.claude/tech-guides/testing.md` - Comprehensive testing patterns: behavioral, unit, integration, and multi-agent
-- `.claude/tech-guides/security-authentication.md` - JWT authentication, RBAC, input sanitization, and audit logging
-- `.claude/tech-guides/performance-optimization.md` - RapidFuzz search, connection pooling, caching, and monitoring
-- `.claude/tech-guides/data-validation.md` - Pydantic models, validation rules, and type safety
-- `.claude/tech-guides/error-handling.md` - Error hierarchy, circuit breakers, recovery patterns, and logging
-- `.claude/tech-guides/ci.md` - CI environment testing, SQLite limitations, and concurrency solutions
+### Authentication Flow
 
-### Standards
-- `.claude/development-standards.md` - Code quality, testing, file limits
-- `pyproject.toml` - Complete project configuration with ruff, mypy, and pytest settings
+1. MCP client provides API_KEY header
+2. Server validates and generates JWT token via authenticate_agent tool
+3. JWT contains agent_id, type, permissions (read/write/admin)
+4. Tools check JWT for authorization based on visibility rules
 
-### Key Architecture Notes
-- **⚠️ UTC Timestamps Critical**: Always use `datetime.now(timezone.utc)` for system coordination
-- **FastMCP Integration**: FastMCP server pattern with tool definitions and async handlers
-- **Progressive Enhancement**: Core functionality first, advanced features incrementally
+### Message Visibility System
 
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+Four-tier visibility control:
+- `public`: All agents can see
+- `private`: Only sender can see
+- `agent_only`: Only agents of same type
+- `admin_only`: Requires admin JWT
+
+## Testing Strategy
+
+### Test Organization
+- `tests/unit/` - Component isolation tests
+- `tests/integration/` - Multi-component workflow tests
+- `tests/behavioral/` - End-to-end user scenarios
+- `tests/performance/` - Performance benchmarks
+- `tests/security/` - Auth and isolation validation
+
+### Running Specific Tests
+```bash
+pytest tests/unit/test_auth_jwt.py -v      # Single file
+pytest tests/security/ -v                   # Category
+pytest -k "test_jwt" -v                     # Pattern match
+pytest -m "not slow" -v                     # Exclude slow tests
+```
+
+### Database Testing
+Tests automatically use in-memory SQLite with WAL mode for isolation. Backend switching is tested via `test_simplified_backend_switching.py`.
+
+## Environment Variables
+
+Key configuration:
+```bash
+API_KEY=your-key                # Required for MCP authentication
+JWT_SECRET_KEY=your-secret      # Required for JWT signing
+JWT_ENCRYPTION_KEY=fernet-key   # Required for token encryption
+DATABASE_URL=path/to/db         # Optional (default: shared_context.db)
+USE_SQLALCHEMY=true/false       # Backend selection (default: false)
+```
+
+## Performance Targets
+
+- Message operations: <30ms
+- Fuzzy search: 2-3ms (RapidFuzz optimization)
+- Concurrent agents: 20+ per session
+- Cache hit ratio: >70%
+
+## Common Development Patterns
+
+### Adding a New MCP Tool
+
+1. Define tool in `server.py` with FastMCP decorator
+2. Add metadata to `tools.py` registry
+3. Implement auth checks using `validate_agent_context_or_error`
+4. Write unit test in `tests/unit/`
+5. Add integration test in `tests/integration/`
+
+### Database Schema Changes
+
+1. Update schema in `database_*.sql` files
+2. Modify both backends (`database.py` and `database_sqlalchemy.py`)
+3. Run migration via `initialize_database(reset=True)` in dev
+4. Test with `make test-backend`
+
+### WebSocket Integration
+
+WebSocket server runs alongside FastAPI for real-time updates:
+- Notifications sent via `websocket_notify()` helper
+- Dashboard at `http://localhost:23456/ui/`
+- Auto-reconnect with exponential backoff
+
+## Framework Guides
+
+The `.claude/guides/` directory contains specialized documentation for multi-agent development patterns:
+
+### Shared Context Integration
+**File**: `.claude/guides/shared-context-integration.md`
+
+Comprehensive patterns for multi-agent collaboration through the shared context server. Covers session-based coordination, agent handoff protocols, memory persistence patterns, and performance optimization strategies.
+
+### MCP Toolkit Architecture
+**File**: `.claude/guides/mcp-toolkit-architecture.md`
+
+Production-ready MCP tool integration patterns based on the shared context server implementation. Includes dual-layer memory strategy, research tools coordination, and checkpoint management for framework commands.
+
+### Development Standards
+**File**: `.claude/guides/development-standards.md`
+
+Critical development rules including file size limits (500 lines code, 1000 lines tests), testing requirements, browser automation standards, agent transparency protocols, and escalation triggers.
+
+### Browser Automation
+**File**: `.claude/guides/browser-automation.md`
+
+Playwright MCP integration for behavioral testing, visual regression prevention, and research-first web development. Covers user story validation, responsive testing, and cross-device compatibility patterns.
+
+## Dual-Layer Memory System
+
+This project leverages a sophisticated dual-layer memory architecture combining immediate coordination with long-term intelligence preservation:
+
+### Layer 1: Shared Context Server (Immediate Coordination)
+
+**Purpose**: Real-time multi-agent collaboration and session-based memory
+**Performance**: \<30ms message operations, 2-3ms fuzzy search
+**Scope**: Current development session and task coordination
+
+#### Core Capabilities
+- **Session Management**: Create dedicated sessions for feature development tasks
+- **Agent Handoffs**: Coordinate between different agent types with context preservation
+- **Search & Discovery**: RapidFuzz-powered context search across session history
+- **Memory Persistence**: Session-scoped memory with TTL support for immediate coordination
+- **Visibility Controls**: 4-tier visibility system (public/private/agent_only/admin_only)
+
+### Layer 2: Long-Term Project Knowledge
+
+**Purpose**: Cross-project pattern recognition and breakthrough preservation
+**Scope**: Historical context, architectural decisions, and learned patterns
+
+#### Knowledge Preservation Strategy
+**Note**: Pieces MCP server integration recommended for long-term memory. Current setup focuses on shared context server for immediate coordination.
+
+#### Memory Checkpoints
+Every major command should implement 3 checkpoints:
+- **START**: Load relevant context from previous work
+- **MID**: Store progress and coordination decisions
+- **END**: Preserve knowledge and patterns for future reference
+
+## Multi-Agent Authentication
+
+### Authentication Gateway Pattern
+
+Main Claude agent serves as the authentication gateway for the multi-agent framework:
+
+**Authentication Flow:**
+1. **Main Claude Only**: Uses `authenticate_agent` tool to obtain tokens
+2. **Token Provisioning**: Passes tokens to subagents with appropriate `agent_type` and permissions
+3. **Token Refresh**: Subagents can refresh their own tokens using `refresh_token` tool
+
+**Agent Types & Permissions:**
+- `claude`: Standard agent (read/write)
+- `admin`: Framework coordination (read/write/admin/debug)
+- `generic`: Read-only access
+- `custom`: Configure via `PERMISSIONS_CONFIG_FILE`
+
+**Usage Pattern:**
+```python
+# Main Claude provisions tokens
+admin_token = await authenticate_agent(agent_id="coord_agent", agent_type="admin")
+claude_token = await authenticate_agent(agent_id="dev_agent", agent_type="claude")
+
+# Pass tokens to subagents for their operations
+# Subagents use: refresh_token(current_token) when needed
+```
+
+**Key Requirement**: `agent_type="admin"` required for admin-level permissions.
+
+- use uv run python instead of python3

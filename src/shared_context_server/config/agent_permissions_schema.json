@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Permissions Configuration Schema",
+  "description": "JSON schema for validating agent permissions configuration",
+  "type": "object",
+  "required": ["config"],
+  "properties": {
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this configuration"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Configuration version number"
+    },
+    "config": {
+      "type": "object",
+      "required": ["available_permissions", "default_permissions", "agent_types"],
+      "properties": {
+        "available_permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "description": "List of all valid permissions in the system"
+        },
+        "default_permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "description": "Default permissions for unknown agent types"
+        },
+        "agent_types": {
+          "type": "object",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "type": "object",
+              "required": ["permissions", "description"],
+              "properties": {
+                "permissions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "description": "List of permissions granted to this agent type"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Human-readable description of this agent type"
+                },
+                "inherits_from": {
+                  "type": "string",
+                  "description": "Optional: inherit permissions from another agent type"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Mapping of agent types to their permissions and descriptions"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

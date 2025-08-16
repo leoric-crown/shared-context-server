@@ -1,0 +1,63 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(touch:*)",
+      "Bash(cat:*)",
+      "Bash(python:*)",
+      "Bash(rg:*)",
+      "Bash(test:*)",
+      "Bash(wc:*)",
+      "Bash(sed:*)",
+      "Bash(make:*)",
+
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__octocode__githubSearchRepositories",
+      "mcp__octocode__githubSearchCode",
+      "mcp__octocode__githubGetFileContent",
+      "mcp__octocode__githubViewRepoStructure",
+      "mcp__crawl4ai__md",
+      "mcp__crawl4ai__ask",
+      "mcp__crawl4ai__crawl",
+      "mcp__brave-search__brave_web_search",
+
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_navigate_back",
+      "mcp__playwright__browser_navigate_forward",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_hover",
+      "mcp__playwright__browser_drag",
+      "mcp__playwright__browser_select_option",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_tab_list",
+      "mcp__playwright__browser_tab_new",
+      "mcp__playwright__browser_tab_select",
+      "mcp__playwright__browser_tab_close",
+      "mcp__playwright__browser_close",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_install",
+
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(**/.env)"
+    ],
+    "additionalDirectories": []
+  }
+}
