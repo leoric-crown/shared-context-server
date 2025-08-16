@@ -693,16 +693,90 @@ async def reset_global_singletons():
     except ImportError:
         pass
 
-    # Reset database managers for both aiosqlite and SQLAlchemy
+    # Enhanced database manager cleanup for SQLAlchemy flakiness prevention
     try:
         import shared_context_server.database as db_module
 
         with suppress(Exception):
+            # Critical: Close SQLAlchemy manager properly before reset
+            if (
+                hasattr(db_module, "_sqlalchemy_manager")
+                and db_module._sqlalchemy_manager
+            ):
+                await db_module._sqlalchemy_manager.close()
+
             # Reset global database managers to ensure clean state
             db_module._db_manager = None
             db_module._sqlalchemy_manager = None
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+async def isolate_database_globals():
+    """
+    Comprehensive database global state isolation for SQLAlchemy flakiness prevention.
+
+    CRITICAL: This fixture addresses the root cause of SQLAlchemy test flakiness by ensuring
+    complete isolation of global database managers between tests.
+    """
+    import shared_context_server.database as db_module
+
+    # Store original state
+    original_db_manager = getattr(db_module, "_db_manager", None)
+    original_sqlalchemy_manager = getattr(db_module, "_sqlalchemy_manager", None)
+
+    # Critical: Properly close SQLAlchemy manager BEFORE resetting globals
+    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
+        with suppress(Exception):
+            await db_module._sqlalchemy_manager.close()
+
+    # Reset to None for complete test isolation
+    db_module._db_manager = None
+    db_module._sqlalchemy_manager = None
+
+    yield  # Let the test run with clean globals
+
+    # Post-test cleanup: Close any managers created during test
+    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
+        with suppress(Exception):
+            await db_module._sqlalchemy_manager.close()
+
+    # Restore original state (usually None anyway, but ensures consistency)
+    db_module._db_manager = original_db_manager
+    db_module._sqlalchemy_manager = original_sqlalchemy_manager
+
+
+@pytest.fixture(autouse=True)
+def isolate_environment_variables():
+    """
+    Environment variable isolation to prevent SQLAlchemy test flakiness.
+
+    CRITICAL: Prevents USE_SQLALCHEMY and database path variables from leaking
+    between tests running in parallel workers.
+    """
+    import os
+
+    # Database-related environment variables that cause flakiness
+    critical_vars = [
+        "USE_SQLALCHEMY",
+        "DATABASE_URL",
+        "DATABASE_PATH",
+        "JWT_ENCRYPTION_KEY",  # Token tests depend on this
+        "API_KEY",  # Required for config loading
+    ]
+
+    # Store original values
+    original_values = {var: os.environ.get(var) for var in critical_vars}
+
+    yield  # Let the test run
+
+    # Restore original environment state
+    for var, original_value in original_values.items():
+        if original_value is None:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = original_value
 
 
 @pytest.fixture(autouse=True)
