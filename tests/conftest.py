@@ -6,6 +6,14 @@ instead of fragile hardcoded mocks. This approach ensures tests remain valid as
 database schemas evolve and provides better test fidelity.
 
 Includes industry-standard background task cleanup for asyncio test environments.
+
+IMPORTANT: All test functions that use server tools (create_session, add_message, etc.)
+MUST use the 'isolated_db' fixture to prevent creating sessions in the production database.
+Example:
+    async def test_something(self, isolated_db):
+        from tests.fixtures.database import patch_database_for_test
+        with patch_database_for_test(isolated_db):
+            # ... test code that uses server tools
 """
 
 import asyncio

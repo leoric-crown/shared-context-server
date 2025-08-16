@@ -124,53 +124,57 @@ class TestPhase1EndToEnd:
             print("✅ Phase 1 end-to-end test completed successfully!")
 
     @pytest.mark.asyncio
-    async def test_error_scenarios(self):
+    async def test_error_scenarios(self, isolated_db):
         """Test error handling scenarios."""
 
-        mock_context = MockContext("test_session", "error_test_agent")
+        # Use isolated test database instead of production database
+        from tests.fixtures.database import patch_database_for_test
 
-        # Test 1: Add message to non-existent session
-        invalid_session = await call_fastmcp_tool(
-            add_message,
-            mock_context,
-            session_id="session_nonexistent123",
-            content="This should fail",
-            visibility="public",
-        )
+        with patch_database_for_test(isolated_db):
+            mock_context = MockContext("test_session", "error_test_agent")
 
-        assert invalid_session["success"] is False
-        assert invalid_session["code"] == "SESSION_NOT_FOUND"
+            # Test 1: Add message to non-existent session
+            invalid_session = await call_fastmcp_tool(
+                add_message,
+                mock_context,
+                session_id="session_nonexistent123",
+                content="This should fail",
+                visibility="public",
+            )
 
-        # Test 2: Invalid visibility level
-        session_result = await call_fastmcp_tool(
-            create_session, mock_context, purpose="Error test session"
-        )
-        session_id = session_result["session_id"]
+            assert invalid_session["success"] is False
+            assert invalid_session["code"] == "SESSION_NOT_FOUND"
 
-        invalid_visibility = await call_fastmcp_tool(
-            add_message,
-            mock_context,
-            session_id=session_id,
-            content="Test message",
-            visibility="invalid_visibility",
-        )
+            # Test 2: Invalid visibility level
+            session_result = await call_fastmcp_tool(
+                create_session, mock_context, purpose="Error test session"
+            )
+            session_id = session_result["session_id"]
 
-        assert invalid_visibility["success"] is False
-        assert invalid_visibility["code"] == "INVALID_VISIBILITY"
+            invalid_visibility = await call_fastmcp_tool(
+                add_message,
+                mock_context,
+                session_id=session_id,
+                content="Test message",
+                visibility="invalid_visibility",
+            )
 
-        # Test 3: Empty content
-        empty_content = await call_fastmcp_tool(
-            add_message,
-            mock_context,
-            session_id=session_id,
-            content="   ",  # Empty after sanitization
-            visibility="public",
-        )
+            assert invalid_visibility["success"] is False
+            assert invalid_visibility["code"] == "INVALID_VISIBILITY"
 
-        assert empty_content["success"] is False
-        assert empty_content["code"] == "INVALID_INPUT"
+            # Test 3: Empty content
+            empty_content = await call_fastmcp_tool(
+                add_message,
+                mock_context,
+                session_id=session_id,
+                content="   ",  # Empty after sanitization
+                visibility="public",
+            )
 
-        print("✅ Error scenarios test completed successfully!")
+            assert empty_content["success"] is False
+            assert empty_content["code"] == "INVALID_INPUT"
+
+            print("✅ Error scenarios test completed successfully!")
 
     @pytest.mark.asyncio
     async def test_multi_agent_visibility(self, isolated_db):
