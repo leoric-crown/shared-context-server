@@ -167,13 +167,17 @@ Playwright MCP integration for behavioral testing, visual regression prevention,
 
 ## Dual-Layer Memory System
 
-This project leverages a sophisticated dual-layer memory architecture combining immediate coordination with long-term intelligence preservation:
+When working with agents YOUR MUST USE the sophisticated dual-layer memory architecture provided by shared-context-server and pieces MCP servers, combining immediate coordination with long-term intelligence preservation:
 
 ### Layer 1: Shared Context Server (Immediate Coordination)
 
 **Purpose**: Real-time multi-agent collaboration and session-based memory
 **Performance**: \<30ms message operations, 2-3ms fuzzy search
 **Scope**: Current development session and task coordination
+
+When starting a collaboration session with agents, YOU MUST create a new session using the session-context-server, and provide the newly created session ID as well as create JWT tokens (using the authenticate tool) for agents to write to that session.
+
+In between agent calls and hand-offs, you can check session messages to get a better sense of what was done.
 
 #### Core Capabilities
 - **Session Management**: Create dedicated sessions for feature development tasks
