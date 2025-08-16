@@ -1,20 +1,21 @@
 # Feature Planning Template
 
 ## Overview
-Brief description of the feature and its purpose.
+Brief description of the feature or enhancement.
 
 ## Requirements
 - Functional requirements
 - Non-functional requirements
-- Constraints and dependencies
+- Dependencies
 
 ## Implementation Plan
-- [ ] Task 1
-- [ ] Task 2
-- [ ] Task 3
+1. Database schema changes (if any)
+2. API endpoint modifications
+3. Agent integration patterns
+4. Testing approach
 
-## Testing Strategy
-How will this feature be tested?
-
-## Success Criteria
-How will we know this feature is complete and working?
+## Acceptance Criteria
+- [ ] Feature works as specified
+- [ ] Tests pass
+- [ ] Documentation updated
+- [ ] Agent integration validated
