@@ -1,21 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}Global Memory - Shared Context Server{% endblock %}
+{% block title %}Memory Dashboard - Shared Context Server{% endblock %}
 
 {% block content %}
 <div class="memory-dashboard">
     <div class="dashboard-header">
-        <h1>Global Memory Entries</h1>
+        <h1>{{ scope_label }} Memory Entries</h1>
         <div class="dashboard-stats">
             <div class="stat-card">
                 <span class="stat-number">{{ total_entries }}</span>
-                <span class="stat-label">Global Entries</span>
+                <span class="stat-label">{{ scope_label }} Entries</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ global_count }}</span>
+                <span class="stat-label">Global</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ session_count }}</span>
+                <span class="stat-label">Session</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ all_count }}</span>
+                <span class="stat-label">Total</span>
             </div>
         </div>
     </div>
 
-    <div class="memory-search">
-        <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+    <div class="memory-controls">
+        <div class="scope-filter">
+            <label class="scope-label">Memory Scope:</label>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="scope" value="global" {% if current_scope == 'global' %}checked{% endif %} onchange="changeScopeFilter('global')">
+                    <span class="radio-text">Global Only</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="scope" value="session" {% if current_scope == 'session' %}checked{% endif %} onchange="changeScopeFilter('session')">
+                    <span class="radio-text">Session-Scoped Only</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="scope" value="all" {% if current_scope == 'all' %}checked{% endif %} onchange="changeScopeFilter('all')">
+                    <span class="radio-text">All Memories</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="memory-search">
+            <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+        </div>
     </div>
 
     {% if memory_entries %}
@@ -25,6 +57,7 @@
                 <tr>
                     <th>Key</th>
                     <th>Agent</th>
+                    {% if current_scope == 'all' %}<th>Scope</th>{% endif %}
                     <th>Value Preview</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -39,6 +72,15 @@
                     <td class="memory-agent">
                         <span class="agent-badge">{{ entry.agent_id|e }}</span>
                     </td>
+                    {% if current_scope == 'all' %}
+                    <td class="memory-scope">
+                        {% if entry.session_id %}
+                            <span class="scope-badge session">Session</span>
+                        {% else %}
+                            <span class="scope-badge global">Global</span>
+                        {% endif %}
+                    </td>
+                    {% endif %}
                     <td class="memory-value">
                         {% set value_text = entry.value|e %}
                         {% if value_text|length > 100 %}
@@ -119,10 +161,17 @@
 </div>
 
 <script>
-// Auto-refresh dashboard every 30 seconds
+// Auto-refresh dashboard every 30 seconds, preserving current scope
 setInterval(() => {
     window.location.reload();
 }, 30000);
+
+// Change scope filter
+function changeScopeFilter(scope) {
+    const url = new URL(window.location);
+    url.searchParams.set('scope', scope);
+    window.location.href = url.toString();
+}
 
 // Search functionality
 document.getElementById('search-input').addEventListener('input', function(e) {
@@ -214,8 +263,72 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     padding: 2rem;
 }
 
-.memory-search {
+.memory-controls {
     margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.scope-filter {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.scope-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0;
+}
+
+.radio-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.radio-option:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.radio-option input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.radio-option input[type="radio"]:checked + .radio-text {
+    color: #007bff;
+    font-weight: 600;
+}
+
+.radio-option:has(input[type="radio"]:checked) {
+    border-color: #007bff;
+    background-color: #e7f3ff;
+}
+
+.radio-text {
+    font-size: 0.9rem;
+    color: #495057;
+    transition: all 0.2s ease;
+}
+
+.memory-search {
+    margin-bottom: 0;
 }
 
 .search-input {
@@ -268,6 +381,23 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     border-radius: 12px;
     font-size: 0.8rem;
     font-weight: 500;
+}
+
+.scope-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.scope-badge.global {
+    background: #e8f5e8;
+    color: #2e7d32;
+}
+
+.scope-badge.session {
+    background: #fff3e0;
+    color: #f57c00;
 }
 
 .value-preview {

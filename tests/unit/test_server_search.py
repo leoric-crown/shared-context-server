@@ -107,21 +107,26 @@ class TestRapidFuzzSearchSystem:
         return session_id, ctx
 
     async def test_search_context_basic_functionality(
-        self, server_with_db, search_test_session
+        self, server_with_db, search_test_session, test_db_manager
     ):
         """Test basic fuzzy search functionality."""
         session_id, ctx = search_test_session
 
-        # Test exact match
-        from shared_context_server.server import search_context
+        # Use test database connection for search
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
 
-        result = await call_fastmcp_tool(
-            search_context,
-            ctx,
-            session_id=session_id,
-            query="FastAPI",
-            fuzzy_threshold=60.0,  # More realistic threshold for partial matches
-        )
+            test_conn.row_factory = aiosqlite.Row
+
+            # Call search_context with test connection injection
+            result = await call_fastmcp_tool(
+                server_with_db.search_context,
+                ctx,
+                session_id=session_id,
+                query="FastAPI",
+                fuzzy_threshold=60.0,  # More realistic threshold for partial matches
+                _test_connection=test_conn,
+            )
 
         assert result["success"] is True
         assert len(result["results"]) > 0
@@ -594,13 +599,19 @@ class TestRapidFuzzSearchSystem:
         end_time = datetime.now(timezone.utc)
 
         # Search for messages in specific time range
-        result = await call_fastmcp_tool(
-            server_with_db.search_by_timerange,
-            ctx,
-            session_id=session_id,
-            start_time=base_time.isoformat(),
-            end_time=end_time.isoformat(),
-        )
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
+
+            test_conn.row_factory = aiosqlite.Row
+
+            result = await call_fastmcp_tool(
+                server_with_db.search_by_timerange,
+                ctx,
+                session_id=session_id,
+                start_time=base_time.isoformat(),
+                end_time=end_time.isoformat(),
+                _test_connection=test_conn,
+            )
 
         assert result["success"] is True
         assert len(result["messages"]) == 2
@@ -610,13 +621,19 @@ class TestRapidFuzzSearchSystem:
         assert result["timerange"]["end"] == end_time.isoformat()
 
         # Test narrower time range
-        narrow_result = await call_fastmcp_tool(
-            server_with_db.search_by_timerange,
-            ctx,
-            session_id=session_id,
-            start_time=mid_time.isoformat(),
-            end_time=end_time.isoformat(),
-        )
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
+
+            test_conn.row_factory = aiosqlite.Row
+
+            narrow_result = await call_fastmcp_tool(
+                server_with_db.search_by_timerange,
+                ctx,
+                session_id=session_id,
+                start_time=mid_time.isoformat(),
+                end_time=end_time.isoformat(),
+                _test_connection=test_conn,
+            )
 
         assert narrow_result["success"] is True
         assert len(narrow_result["messages"]) == 1

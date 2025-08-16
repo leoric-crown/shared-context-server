@@ -11,15 +11,14 @@ import asyncio
 import sys
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 sys.path.append(str(Path(__file__).parent.parent))
-from conftest import MockContext, call_fastmcp_tool
+from conftest import call_fastmcp_tool
 
 # Import search function directly
-from shared_context_server.server import create_session, search_context
 
 
 @pytest.fixture
@@ -121,80 +120,78 @@ def mock_database_with_messages():
 
 @pytest.mark.asyncio
 @pytest.mark.performance
-async def test_rapidfuzz_search_performance(mock_database_with_messages):
+async def test_rapidfuzz_search_performance(
+    server_with_db, search_test_session, test_db_manager
+):
     """Test RapidFuzz search performance meets <100ms requirement."""
 
-    with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
-        patch(
-            "shared_context_server.server.trigger_resource_notifications"
-        ) as mock_notify,
-    ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database_with_messages
-        mock_notify.return_value = None
+    session_id, ctx = search_test_session
 
-        ctx = MockContext("test_session_perf_123")
+    # Performance test: multiple searches
+    search_queries = [
+        "fuzzy search performance",
+        "async await patterns",
+        "database connection",
+        "memory system",
+        "agent authentication",
+    ]
 
-        # Create session
-        session_result = await call_fastmcp_tool(
-            create_session, ctx, purpose="RapidFuzz performance testing session"
-        )
-        session_id = session_result["session_id"]
+    total_time = 0
+    successful_searches = 0
 
-        # Performance test: multiple searches
-        search_queries = [
-            "fuzzy search performance",
-            "async await patterns",
-            "database connection",
-            "memory system",
-            "agent authentication",
-        ]
+    for query in search_queries:
+        start_time = time.time()
 
-        total_time = 0
-        successful_searches = 0
+        # Use test database connection for search
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
 
-        for query in search_queries:
-            start_time = time.time()
+            test_conn.row_factory = aiosqlite.Row
 
             result = await call_fastmcp_tool(
-                search_context,
+                server_with_db.search_context,
                 ctx,
                 session_id=session_id,
                 query=query,
                 fuzzy_threshold=60.0,
                 limit=10,
+                _test_connection=test_conn,
             )
 
-            search_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        search_time = (time.time() - start_time) * 1000  # Convert to milliseconds
 
-            assert result["success"] is True, f"Search failed for query: {query}"
-            assert "search_time_ms" in result, "Search time not reported"
+        assert result["success"] is True, f"Search failed for query: {query}"
+        assert "search_time_ms" in result, "Search time not reported"
 
-            # Verify performance requirement: <100ms for search operation
-            assert search_time < 100, (
-                f"Search took {search_time:.2f}ms, expected <100ms"
-            )
+        # Verify performance requirement: <100ms for search operation
+        assert search_time < 100, f"Search took {search_time:.2f}ms, expected <100ms"
 
-            # Verify reported time is reasonable
-            reported_time = result["search_time_ms"]
-            assert reported_time > 0, "Reported search time should be positive"
+        # Verify reported time is reasonable
+        reported_time = result["search_time_ms"]
+        assert reported_time > 0, "Reported search time should be positive"
 
-            total_time += search_time
-            successful_searches += 1
+        total_time += search_time
+        successful_searches += 1
 
-        # Calculate average performance
-        avg_time = total_time / successful_searches
-        print("\nRapidFuzz Search Performance Results:")
-        print(f"  - Average search time: {avg_time:.2f}ms")
-        print(f"  - All searches completed under 100ms requirement: {avg_time < 100}")
+    # Calculate average performance
+    avg_time = total_time / successful_searches
+    print("\nRapidFuzz Search Performance Results:")
+    print(f"  - Average search time: {avg_time:.2f}ms")
+    print(f"  - All searches completed under 100ms requirement: {avg_time < 100}")
 
-        # Verify performance note is included
+    # Verify performance note is included
+    async with test_db_manager.get_connection() as test_conn:
+        import aiosqlite
+
+        test_conn.row_factory = aiosqlite.Row
+
         final_result = await call_fastmcp_tool(
-            search_context,
+            server_with_db.search_context,
             ctx,
             session_id=session_id,
             query="performance test",
             fuzzy_threshold=70,
+            _test_connection=test_conn,
         )
 
         assert "RapidFuzz enabled" in final_result["performance_note"]
@@ -203,196 +200,182 @@ async def test_rapidfuzz_search_performance(mock_database_with_messages):
 
 @pytest.mark.asyncio
 @pytest.mark.performance
-async def test_search_accuracy_vs_threshold(mock_database_with_messages):
+async def test_search_accuracy_vs_threshold(
+    server_with_db, search_test_session, test_db_manager
+):
     """Test search accuracy across different fuzzy thresholds."""
 
-    with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
-        patch(
-            "shared_context_server.server.trigger_resource_notifications"
-        ) as mock_notify,
-    ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database_with_messages
-        mock_notify.return_value = None
+    session_id, ctx = search_test_session
 
-        ctx = MockContext("test_session_threshold_123")
+    # Test query with known matches
+    query = "fuzzy search performance"
+    thresholds = [40.0, 60.0, 80.0, 90.0]
 
-        # Create session
-        session_result = await call_fastmcp_tool(
-            create_session, ctx, purpose="Threshold accuracy testing"
-        )
-        session_id = session_result["session_id"]
+    results_by_threshold = {}
 
-        # Test query with known matches
-        query = "fuzzy search performance"
-        thresholds = [40.0, 60.0, 80.0, 90.0]
+    for threshold in thresholds:
+        # Use test database connection for search
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
 
-        results_by_threshold = {}
+            test_conn.row_factory = aiosqlite.Row
 
-        for threshold in thresholds:
             result = await call_fastmcp_tool(
-                search_context,
+                server_with_db.search_context,
                 ctx,
                 session_id=session_id,
                 query=query,
                 fuzzy_threshold=threshold,
                 limit=20,
+                _test_connection=test_conn,
             )
 
-            assert result["success"] is True
-            results_by_threshold[threshold] = result
+        assert result["success"] is True
+        results_by_threshold[threshold] = result
 
-            # Verify all returned results meet the threshold
-            for match in result["results"]:
-                assert match["score"] >= threshold, (
-                    f"Result score {match['score']} below threshold {threshold}"
+        # Verify all returned results meet the threshold
+        for match in result["results"]:
+            assert match["score"] >= threshold, (
+                f"Result score {match['score']} below threshold {threshold}"
+            )
+
+        # Verify relevance categorization
+        for match in result["results"]:
+            score = match["score"]
+            relevance = match["relevance"]
+
+            if score >= 80:
+                assert relevance == "high", (
+                    f"Score {score} should be high relevance, got {relevance}"
+                )
+            elif score >= 60:
+                assert relevance == "medium", (
+                    f"Score {score} should be medium relevance, got {relevance}"
+                )
+            else:
+                assert relevance == "low", (
+                    f"Score {score} should be low relevance, got {relevance}"
                 )
 
-            # Verify relevance categorization
-            for match in result["results"]:
-                score = match["score"]
-                relevance = match["relevance"]
-
-                if score >= 80:
-                    assert relevance == "high", (
-                        f"Score {score} should be high relevance, got {relevance}"
-                    )
-                elif score >= 60:
-                    assert relevance == "medium", (
-                        f"Score {score} should be medium relevance, got {relevance}"
-                    )
-                else:
-                    assert relevance == "low", (
-                        f"Score {score} should be low relevance, got {relevance}"
-                    )
-
-        print("✅ Search accuracy vs threshold test completed successfully")
+    print("✅ Search accuracy vs threshold test completed successfully")
 
 
 @pytest.mark.asyncio
 @pytest.mark.performance
-async def test_search_with_metadata_performance(mock_database_with_messages):
+async def test_search_with_metadata_performance(
+    server_with_db, search_test_session, test_db_manager
+):
     """Test search performance with metadata inclusion."""
 
-    with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
-        patch(
-            "shared_context_server.server.trigger_resource_notifications"
-        ) as mock_notify,
-    ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database_with_messages
-        mock_notify.return_value = None
+    session_id, ctx = search_test_session
 
-        ctx = MockContext("test_session_metadata_123")
+    # Test with metadata search enabled
+    start_time = time.time()
+    async with test_db_manager.get_connection() as test_conn:
+        import aiosqlite
 
-        # Create session
-        session_result = await call_fastmcp_tool(
-            create_session, ctx, purpose="Metadata search performance testing"
-        )
-        session_id = session_result["session_id"]
+        test_conn.row_factory = aiosqlite.Row
 
-        # Test with metadata search enabled
-        start_time = time.time()
         result_with_metadata = await call_fastmcp_tool(
-            search_context,
+            server_with_db.search_context,
             ctx,
             session_id=session_id,
             query="performance optimization",
             fuzzy_threshold=60.0,
             search_metadata=True,
             limit=10,
+            _test_connection=test_conn,
         )
-        time_with_metadata = (time.time() - start_time) * 1000
+    time_with_metadata = (time.time() - start_time) * 1000
 
-        # Test with metadata search disabled
-        start_time = time.time()
+    # Test with metadata search disabled
+    start_time = time.time()
+    async with test_db_manager.get_connection() as test_conn:
+        import aiosqlite
+
+        test_conn.row_factory = aiosqlite.Row
+
         result_without_metadata = await call_fastmcp_tool(
-            search_context,
+            server_with_db.search_context,
             ctx,
             session_id=session_id,
             query="performance optimization",
             fuzzy_threshold=60.0,
             search_metadata=False,
             limit=10,
+            _test_connection=test_conn,
         )
-        time_without_metadata = (time.time() - start_time) * 1000
+    time_without_metadata = (time.time() - start_time) * 1000
 
-        # Both should complete quickly
-        assert time_with_metadata < 100, (
-            f"Search with metadata took {time_with_metadata:.2f}ms"
-        )
-        assert time_without_metadata < 100, (
-            f"Search without metadata took {time_without_metadata:.2f}ms"
-        )
+    # Both should complete quickly
+    assert time_with_metadata < 100, (
+        f"Search with metadata took {time_with_metadata:.2f}ms"
+    )
+    assert time_without_metadata < 100, (
+        f"Search without metadata took {time_without_metadata:.2f}ms"
+    )
 
-        # Both should be successful
-        assert result_with_metadata["success"] is True
-        assert result_without_metadata["success"] is True
+    # Both should be successful
+    assert result_with_metadata["success"] is True
+    assert result_without_metadata["success"] is True
 
-        print("\nMetadata Search Performance:")
-        print(
-            f"  - With metadata: {len(result_with_metadata['results'])} results in {time_with_metadata:.2f}ms"
-        )
-        print(
-            f"  - Without metadata: {len(result_without_metadata['results'])} results in {time_without_metadata:.2f}ms"
-        )
+    print("\nMetadata Search Performance:")
+    print(
+        f"  - With metadata: {len(result_with_metadata['results'])} results in {time_with_metadata:.2f}ms"
+    )
+    print(
+        f"  - Without metadata: {len(result_without_metadata['results'])} results in {time_without_metadata:.2f}ms"
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.performance
-async def test_concurrent_search_performance(mock_database_with_messages):
+async def test_concurrent_search_performance(
+    server_with_db, search_test_session, test_db_manager
+):
     """Test search performance under concurrent load."""
 
-    with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
-        patch(
-            "shared_context_server.server.trigger_resource_notifications"
-        ) as mock_notify,
-    ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database_with_messages
-        mock_notify.return_value = None
+    session_id, ctx = search_test_session
 
-        ctx = MockContext("test_session_concurrent_123")
+    async def perform_search(query_suffix: str):
+        """Perform a single search operation."""
+        async with test_db_manager.get_connection() as test_conn:
+            import aiosqlite
 
-        # Create session
-        session_result = await call_fastmcp_tool(
-            create_session, ctx, purpose="Concurrent search performance test"
-        )
-        session_id = session_result["session_id"]
+            test_conn.row_factory = aiosqlite.Row
 
-        async def perform_search(query_suffix: str):
-            """Perform a single search operation."""
             return await call_fastmcp_tool(
-                search_context,
+                server_with_db.search_context,
                 ctx,
                 session_id=session_id,
                 query=f"performance test {query_suffix}",
                 fuzzy_threshold=60.0,
                 limit=10,
+                _test_connection=test_conn,
             )
 
-        # Run multiple concurrent searches
-        concurrent_searches = 5  # Reduced for mock testing
-        start_time = time.time()
+    # Run multiple concurrent searches
+    concurrent_searches = 5  # Reduced for mock testing
+    start_time = time.time()
 
-        # Execute searches concurrently
-        tasks = [perform_search(f"query_{i}") for i in range(concurrent_searches)]
-        results = await asyncio.gather(*tasks)
+    # Execute searches concurrently
+    tasks = [perform_search(f"query_{i}") for i in range(concurrent_searches)]
+    results = await asyncio.gather(*tasks)
 
-        total_time = (time.time() - start_time) * 1000
-        avg_time_per_search = total_time / concurrent_searches
+    total_time = (time.time() - start_time) * 1000
+    avg_time_per_search = total_time / concurrent_searches
 
-        # Verify all searches succeeded
-        for i, result in enumerate(results):
-            assert result["success"] is True, f"Concurrent search {i} failed"
+    # Verify all searches succeeded
+    for i, result in enumerate(results):
+        assert result["success"] is True, f"Concurrent search {i} failed"
 
-        # Performance should still be reasonable under concurrent load
-        assert avg_time_per_search < 150, (
-            f"Average concurrent search time {avg_time_per_search:.2f}ms too high"
-        )
+    # Performance should still be reasonable under concurrent load
+    assert avg_time_per_search < 150, (
+        f"Average concurrent search time {avg_time_per_search:.2f}ms too high"
+    )
 
-        print("\nConcurrent Search Performance:")
-        print(f"  - Concurrent searches: {concurrent_searches}")
-        print(f"  - Total time: {total_time:.2f}ms")
-        print(f"  - Average per search: {avg_time_per_search:.2f}ms")
-        print(f"  - All searches successful: {all(r['success'] for r in results)}")
+    print("\nConcurrent Search Performance:")
+    print(f"  - Concurrent searches: {concurrent_searches}")
+    print(f"  - Total time: {total_time:.2f}ms")
+    print(f"  - Average per search: {avg_time_per_search:.2f}ms")
+    print(f"  - All searches successful: {all(r['success'] for r in results)}")

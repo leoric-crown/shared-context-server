@@ -7,7 +7,6 @@ Ensures proper security boundaries between agents and sessions.
 
 # FastMCP testing helpers (inlined for simplicity)
 import inspect
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -104,14 +103,16 @@ class TestVisibilityControls:
             nonlocal sessions, messages, message_id_counter
 
             if "INSERT INTO sessions" in query:
-                session_id, purpose, created_by, metadata = params
+                session_id, purpose, created_by, metadata, created_at, updated_at = (
+                    params
+                )
                 sessions[session_id] = {
                     "id": session_id,
                     "purpose": purpose,
                     "created_by": created_by,
                     "metadata": metadata,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": created_at,
+                    "updated_at": updated_at,
                     "is_active": True,
                 }
                 return AsyncMock(lastrowid=None)
@@ -130,6 +131,7 @@ class TestVisibilityControls:
                     visibility,
                     metadata,
                     parent_id,
+                    timestamp,
                 ) = params
                 message_id = message_id_counter[0]
                 message_id_counter[0] += 1
@@ -142,7 +144,7 @@ class TestVisibilityControls:
                     "content": content,
                     "visibility": visibility,
                     "metadata": metadata,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": timestamp,
                     "parent_message_id": parent_id,
                 }
                 return AsyncMock(lastrowid=message_id)

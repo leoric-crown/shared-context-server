@@ -8,6 +8,7 @@ Tests the create_session and get_session tools according to Phase 1 specificatio
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -56,10 +57,17 @@ class TestCreateSession:
             # Verify database calls
             mock_conn.execute.assert_any_call(
                 """
-                INSERT INTO sessions (id, purpose, created_by, metadata)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO sessions (id, purpose, created_by, metadata, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
             """,
-                (result["session_id"], "Test session", "test_agent", '{"test":true}'),
+                (
+                    result["session_id"],
+                    "Test session",
+                    "test_agent",
+                    '{"test":true}',
+                    mock.ANY,
+                    mock.ANY,
+                ),
             )
             mock_conn.commit.assert_called_once()
 

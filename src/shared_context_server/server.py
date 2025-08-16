@@ -418,6 +418,19 @@ async def session_view(request: Request) -> HTMLResponse:
 
             messages = [dict(row) for row in await cursor.fetchall()]
 
+            # Get session-scoped memory entries for this session
+            memory_cursor = await conn.execute(
+                """
+                SELECT agent_id, key, value, created_at, updated_at
+                FROM agent_memory
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+            """,
+                (session_id,),
+            )
+
+            session_memory = [dict(row) for row in await memory_cursor.fetchall()]
+
         return templates.TemplateResponse(
             request,
             "session_view.html",
@@ -425,6 +438,7 @@ async def session_view(request: Request) -> HTMLResponse:
                 "request": request,
                 "session": dict(session),
                 "messages": messages,
+                "session_memory": session_memory,
                 "session_id": session_id,
                 "websocket_port": config.mcp_server.websocket_port,
             },
@@ -442,24 +456,59 @@ async def session_view(request: Request) -> HTMLResponse:
 @mcp.custom_route("/ui/memory", methods=["GET"])
 async def memory_dashboard(request: Request) -> HTMLResponse:
     """
-    Global memory dashboard displaying all global memory entries.
+    Memory dashboard displaying memory entries based on scope parameter.
+    Supports scope filtering: global (default), session, or all.
     """
     try:
+        # Get scope parameter with default to 'global' for backward compatibility
+        scope = request.query_params.get("scope", "global")
+
+        # Validate scope parameter
+        if scope not in ["global", "session", "all"]:
+            scope = "global"  # fallback to safe default
+
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
                 conn.row_factory = aiosqlite.Row
 
-            # Get global memory entries (where session_id IS NULL)
-            cursor = await conn.execute("""
-                SELECT agent_id, key, value, created_at, updated_at
+            # Build query based on scope parameter
+            if scope == "global":
+                where_clause = "WHERE session_id IS NULL"
+                scope_label = "Global"
+            elif scope == "session":
+                where_clause = "WHERE session_id IS NOT NULL"
+                scope_label = "Session-Scoped"
+            else:  # scope == 'all'
+                where_clause = ""
+                scope_label = "All"
+
+            # Execute query with dynamic WHERE clause
+            base_query = f"""
+                SELECT agent_id, key, value, created_at, updated_at, session_id
                 FROM agent_memory
-                WHERE session_id IS NULL
+                {where_clause}
                 ORDER BY created_at DESC
                 LIMIT 50
-            """)
+            """
 
+            cursor = await conn.execute(base_query)
             memory_entries = [dict(row) for row in await cursor.fetchall()]
+
+            # Get counts for each scope for statistics
+            global_cursor = await conn.execute(
+                "SELECT COUNT(*) as count FROM agent_memory WHERE session_id IS NULL"
+            )
+            global_row = await global_cursor.fetchone()
+            global_count = global_row["count"] if global_row else 0
+
+            session_cursor = await conn.execute(
+                "SELECT COUNT(*) as count FROM agent_memory WHERE session_id IS NOT NULL"
+            )
+            session_row = await session_cursor.fetchone()
+            session_count = session_row["count"] if session_row else 0
+
+            all_count = global_count + session_count
 
         return templates.TemplateResponse(
             request,
@@ -468,6 +517,11 @@ async def memory_dashboard(request: Request) -> HTMLResponse:
                 "request": request,
                 "memory_entries": memory_entries,
                 "total_entries": len(memory_entries),
+                "current_scope": scope,
+                "scope_label": scope_label,
+                "global_count": global_count,
+                "session_count": session_count,
+                "all_count": all_count,
             },
         )
 
@@ -1265,6 +1319,7 @@ async def get_messages(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
+    _test_connection: Any = None,  # Hidden test parameter
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.
@@ -1297,6 +1352,106 @@ async def get_messages(
             logger.debug(f"Cache hit for get_messages: {cache_key}")
             return cached_result  # type: ignore[no-any-return]
 
+        # Handle test connection injection
+        if _test_connection:
+            # Direct connection for tests
+            conn = _test_connection
+            conn.row_factory = aiosqlite.Row
+
+            # Execute the query logic with test connection
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
+
+            # Build query with visibility controls
+            where_conditions = ["session_id = ?"]
+            test_params: list[Any] = [session_id]
+
+            # Agent-specific visibility filtering
+            has_admin_permission = "admin" in agent_context.get("permissions", [])
+
+            if visibility_filter:
+                # Apply specific visibility filter with agent access rules
+                if visibility_filter == "public":
+                    where_conditions.append("visibility = 'public'")
+                elif visibility_filter == "private":
+                    where_conditions.append("visibility = 'private' AND sender = ?")
+                    test_params.append(agent_id)
+                elif visibility_filter == "agent_only":
+                    where_conditions.append("visibility = 'agent_only' AND sender = ?")
+                    test_params.append(agent_id)
+                elif visibility_filter == "admin_only" and has_admin_permission:
+                    where_conditions.append("visibility = 'admin_only'")
+                else:
+                    # Invalid filter or no admin permission for admin_only
+                    return {
+                        "success": True,
+                        "messages": [],
+                        "count": 0,
+                        "total_count": 0,
+                        "has_more": False,
+                    }
+            else:
+                # Apply general visibility controls
+                if has_admin_permission:
+                    # ADMIN: See all messages including admin_only
+                    visibility_conditions = [
+                        "visibility = 'public'",
+                        "visibility = 'private'",
+                        "visibility = 'agent_only'",
+                        "visibility = 'admin_only'",
+                    ]
+                else:
+                    # Standard agent: See public + own private/agent_only
+                    visibility_conditions = [
+                        "visibility = 'public'",
+                        "(visibility = 'private' AND sender = ?)",
+                        "(visibility = 'agent_only' AND sender = ?)",
+                    ]
+                    test_params.extend([agent_id, agent_id])
+
+                visibility_clause = f"({' OR '.join(visibility_conditions)})"
+                where_conditions.append(visibility_clause)
+
+            # First, get total count for pagination
+            count_query = f"""
+                SELECT COUNT(*) FROM messages
+                WHERE {" AND ".join(where_conditions)}
+            """
+            cursor = await conn.execute(count_query, test_params)
+            count_row = await cursor.fetchone()
+            total_count = count_row[0] if count_row else 0
+
+            # Then get the actual messages
+            query = f"""
+                SELECT * FROM messages
+                WHERE {" AND ".join(where_conditions)}
+                ORDER BY timestamp ASC
+                LIMIT ? OFFSET ?
+            """
+            test_params.extend([limit, offset])
+
+            cursor = await conn.execute(query, test_params)
+            messages_rows = await cursor.fetchall()
+            messages = [dict(msg) for msg in messages_rows]
+
+            result = {
+                "success": True,
+                "messages": messages,
+                "count": len(messages),
+                "total_count": total_count,
+                "has_more": offset + limit < total_count,
+            }
+
+            # Phase 4: Cache the result for faster subsequent access (5-minute TTL)
+            await cache_manager.set(cache_key, result, ttl=300, context=cache_context)
+            logger.debug(f"Cached get_messages result: {cache_key}")
+
+            return result
+        # Regular production connection
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             conn.row_factory = aiosqlite.Row
@@ -1351,20 +1506,20 @@ async def get_messages(
 
             # First, get total count for pagination
             count_query = f"""
-                SELECT COUNT(*) FROM messages
-                WHERE {" AND ".join(where_conditions)}
-            """
+                    SELECT COUNT(*) FROM messages
+                    WHERE {" AND ".join(where_conditions)}
+                """
             cursor = await conn.execute(count_query, params)
             count_row = await cursor.fetchone()
             total_count = count_row[0] if count_row else 0
 
             # Then get the actual messages
             query = f"""
-                SELECT * FROM messages
-                WHERE {" AND ".join(where_conditions)}
-                ORDER BY timestamp ASC
-                LIMIT ? OFFSET ?
-            """
+                    SELECT * FROM messages
+                    WHERE {" AND ".join(where_conditions)}
+                    ORDER BY timestamp ASC
+                    LIMIT ? OFFSET ?
+                """
             params.extend([limit, offset])
 
             cursor = await conn.execute(query, params)
@@ -1417,6 +1572,7 @@ async def search_context(
         default=None,
         description="Optional JWT token for elevated permissions",
     ),
+    _test_connection: Any = None,  # Hidden test parameter
 ) -> dict[str, Any]:
     """
     Fuzzy search messages using RapidFuzz for 5-10x performance improvement.
@@ -1455,8 +1611,9 @@ async def search_context(
             cached_result["cache_hit"] = True
             return cached_result  # type: ignore[no-any-return]
 
-        async with get_db_connection() as conn:
-            # Set row factory for dict-like access
+        # Use test connection if provided, otherwise get production connection
+        if _test_connection:
+            conn = _test_connection
             conn.row_factory = aiosqlite.Row
 
             # First, verify session exists
@@ -1475,8 +1632,9 @@ async def search_context(
             params = [session_id]
 
             # Add recency filter to reduce scan scope
+            # Handle both Unix timestamp (numeric) and ISO datetime (string) formats
             where_conditions.append(
-                f"datetime(timestamp) >= datetime('now', '-{recent_hours} hours')"
+                f"(timestamp >= unixepoch('now', '-{recent_hours} hours') OR datetime(timestamp) >= datetime('now', '-{recent_hours} hours'))"
             )
 
             # Apply visibility controls with admin support
@@ -1632,6 +1790,188 @@ async def search_context(
                     "search_time_ms": search_time_ms,
                 },
             )
+        else:
+            # Production connection path
+            async with get_db_connection() as conn:
+                # Set row factory for dict-like access
+                conn.row_factory = aiosqlite.Row
+
+                # First, verify session exists
+                cursor = await conn.execute(
+                    "SELECT id FROM sessions WHERE id = ?", (session_id,)
+                )
+                if not await cursor.fetchone():
+                    return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
+
+                # Pre-filter optimization: Apply time window and row limits first
+                max_rows_scanned = 1000  # Maximum rows to scan for large datasets
+                recent_hours = 168  # 7 days default window
+
+                # Build query with visibility, scope, and pre-filtering
+                where_conditions = ["session_id = ?"]
+                params = [session_id]
+
+                # Add recency filter to reduce scan scope
+                # Handle both Unix timestamp (numeric) and ISO datetime (string) formats
+                where_conditions.append(
+                    f"(timestamp >= unixepoch('now', '-{recent_hours} hours') OR datetime(timestamp) >= datetime('now', '-{recent_hours} hours'))"
+                )
+
+                # Apply visibility controls with admin support
+                if search_scope == "public":
+                    where_conditions.append("visibility = 'public'")
+                elif search_scope == "private":
+                    where_conditions.append("visibility = 'private' AND sender = ?")
+                    params.append(agent_id)
+                else:  # all accessible messages
+                    # Check if agent has admin permissions using extracted agent context
+                    has_admin_permission = "admin" in agent_context.get(
+                        "permissions", []
+                    )
+
+                    if has_admin_permission:
+                        # ADMIN: Unrestricted access to all messages
+                        where_conditions.append("""
+                            (visibility = 'public' OR
+                             visibility = 'private' OR
+                             visibility = 'agent_only' OR
+                             visibility = 'admin_only')
+                        """)
+                        # No sender restrictions for admin
+                    else:
+                        # Non-admin: Limited to public + own private/agent_only
+                        where_conditions.append("""
+                            (visibility = 'public' OR
+                             (visibility = 'private' AND sender = ?) OR
+                             (visibility = 'agent_only' AND sender = ?))
+                        """)
+                        params.append(agent_id)
+                        params.append(agent_id)
+
+                cursor = await conn.execute(
+                    f"""
+                    SELECT * FROM messages
+                    WHERE {" AND ".join(where_conditions)}
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """,
+                    params + [max_rows_scanned],
+                )
+
+                rows = await cursor.fetchall()
+
+                if not rows:
+                    return {
+                        "success": True,
+                        "results": [],
+                        "query": query,
+                        "message_count": 0,
+                        "search_time_ms": round((time.time() - start_time) * 1000, 2),
+                    }
+
+                # Prepare searchable text with optimized processing
+                searchable_items = []
+                for row in rows:
+                    msg = dict(row)
+
+                    # Build searchable text efficiently
+                    text_parts = [msg.get("sender", ""), msg.get("content", "")]
+
+                    if search_metadata and msg.get("metadata"):
+                        try:
+                            metadata = json.loads(msg["metadata"])
+                            if isinstance(metadata, dict):
+                                # Extract searchable metadata values
+                                searchable_values = [
+                                    str(v)
+                                    for v in metadata.values()
+                                    if v and isinstance(v, (str, int, float, bool))
+                                ]
+                                text_parts.extend(searchable_values)
+                        except json.JSONDecodeError:
+                            pass
+
+                    searchable_text = " ".join(text_parts).lower()
+                    searchable_items.append((searchable_text, msg))
+
+                # Use RapidFuzz for high-performance matching
+                # Extract just the searchable text for simpler processing
+                searchable_texts = [item[0] for item in searchable_items]
+
+                # RapidFuzz process.extract for optimal performance
+                matches = process.extract(
+                    query.lower(),
+                    searchable_texts,
+                    scorer=fuzz.partial_ratio,  # Better for finding substrings in search context
+                    limit=limit,
+                    score_cutoff=fuzzy_threshold,
+                )
+
+                # Build optimized results
+                results = []
+                for match in matches:
+                    match_text, score, _ = match
+
+                    # Find the corresponding message by matching the searchable text
+                    message = None
+                    for text, msg in searchable_items:
+                        if text == match_text:
+                            message = msg
+                            break
+
+                    if not message:
+                        continue
+
+                    # Parse metadata for result
+                    metadata = {}
+                    if message.get("metadata"):
+                        try:
+                            metadata = json.loads(message["metadata"])
+                        except json.JSONDecodeError:
+                            metadata = {}
+
+                    # Create match preview with highlighting context
+                    content = message["content"]
+                    preview_length = 150
+                    if len(content) > preview_length:
+                        content = content[:preview_length] + "..."
+
+                    results.append(
+                        {
+                            "message": {
+                                "id": message["id"],
+                                "sender": message["sender"],
+                                "content": message["content"],
+                                "timestamp": message["timestamp"],
+                                "visibility": message["visibility"],
+                                "metadata": metadata,
+                            },
+                            "score": round(score, 2),
+                            "match_preview": content,
+                            "relevance": "high"
+                            if score >= 80
+                            else "medium"
+                            if score >= 60
+                            else "low",
+                        }
+                    )
+
+                search_time_ms = round((time.time() - start_time) * 1000, 2)
+
+                # Audit search operation
+                await audit_log(
+                    conn,
+                    "context_searched",
+                    agent_id,
+                    session_id,
+                    {
+                        "query": query,
+                        "results_count": len(results),
+                        "threshold": fuzzy_threshold,
+                        "search_scope": search_scope,
+                        "search_time_ms": search_time_ms,
+                    },
+                )
 
         result = {
             "success": True,
@@ -1663,16 +2003,17 @@ async def search_by_sender(
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
+    _test_connection: Any = None,  # Hidden test parameter
 ) -> dict[str, Any]:
     """Search messages by specific sender with agent visibility controls."""
 
     try:
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
-        async with get_db_connection() as conn:
-            conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+        # Use test connection if provided, otherwise get production connection
+        if _test_connection:
+            conn = _test_connection
+            conn.row_factory = aiosqlite.Row
 
             # First, verify session exists
             cursor = await conn.execute(
@@ -1703,26 +2044,6 @@ async def search_by_sender(
                 "sender": sender,
                 "count": len(messages),
             }
-
-    except Exception:
-        logger.exception("Failed to search by sender")
-        logger.debug(traceback.format_exc())
-        return create_system_error("search_by_sender", "database", temporary=True)
-
-
-@mcp.tool()
-async def search_by_timerange(
-    ctx: Context,
-    session_id: str = Field(description="Session ID to search within"),
-    start_time: str = Field(description="Start time (ISO format)"),
-    end_time: str = Field(description="End time (ISO format)"),
-    limit: int = Field(default=50, ge=1, le=200),
-) -> dict[str, Any]:
-    """Search messages within a specific time range."""
-
-    try:
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
-
         async with get_db_connection() as conn:
             conn.row_factory = (
                 aiosqlite.Row
@@ -1737,17 +2058,123 @@ async def search_by_timerange(
 
             cursor = await conn.execute(
                 """
+                    SELECT * FROM messages
+                    WHERE session_id = ? AND sender = ?
+                    AND (visibility = 'public' OR
+                         (visibility = 'private' AND sender = ?) OR
+                         (visibility = 'agent_only' AND sender = ?))
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """,
+                (session_id, sender, agent_id, agent_id, limit),
+            )
+
+            messages_rows = await cursor.fetchall()
+            messages = [dict(msg) for msg in messages_rows]
+
+            return {
+                "success": True,
+                "messages": messages,
+                "sender": sender,
+                "count": len(messages),
+            }
+
+    except Exception:
+        logger.exception("Failed to search by sender")
+        logger.debug(traceback.format_exc())
+        return create_system_error("search_by_sender", "database", temporary=True)
+
+
+@mcp.tool()
+async def search_by_timerange(
+    ctx: Context,
+    session_id: str = Field(description="Session ID to search within"),
+    start_time: str = Field(description="Start time (ISO format)"),
+    end_time: str = Field(description="End time (ISO format)"),
+    limit: int = Field(default=50, ge=1, le=200),
+    _test_connection: Any = None,  # Hidden test parameter
+) -> dict[str, Any]:
+    """Search messages within a specific time range."""
+
+    try:
+        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+
+        # Convert ISO datetime strings to Unix timestamps for comparison
+        try:
+            start_unix = datetime.fromisoformat(
+                start_time.replace("Z", "+00:00")
+            ).timestamp()
+            end_unix = datetime.fromisoformat(
+                end_time.replace("Z", "+00:00")
+            ).timestamp()
+        except ValueError:
+            return {
+                "success": False,
+                "error": "Invalid datetime format",
+                "code": "INVALID_DATETIME",
+            }
+
+        # Use test connection if provided, otherwise get production connection
+        if _test_connection:
+            conn = _test_connection
+            conn.row_factory = aiosqlite.Row
+
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
+
+            cursor = await conn.execute(
+                """
                 SELECT * FROM messages
                 WHERE session_id = ?
-                AND datetime(timestamp) >= datetime(?)
-                AND datetime(timestamp) <= datetime(?)
+                AND timestamp >= ?
+                AND timestamp <= ?
                 AND (visibility = 'public' OR
                      (visibility = 'private' AND sender = ?) OR
                      (visibility = 'agent_only' AND sender = ?))
                 ORDER BY timestamp ASC
                 LIMIT ?
             """,
-                (session_id, start_time, end_time, agent_id, agent_id, limit),
+                (session_id, start_unix, end_unix, agent_id, agent_id, limit),
+            )
+
+            messages_rows = await cursor.fetchall()
+            messages = [dict(msg) for msg in messages_rows]
+
+            return {
+                "success": True,
+                "messages": messages,
+                "timerange": {"start": start_time, "end": end_time},
+                "count": len(messages),
+            }
+        async with get_db_connection() as conn:
+            conn.row_factory = (
+                aiosqlite.Row
+            )  # CRITICAL: Set row factory for dict access
+
+            # First, verify session exists
+            cursor = await conn.execute(
+                "SELECT id FROM sessions WHERE id = ?", (session_id,)
+            )
+            if not await cursor.fetchone():
+                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
+
+            cursor = await conn.execute(
+                """
+                    SELECT * FROM messages
+                    WHERE session_id = ?
+                    AND timestamp >= ?
+                    AND timestamp <= ?
+                    AND (visibility = 'public' OR
+                         (visibility = 'private' AND sender = ?) OR
+                         (visibility = 'agent_only' AND sender = ?))
+                    ORDER BY timestamp ASC
+                    LIMIT ?
+                """,
+                (session_id, start_unix, end_unix, agent_id, agent_id, limit),
             )
 
             messages_rows = await cursor.fetchall()
@@ -1995,6 +2422,30 @@ async def set_memory(
 
             # Trigger resource notifications
             await trigger_resource_notifications(session_id or "global", agent_id)
+
+            # Send WebSocket notification for memory updates
+            if session_id:  # Only notify for session-scoped memory
+                try:
+                    memory_data = {
+                        "type": "memory_update",
+                        "data": {
+                            "agent_id": agent_id,
+                            "key": key,
+                            "value": value,
+                            "session_id": session_id,
+                            "scope": "session",
+                            "created_at": created_at_timestamp,
+                            "updated_at": now_timestamp.isoformat(),
+                        },
+                    }
+                    await websocket_manager.broadcast_to_session(
+                        session_id, memory_data
+                    )
+
+                    # HTTP bridge notification to WebSocket server
+                    await _notify_websocket_server(session_id, memory_data)
+                except Exception as e:
+                    logger.warning(f"Failed to send WebSocket memory notification: {e}")
 
         return {
             "success": True,

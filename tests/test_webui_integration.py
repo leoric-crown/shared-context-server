@@ -165,7 +165,9 @@ async def test_session_view_structure(test_client: httpx.AsyncClient):
     assert "session-view" in content
     assert "breadcrumb" in content
     assert "session-info" in content
-    assert "messages-container" in content
+    assert "tab-container" in content  # Updated for tabbed interface
+    assert "messages-pane" in content  # New tabbed structure
+    assert "memory-tab" in content  # Memory tab feature
     assert "Session:" in content
 
 
@@ -177,9 +179,9 @@ async def test_css_and_js_references(test_client: httpx.AsyncClient):
     assert response.status_code == 200
     content = response.text
 
-    # Check for CSS and JS references
-    assert 'href="/ui/static/css/style.css"' in content
-    assert 'src="/ui/static/js/app.js"' in content
+    # Check for CSS and JS references (with version parameters)
+    assert 'href="/ui/static/css/style.css?v=' in content  # Updated for versioned CSS
+    assert 'src="/ui/static/js/app.js?v=' in content  # Updated for versioned JS
 
     # Check for external font reference
     assert "fonts.googleapis.com" in content
@@ -194,8 +196,8 @@ async def test_memory_dashboard_endpoint(test_client: httpx.AsyncClient):
     assert "text/html" in response.headers["content-type"]
 
     content = response.text
-    assert "Global Memory Entries" in content
-    assert "Global Memory - Shared Context Server" in content
+    assert "Memory Entries" in content  # Updated for scope-aware title
+    assert "Memory Dashboard - Shared Context Server" in content  # Updated title
     assert "memory-dashboard" in content
     # Should show either memory entries or empty state
     assert "memory-table" in content or "empty-state" in content

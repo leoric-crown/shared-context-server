@@ -70,12 +70,20 @@
         </div>
     </div>
 
-    <div class="messages-container">
-        <div class="messages-header">
-            <h2>Messages ({{ messages|length }})</h2>
-        </div>
+    <div class="session-content">
+        <div class="tab-container">
+            <div class="tab-header">
+                <button class="tab-button active" onclick="switchTab('messages')" id="messages-tab">
+                    Messages ({{ messages|length }})
+                </button>
+                <button class="tab-button" onclick="switchTab('memory')" id="memory-tab">
+                    Memory ({{ session_memory|length }})
+                </button>
+            </div>
 
-        <div class="messages-list" id="messages-list">
+            <div class="tab-content">
+                <div class="tab-pane active" id="messages-pane">
+                    <div class="messages-list" id="messages-list">
             {% if messages %}
                 {% for message in messages %}
                 <div class="message-item" data-message-id="{{ message.id }}">
@@ -137,6 +145,104 @@
                 <p>Messages will appear here when agents add them to this session.</p>
             </div>
             {% endif %}
+                    </div>
+                </div>
+
+                <div class="tab-pane" id="memory-pane">
+                    {% if session_memory %}
+                    <div class="memory-table-container">
+                        <table class="memory-table">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Agent</th>
+                                    <th>Value Preview</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in session_memory %}
+                                <tr class="memory-row">
+                                    <td class="memory-key">
+                                        <code>{{ entry.key|e }}</code>
+                                    </td>
+                                    <td class="memory-agent">
+                                        <span class="agent-badge">{{ entry.agent_id|e }}</span>
+                                    </td>
+                                    <td class="memory-value">
+                                        {% set value_text = entry.value|e %}
+                                        {% if value_text|length > 100 %}
+                                            <span class="value-preview">{{ value_text[:100] }}...</span>
+                                        {% else %}
+                                            <span class="value-preview">{{ value_text }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="memory-created">
+                                        <span class="timestamp-value">
+                                            <script>
+                                                document.write((function() {
+                                                    const timestamp = "{{ entry.created_at }}";
+                                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                                        if (!isNaN(date.getTime())) {
+                                                            return date.toLocaleString(undefined, {
+                                                                year: 'numeric',
+                                                                month: 'numeric',
+                                                                day: 'numeric',
+                                                                hour: 'numeric',
+                                                                minute: '2-digit',
+                                                                second: '2-digit',
+                                                                timeZoneName: 'short'
+                                                            });
+                                                        }
+                                                    }
+                                                    return timestamp;
+                                                })());
+                                            </script>
+                                        </span>
+                                    </td>
+                                    <td class="memory-actions">
+                                        <button class="btn btn-sm btn-secondary" onclick="viewFullValue('{{ entry.key|e }}', {{ entry.value|tojson|e }})">
+                                            View Full
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">🧠</div>
+                        <h3>No Session Memory</h3>
+                        <p>Session-scoped memory entries will appear here when agents create them.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for viewing full values -->
+<div id="value-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Memory Value</h3>
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="modal-key">
+                <strong>Key:</strong> <code id="modal-key"></code>
+            </div>
+            <div class="modal-value">
+                <strong>Value:</strong>
+                <pre id="modal-value"></pre>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Close</button>
         </div>
     </div>
 </div>
@@ -232,9 +338,155 @@ function updateConnectionStatus(status) {
 function handleRealtimeMessage(message) {
     if (message.type === 'new_message') {
         addNewMessage(message.data);
+    } else if (message.type === 'memory_update') {
+        handleMemoryUpdate(message.data);
     } else if (message.type === 'session_update') {
         // Refresh the page for session updates
         window.location.reload();
+    }
+}
+
+// Handle real-time memory updates
+function handleMemoryUpdate(memoryData) {
+    // Update memory tab count
+    updateMemoryCount();
+
+    // If memory tab is active, update the table
+    const memoryPane = document.getElementById('memory-pane');
+    if (memoryPane.classList.contains('active')) {
+        addOrUpdateMemoryEntry(memoryData);
+    }
+}
+
+// Update memory count in tab
+function updateMemoryCount() {
+    const memoryRows = document.querySelectorAll('#memory-pane .memory-row');
+    const memoryTab = document.getElementById('memory-tab');
+    memoryTab.textContent = `Memory (${memoryRows.length})`;
+}
+
+// Add or update memory entry in the table
+function addOrUpdateMemoryEntry(memoryData) {
+    const memoryTable = document.querySelector('#memory-pane .memory-table tbody');
+    const emptyState = document.querySelector('#memory-pane .empty-state');
+
+    // Remove empty state if present
+    if (emptyState) {
+        emptyState.remove();
+        // Create table if it doesn't exist
+        if (!memoryTable) {
+            createMemoryTable();
+        }
+    }
+
+    if (memoryTable) {
+        // Check if entry already exists
+        const existingRow = document.querySelector(`#memory-pane .memory-row[data-key="${memoryData.key}"]`);
+
+        if (existingRow) {
+            // Update existing row
+            updateMemoryRow(existingRow, memoryData);
+        } else {
+            // Add new row
+            const newRow = createMemoryRow(memoryData);
+            // Insert at the top (most recent first)
+            memoryTable.insertBefore(newRow, memoryTable.firstChild);
+        }
+
+        updateMemoryCount();
+    }
+}
+
+// Create memory row element
+function createMemoryRow(memoryData) {
+    const row = document.createElement('tr');
+    row.className = 'memory-row';
+    row.setAttribute('data-key', memoryData.key);
+
+    const timestamp = (function() {
+        const ts = memoryData.created_at;
+        if (typeof ts === 'number') {
+            const date = new Date(ts * 1000);
+            if (!isNaN(date.getTime())) {
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    timeZoneName: 'short'
+                });
+            }
+        }
+        return ts;
+    })();
+
+    const valuePreview = memoryData.value.length > 100 ?
+        memoryData.value.substring(0, 100) + '...' :
+        memoryData.value;
+
+    row.innerHTML = `
+        <td class="memory-key">
+            <code>${escapeHtml(memoryData.key)}</code>
+        </td>
+        <td class="memory-agent">
+            <span class="agent-badge">${escapeHtml(memoryData.agent_id)}</span>
+        </td>
+        <td class="memory-value">
+            <span class="value-preview">${escapeHtml(valuePreview)}</span>
+        </td>
+        <td class="memory-created">
+            <span class="timestamp-value">${timestamp}</span>
+        </td>
+        <td class="memory-actions">
+            <button class="btn btn-sm btn-secondary" onclick="viewFullValue('${escapeHtml(memoryData.key)}', ${JSON.stringify(memoryData.value).replace(/'/g, '\\\'')})">
+                View Full
+            </button>
+        </td>
+    `;
+
+    return row;
+}
+
+// Update existing memory row
+function updateMemoryRow(row, memoryData) {
+    const valueCell = row.querySelector('.memory-value .value-preview');
+    const timestampCell = row.querySelector('.timestamp-value');
+    const actionButton = row.querySelector('.memory-actions button');
+
+    const valuePreview = memoryData.value.length > 100 ?
+        memoryData.value.substring(0, 100) + '...' :
+        memoryData.value;
+
+    if (valueCell) {
+        valueCell.textContent = valuePreview;
+    }
+
+    if (timestampCell) {
+        const timestamp = (function() {
+            const ts = memoryData.updated_at || memoryData.created_at;
+            if (typeof ts === 'number') {
+                const date = new Date(ts * 1000);
+                if (!isNaN(date.getTime())) {
+                    return date.toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: 'numeric',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        timeZoneName: 'short'
+                    });
+                }
+            }
+            return ts;
+        })();
+        timestampCell.textContent = timestamp;
+    }
+
+    if (actionButton) {
+        actionButton.setAttribute('onclick', `viewFullValue('${escapeHtml(memoryData.key)}', ${JSON.stringify(memoryData.value).replace(/'/g, '\\\'')})"`);
     }
 }
 
@@ -318,8 +570,45 @@ function getSenderIcon(senderType) {
 // Update message count in header
 function updateMessageCount() {
     const messages = document.querySelectorAll('.message-item');
-    const header = document.querySelector('.messages-header h2');
-    header.textContent = `Messages (${messages.length})`;
+    const messagesTab = document.getElementById('messages-tab');
+    messagesTab.textContent = `Messages (${messages.length})`;
+}
+
+// Tab switching functionality
+function switchTab(tabName) {
+    // Hide all tab panes
+    const panes = document.querySelectorAll('.tab-pane');
+    panes.forEach(pane => pane.classList.remove('active'));
+
+    // Remove active class from all tab buttons
+    const buttons = document.querySelectorAll('.tab-button');
+    buttons.forEach(button => button.classList.remove('active'));
+
+    // Show selected tab pane
+    document.getElementById(tabName + '-pane').classList.add('active');
+
+    // Add active class to selected tab button
+    document.getElementById(tabName + '-tab').classList.add('active');
+}
+
+// View full value in modal
+function viewFullValue(key, value) {
+    document.getElementById('modal-key').textContent = key;
+    document.getElementById('modal-value').textContent = value;
+    document.getElementById('value-modal').style.display = 'block';
+}
+
+// Close modal
+function closeModal() {
+    document.getElementById('value-modal').style.display = 'none';
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('value-modal');
+    if (event.target === modal) {
+        closeModal();
+    }
 }
 
 // Copy to clipboard utility
@@ -367,4 +656,257 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
 });
 </script>
+
+<style>
+/* Tab container styles */
+.tab-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.tab-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.tab-button {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-button:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.tab-button.active {
+    background: white;
+    color: #007bff;
+    border-bottom-color: #007bff;
+}
+
+.tab-content {
+    min-height: 400px;
+}
+
+.tab-pane {
+    display: none;
+    padding: 1.5rem;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Memory table styles */
+.memory-table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.memory-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.memory-table th,
+.memory-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.memory-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.memory-key code {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.85rem;
+}
+
+.agent-badge {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.value-preview {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #f8f9fa;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-sm:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+/* Empty state styles */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #6c757d;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+}
+
+.empty-state h3 {
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+.empty-state p {
+    margin: 0;
+    opacity: 0.8;
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background-color: white;
+    margin: 5% auto;
+    padding: 0;
+    width: 80%;
+    max-width: 800px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.modal-close {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-key,
+.modal-value {
+    margin-bottom: 1rem;
+}
+
+.modal-key code {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.modal-value pre {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid #eee;
+    text-align: right;
+}
+
+.btn-secondary {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #6c757d;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    border-color: #545b62;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .tab-button {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .tab-pane {
+        padding: 1rem;
+    }
+
+    .memory-table th,
+    .memory-table td {
+        padding: 0.5rem;
+        font-size: 0.85rem;
+    }
+}
+</style>
 {% endblock %}

@@ -541,12 +541,35 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
                 yield conn
 
     # Patch all the places where get_db_connection is used
+    # This comprehensive patching covers both direct imports and local references
     patches = [
+        # Database module source
         patch(
             "shared_context_server.database.get_db_connection", mock_get_db_connection
         ),
+        patch(
+            "src.shared_context_server.database.get_db_connection",
+            mock_get_db_connection,
+        ),
+        # Server module imports (handles `from .database import get_db_connection`)
         patch("shared_context_server.server.get_db_connection", mock_get_db_connection),
+        patch(
+            "src.shared_context_server.server.get_db_connection", mock_get_db_connection
+        ),
+        # Auth module imports
         patch("shared_context_server.auth.get_db_connection", mock_get_db_connection),
+        patch(
+            "src.shared_context_server.auth.get_db_connection", mock_get_db_connection
+        ),
+        # WebSocket module imports
+        patch(
+            "shared_context_server.websocket_server.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "src.shared_context_server.websocket_server.get_db_connection",
+            mock_get_db_connection,
+        ),
     ]
 
     # Return a context manager that applies all patches
@@ -942,3 +965,54 @@ def pytest_unconfigure(config):
         _quiet_print(f"⚠️ Could not restore original functions: {e}")
 
     _quiet_print("🚪 Unconfigure hook completed - process should exit cleanly")
+
+
+# ============================================================================
+# Common Test Fixtures for Database Testing
+# ============================================================================
+
+
+@pytest.fixture
+async def server_with_db(test_db_manager):
+    """Create server instance with test database."""
+    from shared_context_server import server
+
+    with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        yield server
+
+
+@pytest.fixture
+async def search_test_session(server_with_db, test_db_manager):
+    """Create a test session with sample messages for search testing."""
+    from shared_context_server.server import add_message, create_session
+
+    ctx = MockContext("test_search_session")
+
+    # Create session
+    session_result = await call_fastmcp_tool(
+        create_session, ctx, purpose="Search testing session"
+    )
+    session_id = session_result["session_id"]
+
+    # Add test messages for search functionality
+    test_messages = [
+        "FastAPI framework implementation with async/await patterns",
+        "Database connection optimization techniques",
+        "Memory system performance improvements",
+        "Agent authentication workflow patterns",
+        "Fuzzy search performance optimization",
+        "WebSocket real-time communication setup",
+        "Error handling and retry mechanisms",
+        "Session management and state persistence",
+    ]
+
+    for i, content in enumerate(test_messages):
+        await call_fastmcp_tool(
+            add_message,
+            ctx,
+            session_id=session_id,
+            content=content,
+            metadata={"test_index": i, "category": "search_test"},
+        )
+
+    yield session_id, ctx

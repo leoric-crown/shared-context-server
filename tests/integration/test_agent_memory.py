@@ -40,14 +40,14 @@ def mock_database():
         nonlocal sessions, agent_memory, audit_log
 
         if "INSERT INTO sessions" in query:
-            session_id, purpose, created_by, metadata = params
+            session_id, purpose, created_by, metadata, created_at, updated_at = params
             sessions[session_id] = {
                 "id": session_id,
                 "purpose": purpose,
                 "created_by": created_by,
                 "metadata": metadata,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": created_at,
+                "updated_at": updated_at,
                 "is_active": True,
             }
             return AsyncMock(lastrowid=None)
