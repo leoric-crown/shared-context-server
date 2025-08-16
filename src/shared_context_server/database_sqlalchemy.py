@@ -16,6 +16,7 @@ Key features:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -270,6 +271,22 @@ class SQLAlchemyConnectionWrapper:
                 if "transaction" in pragma.lower():
                     logger.debug(f"Skipping transaction-sensitive PRAGMA: {pragma}")
                     continue
+
+                # Add small delay before PRAGMA optimize to prevent hot reload conflicts
+                if "optimize" in pragma.lower():
+                    from .config import get_config
+
+                    config = get_config()
+                    # Only apply delay in development mode and not during testing
+                    if (
+                        config.development.environment == "development"
+                        and not _is_testing_environment()
+                    ):
+                        await asyncio.sleep(0.1)
+                        logger.debug(
+                            "Applying PRAGMA optimize with delay for hot reload compatibility (development mode)"
+                        )
+
                 await self.conn.execute(text(pragma))
 
             # Validate critical settings

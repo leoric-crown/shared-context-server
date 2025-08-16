@@ -307,7 +307,9 @@ class DevelopmentServer:
 
                 def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
                     self.last_reload: float = 0
-                    self.debounce_time: float = 1.0  # 1 second debounce
+                    self.debounce_time: float = (
+                        1.5  # 1.5 second debounce for database compatibility
+                    )
                     self.loop = loop
 
                 def on_modified(self, event: FileSystemEvent) -> None:
