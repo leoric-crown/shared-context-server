@@ -14,6 +14,7 @@ also look into this message:
     legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
       warnings.warn("remove second argument of ws_handler", DeprecationWarning)
 
+we should also think about adding token refresh events and memory setting and getting events to the logs in our ui
 
 in dashboard: we are limiting query to 50 results, but we also need to display a total count of sessions (right now we have more than 50, but the ui says 50 sessions)
 in dashboard: created seems to always display just now (probably timezone issues?) look into this - it may have been fixed by recent datetime changes
