@@ -27,7 +27,28 @@
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Created at:</span>
-                    <span class="meta-value" data-timestamp="{{ session.created_at }}">{{ session.created_at }}</span>
+                    <span class="meta-value">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.created_at }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        return date.toLocaleString(undefined, {
+                                            year: 'numeric',
+                                            month: 'numeric',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                            timeZoneName: 'short'
+                                        });
+                                    }
+                                }
+                                return timestamp;
+                            })());
+                        </script>
+                    </span>
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Status:</span>
@@ -68,8 +89,27 @@
                             <span class="sender-name">{{ message.sender }}</span>
                         </div>
                         <div class="message-meta">
-                            <span class="message-timestamp" data-timestamp="{{ message.timestamp }}">
-                                {{ message.timestamp }}
+                            <span class="message-timestamp">
+                                <script>
+                                    document.write((function() {
+                                        const timestamp = "{{ message.timestamp }}";
+                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                            const date = new Date(parseFloat(timestamp) * 1000);
+                                            if (!isNaN(date.getTime())) {
+                                                return date.toLocaleString(undefined, {
+                                                    year: 'numeric',
+                                                    month: 'numeric',
+                                                    day: 'numeric',
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                    timeZoneName: 'short'
+                                                });
+                                            }
+                                        }
+                                        return timestamp;
+                                    })());
+                                </script>
                             </span>
                             <span class="visibility-badge visibility-{{ message.visibility }}">
                                 {{ message.visibility }}
@@ -226,7 +266,24 @@ function createMessageElement(message) {
     messageDiv.setAttribute('data-message-id', message.id);
 
     const senderIcon = getSenderIcon(message.sender_type);
-    const timestamp = new Date(message.timestamp).toLocaleString();
+    const timestamp = (function() {
+        const ts = message.timestamp;
+        if (/^\d+(\.\d+)?$/.test(ts)) {
+            const date = new Date(parseFloat(ts) * 1000);
+            if (!isNaN(date.getTime())) {
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    timeZoneName: 'short'
+                });
+            }
+        }
+        return ts;
+    })();
 
     messageDiv.innerHTML = `
         <div class="message-header">
@@ -304,22 +361,8 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
-// Format timestamps on page load
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // Format all timestamps
-    const timestampElements = document.querySelectorAll('[data-timestamp]');
-    timestampElements.forEach(element => {
-        const timestamp = element.getAttribute('data-timestamp');
-        if (timestamp) {
-            try {
-                const date = new Date(timestamp);
-                element.textContent = date.toLocaleString();
-            } catch (e) {
-                console.warn('Failed to parse timestamp:', timestamp);
-            }
-        }
-    });
-
     // Connect WebSocket
     connectWebSocket();
 });

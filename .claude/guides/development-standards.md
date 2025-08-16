@@ -133,7 +133,24 @@ For complex components this looks like:
 - All features must integrate with existing architecture patterns
 - Maintain consistency with established data handling approaches
 - Support multi-component coordination when applicable
-- Use UTC timestamps for all time-based functionality
+
+### Timestamp Management Standards
+
+**CRITICAL: All timestamps MUST use Unix format (seconds since epoch) for consistency**
+
+- **Backend Storage**: Always use `datetime.now(timezone.utc).timestamp()` for database storage
+- **Frontend Display**: Use consistent JavaScript conversion with timezone support:
+  ```javascript
+  const date = new Date(parseFloat(timestamp) * 1000);
+  date.toLocaleString(undefined, {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', second: '2-digit',
+      timeZoneName: 'short'
+  });
+  ```
+- **Never use SQLite CURRENT_TIMESTAMP** - it creates inconsistent string formats
+- **Never use ISO format strings** - they complicate timezone conversion
+- **Always test timezone conversion** - verify local time display across all UI components
 
 ### Service Integration Pattern
 

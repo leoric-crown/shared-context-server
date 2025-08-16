@@ -45,16 +45,54 @@
             <div class="session-timestamps">
                 <div class="timestamp-item">
                     <span class="timestamp-label">Created:</span>
-                    <span class="timestamp-value" data-timestamp="{{ session.created_at }}">
-                        {{ session.created_at }}
+                    <span class="timestamp-value">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.created_at }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        return date.toLocaleString(undefined, {
+                                            year: 'numeric',
+                                            month: 'numeric',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                            timeZoneName: 'short'
+                                        });
+                                    }
+                                }
+                                return timestamp;
+                            })());
+                        </script>
                     </span>
                 </div>
 
                 {% if session.last_activity %}
                 <div class="timestamp-item">
                     <span class="timestamp-label">Last Activity:</span>
-                    <span class="timestamp-value" data-timestamp="{{ session.last_activity }}">
-                        {{ session.last_activity }}
+                    <span class="timestamp-value">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.last_activity }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        return date.toLocaleString(undefined, {
+                                            year: 'numeric',
+                                            month: 'numeric',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                            timeZoneName: 'short'
+                                        });
+                                    }
+                                }
+                                return timestamp;
+                            })());
+                        </script>
                     </span>
                 </div>
                 {% endif %}
@@ -123,20 +161,6 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
-// Format timestamps on page load
-document.addEventListener('DOMContentLoaded', () => {
-    const timestampElements = document.querySelectorAll('.timestamp-value[data-timestamp]');
-    timestampElements.forEach(element => {
-        const timestamp = element.getAttribute('data-timestamp');
-        if (timestamp) {
-            try {
-                const date = new Date(timestamp);
-                element.textContent = date.toLocaleString();
-            } catch (e) {
-                console.warn('Failed to parse timestamp:', timestamp);
-            }
-        }
-    });
-});
+// Timestamps are now formatted inline during template rendering
 </script>
 {% endblock %}

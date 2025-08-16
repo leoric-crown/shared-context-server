@@ -1,5 +1,6 @@
 .kiro/
 .DS_Store
+.playwright-mcp
 
 # Python
 __pycache__/

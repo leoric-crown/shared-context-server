@@ -230,3 +230,4 @@ claude_token = await authenticate_agent(agent_id="dev_agent", agent_type="claude
 **Key Requirement**: `agent_type="admin"` required for admin-level permissions.
 
 - use uv run python instead of python3
+- **CRITICAL**: All timestamps must use Unix format (`datetime.now(timezone.utc).timestamp()`) for consistent timezone display

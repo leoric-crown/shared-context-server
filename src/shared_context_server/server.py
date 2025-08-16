@@ -439,6 +439,47 @@ async def session_view(request: Request) -> HTMLResponse:
         )
 
 
+@mcp.custom_route("/ui/memory", methods=["GET"])
+async def memory_dashboard(request: Request) -> HTMLResponse:
+    """
+    Global memory dashboard displaying all global memory entries.
+    """
+    try:
+        async with get_db_connection() as conn:
+            # Set row factory for dict-like access
+            if hasattr(conn, "row_factory"):
+                conn.row_factory = aiosqlite.Row
+
+            # Get global memory entries (where session_id IS NULL)
+            cursor = await conn.execute("""
+                SELECT agent_id, key, value, created_at, updated_at
+                FROM agent_memory
+                WHERE session_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 50
+            """)
+
+            memory_entries = [dict(row) for row in await cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            request,
+            "memory.html",
+            {
+                "request": request,
+                "memory_entries": memory_entries,
+                "total_entries": len(memory_entries),
+            },
+        )
+
+    except Exception as e:
+        logger.exception("Memory dashboard failed to load")
+
+        return HTMLResponse(
+            f"<html><body><h1>Memory Dashboard Error</h1><p>Type: {type(e).__name__}</p><p>Error: {e}</p></body></html>",
+            status_code=500,
+        )
+
+
 @mcp.custom_route("/ui/config", methods=["GET"])
 async def ui_config(_request: Request) -> JSONResponse:
     """
@@ -962,14 +1003,22 @@ async def create_session(
 
         # Serialize metadata for database storage
         metadata_str = serialize_metadata(metadata) if metadata else None
+        current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
             await conn.execute(
                 """
-                INSERT INTO sessions (id, purpose, created_by, metadata)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO sessions (id, purpose, created_by, metadata, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
             """,
-                (session_id, purpose, agent_id, metadata_str),
+                (
+                    session_id,
+                    purpose,
+                    agent_id,
+                    metadata_str,
+                    current_timestamp,
+                    current_timestamp,
+                ),
             )
             await conn.commit()
 
@@ -1134,11 +1183,12 @@ async def add_message(
                 return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             # Insert message with sender_type (Phase 3 enhancement)
+            current_timestamp = datetime.now(timezone.utc).timestamp()
             cursor = await conn.execute(
                 """
                 INSERT INTO messages
-                (session_id, sender, sender_type, content, visibility, metadata, parent_message_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (session_id, sender, sender_type, content, visibility, metadata, parent_message_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     session_id,
@@ -1148,6 +1198,7 @@ async def add_message(
                     visibility,
                     metadata_str,
                     parent_message_id,
+                    current_timestamp,
                 ),
             )
 

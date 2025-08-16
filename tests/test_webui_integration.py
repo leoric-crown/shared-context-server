@@ -185,6 +185,95 @@ async def test_css_and_js_references(test_client: httpx.AsyncClient):
     assert "fonts.googleapis.com" in content
 
 
+@pytest.mark.asyncio
+async def test_memory_dashboard_endpoint(test_client: httpx.AsyncClient):
+    """Test that memory dashboard endpoint returns HTML with memory data."""
+    response = await test_client.get("/ui/memory")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
+    content = response.text
+    assert "Global Memory Entries" in content
+    assert "Global Memory - Shared Context Server" in content
+    assert "memory-dashboard" in content
+    # Should show either memory entries or empty state
+    assert "memory-table" in content or "empty-state" in content
+
+
+@pytest.mark.asyncio
+async def test_memory_dashboard_with_entries(test_client: httpx.AsyncClient):
+    """Test memory dashboard displays memory entries correctly."""
+    # Create a test session and add some memory entries via set_memory tool
+    ctx = MockContext(session_id="memory_test", agent_id="test_agent")
+
+    # Create a global memory entry (session_id=None)
+    from shared_context_server.server import set_memory
+
+    await call_fastmcp_tool(
+        set_memory,
+        ctx,
+        key="test_global_key",
+        value="test_global_value",
+        session_id=None,  # Global memory
+    )
+
+    # Test the memory dashboard
+    response = await test_client.get("/ui/memory")
+
+    assert response.status_code == 200
+    content = response.text
+
+    # Check for memory table structure
+    assert "memory-table" in content
+    assert "memory-row" in content
+    assert "test_global_key" in content
+    assert (
+        "test_global_value" in content or "test_global_val..." in content
+    )  # May be truncated
+
+
+@pytest.mark.asyncio
+async def test_memory_dashboard_navigation_link(test_client: httpx.AsyncClient):
+    """Test that Memory navigation link appears in the navbar."""
+    response = await test_client.get("/ui/")
+
+    assert response.status_code == 200
+    content = response.text
+
+    # Check for Memory navigation link
+    assert 'href="/ui/memory"' in content
+    assert ">Memory<" in content
+
+
+@pytest.mark.asyncio
+async def test_memory_dashboard_navigation_active_state(test_client: httpx.AsyncClient):
+    """Test that Memory navigation link is active when on memory page."""
+    response = await test_client.get("/ui/memory")
+
+    assert response.status_code == 200
+    content = response.text
+
+    # Check that Memory nav link has active state
+    assert 'href="/ui/memory"' in content
+    assert 'class="nav-link active"' in content or "nav-link active" in content
+
+
+@pytest.mark.asyncio
+async def test_memory_dashboard_empty_state(test_client: httpx.AsyncClient):
+    """Test memory dashboard shows empty state when no global memory entries exist."""
+    response = await test_client.get("/ui/memory")
+
+    assert response.status_code == 200
+    content = response.text
+
+    # If no memory entries, should show empty state
+    if "memory-row" not in content:
+        assert "empty-state" in content
+        assert "No Global Memory Entries" in content
+        assert "🧠" in content  # Empty state icon
+
+
 if __name__ == "__main__":
     # Run tests directly with pytest
     import subprocess

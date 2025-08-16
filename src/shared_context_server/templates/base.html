@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Shared Context Server{% endblock %}</title>
-    <link href="/ui/static/css/style.css" rel="stylesheet">
+    <link href="/ui/static/css/style.css?v=1.2" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -18,6 +18,7 @@
             </div>
             <div class="nav-links">
                 <a href="/ui/" class="nav-link {% if request.url.path == '/ui/' %}active{% endif %}">Dashboard</a>
+                <a href="/ui/memory" class="nav-link {% if request.url.path == '/ui/memory' %}active{% endif %}">Memory</a>
                 <a href="/health" class="nav-link" target="_blank">Health</a>
                 <div class="status-indicator" id="connection-status">
                     <span class="status-dot online"></span>
@@ -42,7 +43,7 @@
         </div>
     </footer>
 
-    <script src="/ui/static/js/app.js"></script>
+    <script src="/ui/static/js/app.js?v=1.2"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

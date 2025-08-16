@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}Global Memory - Shared Context Server{% endblock %}
+
+{% block content %}
+<div class="memory-dashboard">
+    <div class="dashboard-header">
+        <h1>Global Memory Entries</h1>
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <span class="stat-number">{{ total_entries }}</span>
+                <span class="stat-label">Global Entries</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="memory-search">
+        <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+    </div>
+
+    {% if memory_entries %}
+    <div class="memory-table-container">
+        <table class="memory-table">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>Agent</th>
+                    <th>Value Preview</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="memory-table-body">
+                {% for entry in memory_entries %}
+                <tr class="memory-row" data-key="{{ entry.key|e }}">
+                    <td class="memory-key">
+                        <code>{{ entry.key|e }}</code>
+                    </td>
+                    <td class="memory-agent">
+                        <span class="agent-badge">{{ entry.agent_id|e }}</span>
+                    </td>
+                    <td class="memory-value">
+                        {% set value_text = entry.value|e %}
+                        {% if value_text|length > 100 %}
+                            <span class="value-preview">{{ value_text[:100] }}...</span>
+                        {% else %}
+                            <span class="value-preview">{{ value_text }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="memory-created">
+                        <span class="timestamp-value">
+                            <script>
+                                document.write((function() {
+                                    const timestamp = "{{ entry.created_at }}";
+                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                            // Force local timezone conversion
+                                            return date.toLocaleString(undefined, {
+                                                year: 'numeric',
+                                                month: 'numeric',
+                                                day: 'numeric',
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                timeZoneName: 'short'
+                                            });
+                                        }
+                                    }
+                                    return timestamp;
+                                })());
+                            </script>
+                        </span>
+                    </td>
+                    <td class="memory-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="viewFullValue('{{ entry.key|e }}', {{ entry.value|tojson|e }})">
+                            View Full
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🧠</div>
+        <h2>No Global Memory Entries</h2>
+        <p>When agents create global memory entries, they will appear here.</p>
+        <div class="empty-actions">
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                Refresh Dashboard
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal for viewing full values -->
+<div id="value-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Memory Value</h3>
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="modal-key">
+                <strong>Key:</strong> <code id="modal-key"></code>
+            </div>
+            <div class="modal-value">
+                <strong>Value:</strong>
+                <pre id="modal-value"></pre>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh dashboard every 30 seconds
+setInterval(() => {
+    window.location.reload();
+}, 30000);
+
+// Search functionality
+document.getElementById('search-input').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.memory-row');
+
+    rows.forEach(row => {
+        const key = row.getAttribute('data-key').toLowerCase();
+        if (key.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+// View full value in modal
+function viewFullValue(key, value) {
+    document.getElementById('modal-key').textContent = key;
+    document.getElementById('modal-value').textContent = value;
+    document.getElementById('value-modal').style.display = 'block';
+}
+
+// Close modal
+function closeModal() {
+    document.getElementById('value-modal').style.display = 'none';
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('value-modal');
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+
+// Format timestamps immediately when script runs
+function formatTimestamps() {
+    const timestampElements = document.querySelectorAll('.timestamp-value[data-timestamp]');
+    timestampElements.forEach(element => {
+        const timestamp = element.getAttribute('data-timestamp');
+        if (timestamp && timestamp !== 'null' && timestamp !== '') {
+            try {
+                // Handle various timestamp formats
+                let date;
+
+                // Check if it's a Unix timestamp (numeric string)
+                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                    // Unix timestamp - convert to milliseconds and create date
+                    const timestampMs = parseFloat(timestamp) * 1000;
+                    date = new Date(timestampMs);
+                } else if (timestamp.includes('T') && (timestamp.includes('Z') || timestamp.includes('+') || timestamp.includes('-'))) {
+                    // ISO string with timezone
+                    date = new Date(timestamp);
+                } else if (timestamp.includes('T')) {
+                    // ISO format without timezone - assume UTC
+                    date = new Date(timestamp + 'Z');
+                } else {
+                    // Try parsing as-is
+                    date = new Date(timestamp);
+                }
+
+                // Check if date is valid
+                if (!isNaN(date.getTime())) {
+                    element.textContent = date.toLocaleString();
+                } else {
+                    console.warn('Invalid date parsed:', timestamp);
+                    element.textContent = timestamp; // Show raw timestamp as fallback
+                }
+            } catch (e) {
+                console.warn('Failed to parse timestamp:', timestamp, e);
+                element.textContent = timestamp; // Show raw timestamp as fallback
+            }
+        } else {
+            element.textContent = 'Unknown';
+        }
+    });
+}
+
+// Run immediately
+formatTimestamps();
+
+// Also run when DOM is ready as backup
+document.addEventListener('DOMContentLoaded', formatTimestamps);
+</script>
+
+<style>
+.memory-dashboard {
+    padding: 2rem;
+}
+
+.memory-search {
+    margin-bottom: 2rem;
+}
+
+.search-input {
+    width: 100%;
+    max-width: 400px;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.memory-table-container {
+    overflow-x: auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.memory-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.memory-table th,
+.memory-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.memory-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.memory-key code {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.85rem;
+}
+
+.agent-badge {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.value-preview {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background-color: white;
+    margin: 5% auto;
+    padding: 0;
+    width: 80%;
+    max-width: 800px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.modal-close {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-key,
+.modal-value {
+    margin-bottom: 1rem;
+}
+
+.modal-key code {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.modal-value pre {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid #eee;
+    text-align: right;
+}
+</style>
+{% endblock %}
