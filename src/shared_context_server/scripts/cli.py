@@ -127,7 +127,7 @@ class ProductionServer:
 
             # Use FastMCP's native Streamable HTTP transport
             # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
-            # Configure uvicorn to use the modern websockets Sans-I/O implementation
+            # Configure uvicorn to use the modern websockets-sansio implementation
             # to avoid deprecation warnings from the legacy websockets API
             uvicorn_config = {"ws": "websockets-sansio"}
 

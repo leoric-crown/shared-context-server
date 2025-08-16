@@ -165,11 +165,14 @@ Critical development rules including file size limits (500 lines code, 1000 line
 
 Playwright MCP integration for behavioral testing, visual regression prevention, and research-first web development. Covers user story validation, responsive testing, and cross-device compatibility patterns.
 
+
 ## Dual-Layer Memory System
 
 When working with agents YOU MUST USE the sophisticated dual-layer memory architecture provided by shared-context-server and pieces MCP servers, combining immediate coordination with long-term intelligence preservation:
 
 You MUST ALWAYS give agents a session id where they can participate AND a valid and non-expired JWT token with appropriate permissions
+
+You SHOULD ALWAYS try to launch agents in parallel when the task allows for it, providing them a common session and valid JWT tokens and instructing them to collaborate through the session.
 
 ### Layer 1: Shared Context Server (Immediate Coordination)
 

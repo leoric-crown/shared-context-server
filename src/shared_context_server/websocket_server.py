@@ -327,6 +327,7 @@ async def start_websocket_server(host: str = "127.0.0.1", port: int = 8080):
             port=port,
             log_level="info",
             access_log=False,  # Reduce log noise
+            ws="websockets-sansio",  # Use modern websockets Sans-I/O implementation
         )
         server = uvicorn.Server(config)
         await server.serve()
