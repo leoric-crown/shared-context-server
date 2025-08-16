@@ -140,3 +140,60 @@ WebSocket server runs alongside FastAPI for real-time updates:
 - Notifications sent via `websocket_notify()` helper
 - Dashboard at `http://localhost:23456/ui/`
 - Auto-reconnect with exponential backoff
+
+## Framework Guides
+
+The `.claude/guides/` directory contains specialized documentation for multi-agent development patterns:
+
+### Shared Context Integration
+**File**: `.claude/guides/shared-context-integration.md`
+
+Comprehensive patterns for multi-agent collaboration through the shared context server. Covers session-based coordination, agent handoff protocols, memory persistence patterns, and performance optimization strategies.
+
+### MCP Toolkit Architecture
+**File**: `.claude/guides/mcp-toolkit-architecture.md`
+
+Production-ready MCP tool integration patterns based on the shared context server implementation. Includes dual-layer memory strategy, research tools coordination, and checkpoint management for framework commands.
+
+### Development Standards
+**File**: `.claude/guides/development-standards.md`
+
+Critical development rules including file size limits (500 lines code, 1000 lines tests), testing requirements, browser automation standards, agent transparency protocols, and escalation triggers.
+
+### Browser Automation
+**File**: `.claude/guides/browser-automation.md`
+
+Playwright MCP integration for behavioral testing, visual regression prevention, and research-first web development. Covers user story validation, responsive testing, and cross-device compatibility patterns.
+
+## Dual-Layer Memory System
+
+This project leverages a sophisticated dual-layer memory architecture combining immediate coordination with long-term intelligence preservation:
+
+### Layer 1: Shared Context Server (Immediate Coordination)
+
+**Purpose**: Real-time multi-agent collaboration and session-based memory
+**Performance**: \<30ms message operations, 2-3ms fuzzy search
+**Scope**: Current development session and task coordination
+
+#### Core Capabilities
+- **Session Management**: Create dedicated sessions for feature development tasks
+- **Agent Handoffs**: Coordinate between different agent types with context preservation
+- **Search & Discovery**: RapidFuzz-powered context search across session history
+- **Memory Persistence**: Session-scoped memory with TTL support for immediate coordination
+- **Visibility Controls**: 4-tier visibility system (public/private/agent_only/admin_only)
+
+### Layer 2: Long-Term Project Knowledge
+
+**Purpose**: Cross-project pattern recognition and breakthrough preservation
+**Scope**: Historical context, architectural decisions, and learned patterns
+
+#### Knowledge Preservation Strategy
+**Note**: Pieces MCP server integration recommended for long-term memory. Current setup focuses on shared context server for immediate coordination.
+
+#### Memory Checkpoints
+Every major command should implement 3 checkpoints:
+- **START**: Load relevant context from previous work
+- **MID**: Store progress and coordination decisions
+- **END**: Preserve knowledge and patterns for future reference
+
+- use uv run python instead of python3
