@@ -156,16 +156,11 @@ class JWTAuthenticationManager:
         self, agent_type: str, requested_permissions: list[str]
     ) -> list[str]:
         """Determine granted permissions based on agent type and request."""
-        type_permissions = {
-            "claude": ["read", "write"],
-            "gemini": ["read", "write"],
-            "admin": ["read", "write", "admin", "debug"],
-            "system": ["read", "write", "admin", "debug"],
-            "test": ["read", "write", "debug"],
-            "generic": ["read"],
-        }
+        # Import config here to avoid circular imports
+        from .config import get_agent_permissions_config
 
-        base_permissions = type_permissions.get(agent_type.lower(), ["read"])
+        permissions_config = get_agent_permissions_config()
+        base_permissions = permissions_config.get_permissions_for_agent_type(agent_type)
 
         granted_permissions = [
             permission
@@ -177,7 +172,7 @@ class JWTAuthenticationManager:
         ]
 
         if not granted_permissions:
-            granted_permissions = ["read"]
+            granted_permissions = permissions_config.default_permissions.copy()
 
         logger.info(f"Granted permissions {granted_permissions} to {agent_type} agent")
         return granted_permissions

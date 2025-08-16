@@ -15,6 +15,7 @@ Key features:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -261,6 +262,197 @@ class SecurityConfig(BaseSettings):
         return v
 
 
+class AgentPermissionsConfig(BaseSettings):
+    """Agent permissions and authentication configuration."""
+
+    # Permission definitions
+    available_permissions: list[str] = Field(
+        default=["read", "write", "admin", "debug"],
+        json_schema_extra={"env": "AVAILABLE_PERMISSIONS"},
+        description="List of all available permissions in the system",
+    )
+    default_permissions: list[str] = Field(
+        default=["read"],
+        json_schema_extra={"env": "DEFAULT_PERMISSIONS"},
+        description="Default permissions for unknown agent types",
+    )
+
+    # Agent type permissions mapping
+    agent_type_permissions: dict[str, list[str]] = Field(
+        default={
+            "claude": ["read", "write"],
+            "gemini": ["read", "write"],
+            "admin": ["read", "write", "admin", "debug"],
+            "system": ["read", "write", "admin", "debug"],
+            "test": ["read", "write", "debug"],
+            "generic": ["read"],
+        },
+        description="Mapping of agent types to their granted permissions",
+    )
+
+    # Agent type descriptions for documentation
+    agent_type_descriptions: dict[str, str] = Field(
+        default={
+            "claude": "Standard Claude agent",
+            "gemini": "Standard Gemini agent",
+            "admin": "Full administrative access",
+            "system": "System-level administrative access",
+            "test": "Testing agent with debug capabilities",
+            "generic": "Read-only access",
+        },
+        description="Human-readable descriptions for each agent type",
+    )
+
+    # Configuration file path (optional)
+    permissions_config_file: str | None = Field(
+        default=None,
+        json_schema_extra={"env": "PERMISSIONS_CONFIG_FILE"},
+        description="Path to JSON configuration file for agent permissions",
+    )
+
+    @field_validator("agent_type_permissions")
+    @classmethod
+    def validate_agent_permissions(
+        cls, v: dict[str, list[str]], info: Any
+    ) -> dict[str, list[str]]:
+        """Validate that agent permissions only use available permissions."""
+        available = info.data.get(
+            "available_permissions", ["read", "write", "admin", "debug"]
+        )
+
+        for agent_type, permissions in v.items():
+            invalid_perms = [p for p in permissions if p not in available]
+            if invalid_perms:
+                raise ValueError(
+                    f"Agent type '{agent_type}' has invalid permissions: {invalid_perms}. "
+                    f"Available permissions: {available}"
+                )
+        return v
+
+    @field_validator("default_permissions")
+    @classmethod
+    def validate_default_permissions(cls, v: list[str], info: Any) -> list[str]:
+        """Validate that default permissions only use available permissions."""
+        available = info.data.get(
+            "available_permissions", ["read", "write", "admin", "debug"]
+        )
+
+        invalid_perms = [p for p in v if p not in available]
+        if invalid_perms:
+            raise ValueError(
+                f"Default permissions contain invalid values: {invalid_perms}. "
+                f"Available permissions: {available}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def load_from_config_file_and_validate(self) -> AgentPermissionsConfig:
+        """Load from JSON config file if specified and ensure admin access exists."""
+        # Load from JSON config file if specified
+        if self.permissions_config_file:
+            config_path = Path(self.permissions_config_file)
+            if not config_path.is_absolute():
+                # Make relative paths relative to the config module location
+                config_dir = Path(__file__).parent / "config"
+                config_path = config_dir / config_path
+
+            if config_path.exists():
+                try:
+                    with open(config_path) as f:
+                        config_data = json.load(f)
+
+                    # Extract configuration from JSON structure
+                    if "config" in config_data:
+                        json_config = config_data["config"]
+
+                        # Update available permissions
+                        if "available_permissions" in json_config:
+                            self.available_permissions = json_config[
+                                "available_permissions"
+                            ]
+
+                        # Update default permissions
+                        if "default_permissions" in json_config:
+                            self.default_permissions = json_config[
+                                "default_permissions"
+                            ]
+
+                        # Update agent types from JSON format
+                        if "agent_types" in json_config:
+                            agent_types = {}
+                            descriptions = {}
+
+                            for agent_type, config in json_config[
+                                "agent_types"
+                            ].items():
+                                agent_types[agent_type] = config["permissions"]
+                                descriptions[agent_type] = config["description"]
+
+                            self.agent_type_permissions = agent_types
+                            self.agent_type_descriptions = descriptions
+
+                    logger.info(f"Loaded agent permissions from {config_path}")
+
+                except (json.JSONDecodeError, KeyError, OSError) as e:
+                    logger.warning(
+                        f"Failed to load permissions config from {config_path}: {e}"
+                    )
+                    logger.info("Using default agent permissions configuration")
+            else:
+                logger.warning(f"Permissions config file not found: {config_path}")
+                logger.info("Using default agent permissions configuration")
+
+        # Ensure at least one agent type has admin permissions
+        admin_types = [
+            agent_type
+            for agent_type, permissions in self.agent_type_permissions.items()
+            if "admin" in permissions
+        ]
+
+        if not admin_types:
+            raise ValueError(
+                "At least one agent type must have 'admin' permissions. "
+                "Consider adding an 'admin' or 'system' agent type."
+            )
+
+        return self
+
+    def get_permissions_for_agent_type(self, agent_type: str) -> list[str]:
+        """Get permissions for a specific agent type."""
+        return self.agent_type_permissions.get(
+            agent_type.lower(), self.default_permissions.copy()
+        )
+
+    def get_agent_type_description(self, agent_type: str) -> str:
+        """Get description for a specific agent type."""
+        return self.agent_type_descriptions.get(
+            agent_type.lower(),
+            f"Custom agent type (permissions: {', '.join(self.get_permissions_for_agent_type(agent_type))})",
+        )
+
+    def generate_agent_types_docstring(self) -> str:
+        """Generate docstring content describing all agent types and their permissions."""
+        lines = ["Agent Types & Permissions:"]
+
+        for agent_type, permissions in self.agent_type_permissions.items():
+            _description = self.get_agent_type_description(agent_type)
+            perm_str = ", ".join(permissions)
+            access_level = " (full access)" if "admin" in permissions else ""
+            lines.append(f"- '{agent_type}': {perm_str}{access_level}")
+
+        lines.append("")
+        admin_types = [
+            t for t, p in self.agent_type_permissions.items() if "admin" in p
+        ]
+        if admin_types:
+            admin_list = "' or '".join(admin_types)
+            lines.append(
+                f"Note: Admin permissions are only granted when agent_type='{admin_list}'."
+            )
+
+        return "\n".join(lines)
+
+
 class OperationalConfig(BaseSettings):
     """Operational and monitoring configuration."""
 
@@ -344,6 +536,7 @@ class SharedContextServerConfig(BaseSettings):
     database: DatabaseConfig
     mcp_server: MCPServerConfig
     security: SecurityConfig
+    agent_permissions: AgentPermissionsConfig
     operational: OperationalConfig
     development: DevelopmentConfig
 
@@ -365,6 +558,8 @@ class SharedContextServerConfig(BaseSettings):
             kwargs["security"] = SecurityConfig(
                 api_key=os.getenv("API_KEY", "default-dev-key")
             )
+        if "agent_permissions" not in kwargs:
+            kwargs["agent_permissions"] = AgentPermissionsConfig()
         if "operational" not in kwargs:
             kwargs["operational"] = OperationalConfig()
         if "development" not in kwargs:
@@ -533,6 +728,11 @@ def get_database_config() -> DatabaseConfig:
 def get_security_config() -> SecurityConfig:
     """Get security configuration section."""
     return get_config().security
+
+
+def get_agent_permissions_config() -> AgentPermissionsConfig:
+    """Get agent permissions configuration section."""
+    return get_config().agent_permissions
 
 
 def get_operational_config() -> OperationalConfig:

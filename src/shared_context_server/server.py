@@ -75,6 +75,86 @@ def _raise_unauthorized_access_error(agent_id: str) -> None:
     raise ValueError(f"Unauthorized access to agent memory for {agent_id}")
 
 
+def _generate_agent_type_field_description() -> str:
+    """Generate dynamic field description for agent_type parameter."""
+    try:
+        from .config import get_agent_permissions_config
+
+        permissions_config = get_agent_permissions_config()
+        agent_types = list(permissions_config.agent_type_permissions.keys())
+
+        # Find admin-capable types
+        admin_types = [
+            t
+            for t, p in permissions_config.agent_type_permissions.items()
+            if "admin" in p
+        ]
+
+        if admin_types:
+            admin_str = f"Use '{admin_types[0]}' for admin access"
+            if len(admin_types) > 1:
+                admin_str = (
+                    f"Use '{admin_types[0]}' or '{admin_types[1]}' for admin access"
+                )
+        else:
+            admin_str = "No admin types configured"
+
+        # Create short description with key types
+        key_types = []
+        if "claude" in agent_types:
+            key_types.append("'claude'")
+        if "gemini" in agent_types:
+            key_types.append("'gemini'")
+        if "generic" in agent_types:
+            key_types.append("'generic' for read-only")
+
+        types_str = "/".join(key_types) if key_types else "standard agents"
+
+        return f"Agent type - determines base permissions. {admin_str}, {types_str}"
+
+    except Exception:
+        # Fallback to static description if config is not available
+        return "Agent type - determines base permissions. Use 'admin' for admin access, 'claude'/'gemini' for standard agents, 'generic' for read-only"
+
+
+def _generate_authenticate_agent_docstring() -> str:
+    """Generate dynamic docstring for authenticate_agent function."""
+    try:
+        from .config import get_agent_permissions_config
+
+        permissions_config = get_agent_permissions_config()
+        base_docstring = """Generate JWT token for agent authentication.
+
+This tool validates the MCP client's API key (via headers) and generates
+a JWT token for the specified agent with appropriate permissions.
+The JWT token can then be used for subsequent authenticated requests.
+
+"""
+
+        # Add the dynamic permissions section
+        permissions_section = permissions_config.generate_agent_types_docstring()
+
+        return base_docstring + permissions_section
+
+    except Exception:
+        # Fallback to static docstring if config is not available
+        return """Generate JWT token for agent authentication.
+
+This tool validates the MCP client's API key (via headers) and generates
+a JWT token for the specified agent with appropriate permissions.
+The JWT token can then be used for subsequent authenticated requests.
+
+Agent Types & Permissions:
+- 'admin': read, write, admin, debug (full access)
+- 'system': read, write, admin, debug (full access)
+- 'claude': read, write (standard agent)
+- 'gemini': read, write (standard agent)
+- 'test': read, write, debug (testing)
+- 'generic': read (read-only access)
+
+Note: Admin permissions are only granted when agent_type='admin' or 'system'."""
+
+
 class ConcreteResource(Resource):
     """Concrete Resource implementation for FastMCP."""
 
@@ -511,24 +591,42 @@ async def audit_log(
 # ============================================================================
 
 
-@mcp.tool()
-async def authenticate_agent(
-    ctx: Context,
-    agent_id: str = Field(description="Agent identifier", min_length=1, max_length=100),
-    agent_type: str = Field(
-        description="Agent type (claude, gemini, custom)", max_length=50
-    ),
-    requested_permissions: list[str] = Field(
-        default=["read", "write"], description="Requested permissions for the agent"
-    ),
-) -> dict[str, Any]:
-    """
-    Generate JWT token for agent authentication.
+def _create_authenticate_agent_tool() -> Any:
+    """Create the authenticate_agent tool with dynamic docstring."""
 
-    This tool validates the MCP client's API key (via headers) and generates
-    a JWT token for the specified agent with appropriate permissions.
-    The JWT token can then be used for subsequent authenticated requests.
-    """
+    # Generate dynamic field description
+    agent_type_description = _generate_agent_type_field_description()
+
+    @mcp.tool()
+    async def authenticate_agent(
+        ctx: Context,
+        agent_id: str = Field(
+            description="Agent identifier", min_length=1, max_length=100
+        ),
+        agent_type: str = Field(description=agent_type_description, max_length=50),
+        requested_permissions: list[str] = Field(
+            default=["read", "write"], description="Requested permissions for the agent"
+        ),
+    ) -> dict[str, Any]:
+        # Dynamic docstring generation would be handled here if needed by introspection tools
+        return await _authenticate_agent_impl(
+            ctx, agent_id, agent_type, requested_permissions
+        )
+
+    # Set the dynamic docstring
+    authenticate_agent.__doc__ = _generate_authenticate_agent_docstring()
+
+    return authenticate_agent
+
+
+# Create the tool instance
+authenticate_agent = _create_authenticate_agent_tool()
+
+
+async def _authenticate_agent_impl(
+    ctx: Context, agent_id: str, agent_type: str, requested_permissions: list[str]
+) -> dict[str, Any]:
+    """Implementation of authenticate_agent functionality."""
     try:
         # Validate MCP client authentication via API key header
         from .auth import generate_agent_jwt_token, validate_api_key_header
