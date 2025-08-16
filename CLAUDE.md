@@ -196,4 +196,33 @@ Every major command should implement 3 checkpoints:
 - **MID**: Store progress and coordination decisions
 - **END**: Preserve knowledge and patterns for future reference
 
+## Multi-Agent Authentication
+
+### Authentication Gateway Pattern
+
+Main Claude agent serves as the authentication gateway for the multi-agent framework:
+
+**Authentication Flow:**
+1. **Main Claude Only**: Uses `authenticate_agent` tool to obtain tokens
+2. **Token Provisioning**: Passes tokens to subagents with appropriate `agent_type` and permissions
+3. **Token Refresh**: Subagents can refresh their own tokens using `refresh_token` tool
+
+**Agent Types & Permissions:**
+- `claude`: Standard agent (read/write)
+- `admin`: Framework coordination (read/write/admin/debug)
+- `generic`: Read-only access
+- `custom`: Configure via `PERMISSIONS_CONFIG_FILE`
+
+**Usage Pattern:**
+```python
+# Main Claude provisions tokens
+admin_token = await authenticate_agent(agent_id="coord_agent", agent_type="admin")
+claude_token = await authenticate_agent(agent_id="dev_agent", agent_type="claude")
+
+# Pass tokens to subagents for their operations
+# Subagents use: refresh_token(current_token) when needed
+```
+
+**Key Requirement**: `agent_type="admin"` required for admin-level permissions.
+
 - use uv run python instead of python3
