@@ -286,8 +286,8 @@ class TestMemoryDatabaseAdvantages:
 
     async def test_fast_execution(self):
         """Test that memory databases provide fast execution."""
-        import time
         import os
+        import time
 
         # WARMUP: Initialize database connection and modules to eliminate cold-start
         async with get_test_db_connection("aiosqlite") as warmup_conn:
