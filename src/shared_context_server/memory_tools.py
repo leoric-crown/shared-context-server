@@ -15,7 +15,7 @@ import json
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 import aiosqlite
 from fastmcp import Context
@@ -142,11 +142,10 @@ async def set_memory(
         default=None,
         description="TTL in seconds (null for permanent)",
     ),
-    metadata: Any = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None,
         description="Optional metadata for the memory entry (JSON object or null)",
         examples=[{"source": "user_input", "tags": ["important"]}, None],
-        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"
@@ -182,8 +181,18 @@ async def set_memory(
         # Parse metadata from MCP client (handles both string and dict inputs)
         try:
             metadata = parse_mcp_metadata(metadata)
-        except ValueError:
-            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
+        except ValueError as e:
+            return create_llm_error_response(
+                error=f"Invalid metadata format: {str(e)}",
+                code="INVALID_METADATA_FORMAT",
+                suggestions=[
+                    "Provide metadata as a JSON object (dictionary)",
+                    "Use null for no metadata",
+                    'Example: {"key": "value", "nested": {"data": "example"}}',
+                ],
+                context={"field": "metadata", "expected_type": "dict or null"},
+                severity=ErrorSeverity.WARNING,
+            )
 
         if len(key) > 255:
             return create_llm_error_response(

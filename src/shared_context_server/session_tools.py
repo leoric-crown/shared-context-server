@@ -15,15 +15,11 @@ from __future__ import annotations
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any, Optional
 from uuid import uuid4
 
-if TYPE_CHECKING:
-    from fastmcp import Context
-else:
-    Context = None  # Will be imported when needed
-
 import aiosqlite
+from fastmcp import Context
 from pydantic import Field
 
 from .auth import validate_agent_context_or_error
@@ -113,11 +109,10 @@ async def audit_log(
 async def create_session(
     ctx: Context,
     purpose: str = Field(description="Purpose or description of the session"),
-    metadata: Any = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
-        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """
@@ -150,8 +145,18 @@ async def create_session(
         # Parse metadata from MCP client (handles both string and dict inputs)
         try:
             metadata = parse_mcp_metadata(metadata)
-        except ValueError:
-            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
+        except ValueError as e:
+            return create_llm_error_response(
+                error=f"Invalid metadata format: {str(e)}",
+                code="INVALID_METADATA_FORMAT",
+                suggestions=[
+                    "Provide metadata as a JSON object (dictionary)",
+                    "Use null for no metadata",
+                    'Example: {"key": "value", "nested": {"data": "example"}}',
+                ],
+                context={"field": "metadata", "expected_type": "dict or null"},
+                severity=ErrorSeverity.WARNING,
+            )
 
         # Serialize metadata for database storage
         metadata_str = serialize_metadata(metadata) if metadata else None
@@ -263,11 +268,10 @@ async def add_message(
         default="public",
         description="Message visibility: public, private, agent_only, or admin_only",
     ),
-    metadata: Any = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None,
         description="Optional message metadata (JSON object or null)",
         examples=[{"message_type": "test", "priority": "high"}, None],
-        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
     parent_message_id: int | None = Field(
         default=None, description="ID of parent message for threading"
@@ -331,8 +335,18 @@ async def add_message(
         # Parse metadata from MCP client (handles both string and dict inputs)
         try:
             metadata = parse_mcp_metadata(metadata)
-        except ValueError:
-            return ERROR_MESSAGE_PATTERNS["invalid_json_format"]("metadata")  # type: ignore[no-any-return,operator]
+        except ValueError as e:
+            return create_llm_error_response(
+                error=f"Invalid metadata format: {str(e)}",
+                code="INVALID_METADATA_FORMAT",
+                suggestions=[
+                    "Provide metadata as a JSON object (dictionary)",
+                    "Use null for no metadata",
+                    'Example: {"key": "value", "nested": {"data": "example"}}',
+                ],
+                context={"field": "metadata", "expected_type": "dict or null"},
+                severity=ErrorSeverity.WARNING,
+            )
 
         # Serialize metadata for database storage
         metadata_str = serialize_metadata(metadata) if metadata else None

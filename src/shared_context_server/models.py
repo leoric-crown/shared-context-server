@@ -14,7 +14,7 @@ import json
 import re
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal, cast
+from typing import Any, Literal, Optional, cast
 
 from pydantic import (
     BaseModel,
@@ -81,7 +81,7 @@ def validate_agent_id(agent_id: str) -> str:
     return agent_id
 
 
-def validate_json_metadata(metadata: dict[str, Any] | None) -> str | None:
+def validate_json_metadata(metadata: Optional[dict[str, Any]]) -> Optional[str]:
     """
     Validate and serialize metadata as JSON string.
 
@@ -209,7 +209,7 @@ class SessionModel(BaseModel):
         max_length=MAX_AGENT_ID_LENGTH,
         description="Agent who created session",
     )
-    metadata: dict[str, Any] | None = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None, description="Session metadata"
     )
 
@@ -264,7 +264,7 @@ class MessageModel(BaseModel):
     message_type: MessageType = Field(
         default=MessageType.AGENT_RESPONSE, description="Message type"
     )
-    metadata: dict[str, Any] | None = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None, description="Message metadata"
     )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -320,14 +320,16 @@ class AgentMemoryModel(BaseModel):
     agent_id: str = Field(
         ..., min_length=1, max_length=MAX_AGENT_ID_LENGTH, description="Agent ID"
     )
-    session_id: str | None = Field(
+    session_id: Optional[str] = Field(
         None, description="Session ID for scoped memory (null for global)"
     )
     key: str = Field(
         ..., min_length=1, max_length=MAX_MEMORY_KEY_LENGTH, description="Memory key"
     )
     value: str = Field(..., min_length=1, description="Memory value (JSON string)")
-    metadata: dict[str, Any] | None = Field(default=None, description="Memory metadata")
+    metadata: Optional[dict[str, Any]] = Field(
+        default=None, description="Memory metadata"
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime | None = Field(None, description="Expiration timestamp")
@@ -339,7 +341,7 @@ class AgentMemoryModel(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id_format(cls, v: str | None) -> str | None:
+    def validate_session_id_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             return validate_session_id(v)
         return v
@@ -398,7 +400,7 @@ class AgentMemoryModel(BaseModel):
     model_config = ConfigDict()
 
     @field_serializer("created_at", "updated_at", "expires_at", when_used="json")
-    def serialize_datetime(self, value: datetime | None) -> str | None:
+    def serialize_datetime(self, value: datetime | None) -> Optional[str]:
         return value.isoformat() if value else None
 
 
@@ -415,11 +417,15 @@ class AuditLogModel(BaseModel):
     agent_id: str = Field(
         ..., min_length=1, max_length=MAX_AGENT_ID_LENGTH, description="Agent ID"
     )
-    session_id: str | None = Field(None, description="Session ID if applicable")
-    resource: str | None = Field(None, max_length=500, description="Resource involved")
-    action: str | None = Field(None, max_length=200, description="Action performed")
-    result: str | None = Field(None, max_length=100, description="Action result")
-    metadata: dict[str, Any] | None = Field(default=None, description="Event metadata")
+    session_id: Optional[str] = Field(None, description="Session ID if applicable")
+    resource: Optional[str] = Field(
+        None, max_length=500, description="Resource involved"
+    )
+    action: Optional[str] = Field(None, max_length=200, description="Action performed")
+    result: Optional[str] = Field(None, max_length=100, description="Action result")
+    metadata: Optional[dict[str, Any]] = Field(
+        default=None, description="Event metadata"
+    )
 
     @field_validator("agent_id")
     @classmethod
@@ -428,14 +434,14 @@ class AuditLogModel(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id_format(cls, v: str | None) -> str | None:
+    def validate_session_id_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             return validate_session_id(v)
         return v
 
     @field_validator("event_type", "action", "result")
     @classmethod
-    def sanitize_text_fields(cls, v: str | None) -> str | None:
+    def sanitize_text_fields(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             v = sanitize_text_input(v)
             if not v:
@@ -465,7 +471,7 @@ class CreateSessionRequest(BaseModel):
     """Request model for creating a session."""
 
     purpose: str = Field(..., min_length=1, max_length=MAX_PURPOSE_LENGTH)
-    metadata: dict[str, Any] | None = None
+    metadata: Optional[dict[str, Any]] = None
 
     @field_validator("purpose")
     @classmethod
@@ -480,16 +486,16 @@ class CreateSessionResponse(BaseModel):
     """Response model for session creation."""
 
     success: bool
-    session_id: str | None = None
-    created_by: str | None = None
+    session_id: Optional[str] = None
+    created_by: Optional[str] = None
     created_at: datetime | None = None
-    error: str | None = None
-    code: str | None = None
+    error: Optional[str] = None
+    code: Optional[str] = None
 
     model_config = ConfigDict()
 
     @field_serializer("created_at", when_used="json")
-    def serialize_datetime(self, value: datetime | None) -> str | None:
+    def serialize_datetime(self, value: datetime | None) -> Optional[str]:
         return value.isoformat() if value else None
 
 
@@ -499,7 +505,7 @@ class AddMessageRequest(BaseModel):
     session_id: str
     content: str = Field(..., min_length=1, max_length=MAX_CONTENT_LENGTH)
     visibility: MessageVisibility = MessageVisibility.PUBLIC
-    metadata: dict[str, Any] | None = None
+    metadata: Optional[dict[str, Any]] = None
     parent_message_id: int | None = None
 
     @field_validator("session_id")
@@ -524,13 +530,13 @@ class AddMessageResponse(BaseModel):
     success: bool
     message_id: int | None = None
     timestamp: datetime | None = None
-    error: str | None = None
-    code: str | None = None
+    error: Optional[str] = None
+    code: Optional[str] = None
 
     model_config = ConfigDict()
 
     @field_serializer("timestamp", when_used="json")
-    def serialize_datetime(self, value: datetime | None) -> str | None:
+    def serialize_datetime(self, value: datetime | None) -> Optional[str]:
         return value.isoformat() if value else None
 
 
@@ -539,16 +545,16 @@ class SetMemoryRequest(BaseModel):
 
     key: str = Field(..., min_length=1, max_length=MAX_MEMORY_KEY_LENGTH)
     value: Any = Field(..., description="JSON serializable value")
-    session_id: str | None = None
+    session_id: Optional[str] = None
     expires_in: int | None = Field(
         None, ge=1, le=31536000, description="TTL in seconds (max 1 year)"
     )
-    metadata: dict[str, Any] | None = None
+    metadata: Optional[dict[str, Any]] = None
     overwrite: bool = True
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id_format(cls, v: str | None) -> str | None:
+    def validate_session_id_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             return validate_session_id(v)
         return v
@@ -581,11 +587,11 @@ class GetMemoryRequest(BaseModel):
     """Request model for getting agent memory."""
 
     key: str = Field(..., min_length=1, max_length=MAX_MEMORY_KEY_LENGTH)
-    session_id: str | None = None
+    session_id: Optional[str] = None
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id_format(cls, v: str | None) -> str | None:
+    def validate_session_id_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             return validate_session_id(v)
         return v
@@ -685,8 +691,8 @@ class MemorySetResponse(BaseModel):
     expires_at: float | None = None
     scope: Literal["session", "global"]
     stored_at: str
-    error: str | None = None
-    code: str | None = None
+    error: Optional[str] = None
+    code: Optional[str] = None
 
 
 class MemoryGetResponse(BaseModel):
@@ -700,31 +706,31 @@ class MemoryGetResponse(BaseModel):
     updated_at: str
     expires_at: float | None = None
     scope: Literal["session", "global"]
-    error: str | None = None
-    code: str | None = None
+    error: Optional[str] = None
+    code: Optional[str] = None
 
 
 class MemoryListRequest(BaseModel):
     """Request model for listing memory entries."""
 
-    session_id: str | None = Field(
+    session_id: Optional[str] = Field(
         default=None, description="Session scope (null for global, 'all' for both)"
     )
-    prefix: str | None = Field(
+    prefix: Optional[str] = Field(
         default=None, max_length=100, description="Key prefix filter"
     )
     limit: int = Field(default=50, ge=1, le=200)
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id_format(cls, v: str | None) -> str | None:
+    def validate_session_id_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v != "all":
             return validate_session_id(v)
         return v
 
     @field_validator("prefix")
     @classmethod
-    def validate_prefix(cls, v: str | None) -> str | None:
+    def validate_prefix(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             v = sanitize_text_input(v)
             if not v:
@@ -775,10 +781,10 @@ class ValidationErrorDetail(BaseModel):
 
     field: str = Field(..., description="Field name that failed validation")
     message: str = Field(..., description="Validation error message")
-    invalid_value: str | None = Field(
+    invalid_value: Optional[str] = Field(
         None, description="The invalid value (if safe to expose)"
     )
-    expected_type: str | None = Field(None, description="Expected type or format")
+    expected_type: Optional[str] = Field(None, description="Expected type or format")
 
 
 class ValidationErrorResponse(BaseModel):
@@ -812,7 +818,7 @@ def create_error_response(error: str, code: str, **kwargs: Any) -> dict[str, Any
     return create_standard_response(success=False, error=error, code=code, **kwargs)
 
 
-def serialize_metadata(metadata: dict[str, Any] | None) -> str | None:
+def serialize_metadata(metadata: Optional[dict[str, Any]]) -> Optional[str]:
     """
     Serialize metadata for database storage.
 
@@ -828,7 +834,7 @@ def serialize_metadata(metadata: dict[str, Any] | None) -> str | None:
     return validate_json_metadata(metadata)
 
 
-def deserialize_metadata(metadata_str: str | None) -> dict[str, Any] | None:
+def deserialize_metadata(metadata_str: Optional[str]) -> Optional[dict[str, Any]]:
     """
     Deserialize metadata from database storage.
 
@@ -935,7 +941,7 @@ def sanitize_memory_key(key: str) -> str:
     return key
 
 
-def parse_mcp_metadata(metadata: Any) -> dict[str, Any] | None:
+def parse_mcp_metadata(metadata: Any) -> Optional[dict[str, Any]]:
     """
     Parse metadata parameter from MCP client requests.
 
@@ -949,18 +955,28 @@ def parse_mcp_metadata(metadata: Any) -> dict[str, Any] | None:
         Parsed metadata dictionary or None
 
     Raises:
-        ValueError: If metadata string is invalid JSON
+        ValueError: If metadata is not a valid dictionary or None
     """
     if metadata is None:
         return None
 
     if isinstance(metadata, str):
         try:
-            return cast("dict[str, Any]", json.loads(metadata))
+            parsed = json.loads(metadata)
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    f"Metadata string must parse to a dictionary object, got {type(parsed).__name__}"
+                )
+            return cast("dict[str, Any]", parsed)
         except (json.JSONDecodeError, TypeError) as e:
             raise ValueError(f"Invalid JSON in metadata parameter: {e}") from e
 
-    # Assume it's already a dict (from direct API calls)
+    # Validate that non-string metadata is actually a dict
+    if not isinstance(metadata, dict):
+        raise ValueError(
+            f"Metadata must be a dictionary object or null, got {type(metadata).__name__}"
+        )
+
     return cast("dict[str, Any]", metadata)
 
 
