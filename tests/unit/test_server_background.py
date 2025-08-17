@@ -31,7 +31,7 @@ class TestBackgroundTaskSystem:
         self, server_with_db, test_db_manager
     ):
         """Test memory cleanup task functionality."""
-        from shared_context_server.server import _perform_memory_cleanup
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
 
         MockContext(agent_id="cleanup_test_agent")
 
@@ -124,10 +124,8 @@ class TestBackgroundTaskSystem:
         self, server_with_db, test_db_manager
     ):
         """Test subscription cleanup task functionality."""
-        from shared_context_server.server import (
-            _perform_subscription_cleanup,
-            notification_manager,
-        )
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
+        from shared_context_server.server import notification_manager
 
         # Add fresh and stale subscriptions
         await notification_manager.subscribe("fresh_client", "session://test1")
@@ -158,10 +156,8 @@ class TestBackgroundTaskSystem:
 
     async def test_cleanup_tasks_error_handling(self, server_with_db, test_db_manager):
         """Test that cleanup tasks handle errors gracefully."""
-        from shared_context_server.server import (
-            _perform_memory_cleanup,
-            _perform_subscription_cleanup,
-        )
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
 
         # Test memory cleanup with database error
         with patch(
@@ -251,7 +247,7 @@ class TestBackgroundTaskSystem:
 
         # Mock database initialization to avoid actual database operations
         with patch(
-            "shared_context_server.admin_tools.initialize_database"
+            "shared_context_server.admin_lifecycle.initialize_database"
         ) as mock_init:
             mock_init.side_effect = lambda: init_calls.append("init")
 
@@ -333,7 +329,7 @@ class TestBackgroundTaskSystem:
 
     async def test_memory_cleanup_with_real_data(self, server_with_db, test_db_manager):
         """Test memory cleanup with realistic memory operations."""
-        from shared_context_server.server import _perform_memory_cleanup
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
 
         ctx = MockContext(agent_id="real_cleanup_agent")
 
@@ -393,10 +389,8 @@ class TestBackgroundTaskSystem:
         self, server_with_db, test_db_manager
     ):
         """Test subscription cleanup integration with real subscription operations."""
-        from shared_context_server.server import (
-            _perform_subscription_cleanup,
-            notification_manager,
-        )
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
+        from shared_context_server.server import notification_manager
 
         # Create realistic subscriptions
         clients_and_resources = [
@@ -439,10 +433,8 @@ class TestBackgroundTaskSystem:
 
     async def test_concurrent_background_tasks(self, server_with_db, test_db_manager):
         """Test that background tasks can run concurrently without interference."""
-        from shared_context_server.server import (
-            _perform_memory_cleanup,
-            _perform_subscription_cleanup,
-        )
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
 
         # Set up test data for both cleanup types
         ctx = MockContext(agent_id="concurrent_agent")
@@ -506,8 +498,10 @@ class TestBackgroundTaskSystem:
 
             try:
                 # Run both tasks - memory cleanup should fail, subscription should succeed
-                from shared_context_server.server import (
+                from shared_context_server.admin_lifecycle import (
                     _perform_memory_cleanup,
+                )
+                from shared_context_server.admin_resources import (
                     _perform_subscription_cleanup,
                 )
 

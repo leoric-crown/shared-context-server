@@ -66,7 +66,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return non-admin user
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "test_user",
@@ -96,7 +96,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return admin user
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -143,7 +143,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return admin user
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -178,7 +178,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return validation error
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "success": False,
@@ -211,7 +211,7 @@ class TestPerformanceMetricsAccessControl:
 
         for agent_id, agent_type, permissions in admin_types:
             with patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
             ) as mock_validate:
                 mock_validate.return_value = {
                     "agent_id": agent_id,
@@ -242,7 +242,7 @@ class TestPerformanceMetricsAccessControl:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -281,7 +281,7 @@ class TestPerformanceMetricsAccessControl:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "comprehensive_admin",
@@ -360,7 +360,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -393,7 +393,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "debug_user",
@@ -422,7 +422,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_lifecycle.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "no_perms_user",
