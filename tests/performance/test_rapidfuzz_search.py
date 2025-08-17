@@ -142,25 +142,21 @@ async def test_rapidfuzz_search_performance(
     for query in search_queries:
         start_time = time.time()
 
-        # Use test database connection for search
-        async with test_db_manager.get_connection() as test_conn:
-            import aiosqlite
-
-            test_conn.row_factory = aiosqlite.Row
-
-            result = await call_fastmcp_tool(
-                server_with_db.search_context,
-                ctx,
-                session_id=session_id,
-                query=query,
-                fuzzy_threshold=60.0,
-                limit=10,
-                _test_connection=test_conn,
-            )
+        # Use same database as session creation (patched via server_with_db)
+        result = await call_fastmcp_tool(
+            server_with_db.search_context,
+            ctx,
+            session_id=session_id,
+            query=query,
+            fuzzy_threshold=60.0,
+            limit=10,
+        )
 
         search_time = (time.time() - start_time) * 1000  # Convert to milliseconds
 
-        assert result["success"] is True, f"Search failed for query: {query}"
+        assert result["success"] is True, (
+            f"Search failed for query: {query} - Error: {result.get('error', 'Unknown error')}"
+        )
         assert "search_time_ms" in result, "Search time not reported"
 
         # Verify performance requirement: <100ms for search operation
@@ -180,22 +176,16 @@ async def test_rapidfuzz_search_performance(
     print(f"  - All searches completed under 100ms requirement: {avg_time < 100}")
 
     # Verify performance note is included
-    async with test_db_manager.get_connection() as test_conn:
-        import aiosqlite
+    final_result = await call_fastmcp_tool(
+        server_with_db.search_context,
+        ctx,
+        session_id=session_id,
+        query="performance test",
+        fuzzy_threshold=70,
+    )
 
-        test_conn.row_factory = aiosqlite.Row
-
-        final_result = await call_fastmcp_tool(
-            server_with_db.search_context,
-            ctx,
-            session_id=session_id,
-            query="performance test",
-            fuzzy_threshold=70,
-            _test_connection=test_conn,
-        )
-
-        assert "RapidFuzz enabled" in final_result["performance_note"]
-        assert "5-10x faster" in final_result["performance_note"]
+    assert "RapidFuzz enabled" in final_result["performance_note"]
+    assert "5-10x faster" in final_result["performance_note"]
 
 
 @pytest.mark.asyncio
@@ -214,21 +204,15 @@ async def test_search_accuracy_vs_threshold(
     results_by_threshold = {}
 
     for threshold in thresholds:
-        # Use test database connection for search
-        async with test_db_manager.get_connection() as test_conn:
-            import aiosqlite
-
-            test_conn.row_factory = aiosqlite.Row
-
-            result = await call_fastmcp_tool(
-                server_with_db.search_context,
-                ctx,
-                session_id=session_id,
-                query=query,
-                fuzzy_threshold=threshold,
-                limit=20,
-                _test_connection=test_conn,
-            )
+        # Use same database as session creation (patched via server_with_db)
+        result = await call_fastmcp_tool(
+            server_with_db.search_context,
+            ctx,
+            session_id=session_id,
+            query=query,
+            fuzzy_threshold=threshold,
+            limit=20,
+        )
 
         assert result["success"] is True
         results_by_threshold[threshold] = result
@@ -271,40 +255,28 @@ async def test_search_with_metadata_performance(
 
     # Test with metadata search enabled
     start_time = time.time()
-    async with test_db_manager.get_connection() as test_conn:
-        import aiosqlite
-
-        test_conn.row_factory = aiosqlite.Row
-
-        result_with_metadata = await call_fastmcp_tool(
-            server_with_db.search_context,
-            ctx,
-            session_id=session_id,
-            query="performance optimization",
-            fuzzy_threshold=60.0,
-            search_metadata=True,
-            limit=10,
-            _test_connection=test_conn,
-        )
+    result_with_metadata = await call_fastmcp_tool(
+        server_with_db.search_context,
+        ctx,
+        session_id=session_id,
+        query="performance optimization",
+        fuzzy_threshold=60.0,
+        search_metadata=True,
+        limit=10,
+    )
     time_with_metadata = (time.time() - start_time) * 1000
 
     # Test with metadata search disabled
     start_time = time.time()
-    async with test_db_manager.get_connection() as test_conn:
-        import aiosqlite
-
-        test_conn.row_factory = aiosqlite.Row
-
-        result_without_metadata = await call_fastmcp_tool(
-            server_with_db.search_context,
-            ctx,
-            session_id=session_id,
-            query="performance optimization",
-            fuzzy_threshold=60.0,
-            search_metadata=False,
-            limit=10,
-            _test_connection=test_conn,
-        )
+    result_without_metadata = await call_fastmcp_tool(
+        server_with_db.search_context,
+        ctx,
+        session_id=session_id,
+        query="performance optimization",
+        fuzzy_threshold=60.0,
+        search_metadata=False,
+        limit=10,
+    )
     time_without_metadata = (time.time() - start_time) * 1000
 
     # Both should complete quickly
@@ -351,7 +323,6 @@ async def test_concurrent_search_performance(
                 query=f"performance test {query_suffix}",
                 fuzzy_threshold=60.0,
                 limit=10,
-                _test_connection=test_conn,
             )
 
     # Run multiple concurrent searches

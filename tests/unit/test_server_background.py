@@ -164,7 +164,9 @@ class TestBackgroundTaskSystem:
         )
 
         # Test memory cleanup with database error
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             # Should not raise exception
@@ -242,13 +244,15 @@ class TestBackgroundTaskSystem:
 
     async def test_server_lifespan_management(self, server_with_db, test_db_manager):
         """Test server lifespan context manager basic functionality."""
-        from shared_context_server.server import lifespan
+        from shared_context_server.admin_tools import lifespan
 
         # Track database initialization calls
         init_calls = []
 
         # Mock database initialization to avoid actual database operations
-        with patch("shared_context_server.server.initialize_database") as mock_init:
+        with patch(
+            "shared_context_server.admin_tools.initialize_database"
+        ) as mock_init:
             mock_init.side_effect = lambda: init_calls.append("init")
 
             # Mock background tasks to avoid actually starting them
@@ -486,7 +490,7 @@ class TestBackgroundTaskSystem:
 
         # Mock one cleanup to fail
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db:
+        with patch("shared_context_server.session_tools.get_db_connection") as mock_db:
             mock_db.side_effect = Exception("Memory cleanup database error")
 
             # Mock subscription cleanup to track if it runs
@@ -525,7 +529,7 @@ class TestBackgroundTaskSystem:
         from shared_context_server.server import lifespan
 
         # Mock database initialization to fail
-        with patch("shared_context_server.server.initialize_database") as mock_init:
+        with patch("shared_context_server.database.initialize_database") as mock_init:
             mock_init.side_effect = Exception("Database initialization failed")
 
             # Lifespan should handle the error gracefully

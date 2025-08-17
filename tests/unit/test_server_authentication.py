@@ -304,7 +304,7 @@ class TestAuthenticateAgentTool:
         with (
             patch.dict(os.environ, {"API_KEY": "valid_key"}),
             patch(
-                "shared_context_server.auth.generate_agent_jwt_token"
+                "shared_context_server.auth_tools.generate_agent_jwt_token"
             ) as mock_generate_token,
         ):
             mock_generate_token.side_effect = Exception("Token generation failed")

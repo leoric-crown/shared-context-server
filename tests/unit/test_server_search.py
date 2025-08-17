@@ -112,21 +112,14 @@ class TestRapidFuzzSearchSystem:
         """Test basic fuzzy search functionality."""
         session_id, ctx = search_test_session
 
-        # Use test database connection for search
-        async with test_db_manager.get_connection() as test_conn:
-            import aiosqlite
-
-            test_conn.row_factory = aiosqlite.Row
-
-            # Call search_context with test connection injection
-            result = await call_fastmcp_tool(
-                server_with_db.search_context,
-                ctx,
-                session_id=session_id,
-                query="FastAPI",
-                fuzzy_threshold=60.0,  # More realistic threshold for partial matches
-                _test_connection=test_conn,
-            )
+        # Use same database as session creation (patched via server_with_db)
+        result = await call_fastmcp_tool(
+            server_with_db.search_context,
+            ctx,
+            session_id=session_id,
+            query="FastAPI",
+            fuzzy_threshold=60.0,  # More realistic threshold for partial matches
+        )
 
         assert result["success"] is True
         assert len(result["results"]) > 0
@@ -610,7 +603,6 @@ class TestRapidFuzzSearchSystem:
                 session_id=session_id,
                 start_time=base_time.isoformat(),
                 end_time=end_time.isoformat(),
-                _test_connection=test_conn,
             )
 
         assert result["success"] is True
@@ -632,7 +624,6 @@ class TestRapidFuzzSearchSystem:
                 session_id=session_id,
                 start_time=mid_time.isoformat(),
                 end_time=end_time.isoformat(),
-                _test_connection=test_conn,
             )
 
         assert narrow_result["success"] is True

@@ -95,7 +95,9 @@ class TestWebSocketBridgeSimplified:
     async def test_add_message_triggers_http_bridge(self, test_db_manager, test_agent):
         """Test that add_message MCP tool triggers HTTP bridge notification."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
 
             @asynccontextmanager
             async def mock_get_db_connection():
@@ -119,9 +121,14 @@ class TestWebSocketBridgeSimplified:
                 await conn.commit()
 
             # Mock HTTP notification - this is what we're testing
-            with patch.object(
-                server, "_notify_websocket_server", new_callable=AsyncMock
-            ) as mock_http_notify:
+            mock_http_notify = AsyncMock()
+            with patch(
+                "shared_context_server.session_tools.get_websocket_imports",
+                return_value={
+                    "notify_websocket_server": mock_http_notify,
+                    "available": True,
+                },
+            ):
                 # Call add_message
                 result = await call_fastmcp_tool(
                     server.add_message,
@@ -154,7 +161,9 @@ class TestWebSocketBridgeSimplified:
     ):
         """Test that MCP operations work even when WebSocket server is unavailable."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
 
             @asynccontextmanager
             async def mock_get_db_connection():

@@ -46,7 +46,9 @@ class TestCompleteAgentWorkflow:
         """Test a complete agent collaboration workflow."""
 
         with (
-            patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+            patch(
+                "shared_context_server.session_tools.get_db_connection"
+            ) as mock_db_conn,
         ):
             # Use the real test database instead of hardcoded mocks
             @asynccontextmanager
@@ -132,7 +134,9 @@ class TestCompleteAgentWorkflow:
     ):
         """Test error handling in agent workflows."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             # Use the real test database instead of hardcoded mocks
             @asynccontextmanager
             async def mock_get_db_connection():
@@ -169,7 +173,9 @@ class TestCompleteAgentWorkflow:
     ):
         """Test concurrent agent access to the same session."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             # Use the real test database instead of hardcoded mocks
             @asynccontextmanager
             async def mock_get_db_connection():

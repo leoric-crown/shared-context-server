@@ -582,10 +582,24 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
             "src.shared_context_server.database.get_db_connection",
             mock_get_db_connection,
         ),
-        # Server module imports (handles `from .database import get_db_connection`)
-        patch("shared_context_server.server.get_db_connection", mock_get_db_connection),
+        # Server module no longer has get_db_connection after modularization
+        # It imports tools from individual modules that have their own patches
+        # Tool module imports
         patch(
-            "src.shared_context_server.server.get_db_connection", mock_get_db_connection
+            "shared_context_server.session_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.memory_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_tools.get_db_connection",
+            mock_get_db_connection,
         ),
         # Auth module imports
         patch("shared_context_server.auth.get_db_connection", mock_get_db_connection),

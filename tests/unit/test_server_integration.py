@@ -535,7 +535,9 @@ class TestMultiComponentIntegration:
         session_id = session_result["session_id"]
 
         # Test database error during message addition affects search
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             # First call succeeds (for session verification), second fails
             call_count = [0]
 

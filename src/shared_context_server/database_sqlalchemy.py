@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 if TYPE_CHECKING:
@@ -33,6 +33,18 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 logger = logging.getLogger(__name__)
+
+# Critical SQLite PRAGMA settings for performance (matching aiosqlite implementation)
+_SQLITE_PRAGMAS = [
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA journal_mode = WAL",
+    "PRAGMA synchronous = NORMAL",
+    "PRAGMA cache_size = -8000",  # 8MB cache
+    "PRAGMA temp_store = MEMORY",
+    "PRAGMA mmap_size = 268435456",  # 256MB memory mapping
+    "PRAGMA busy_timeout = 5000",
+    "PRAGMA optimize",
+]
 
 
 def _raise_foreign_keys_error(value: int) -> None:
@@ -446,6 +458,31 @@ class SimpleSQLAlchemyManager:
         # Database-specific engine configuration
         engine_config = self._get_engine_config()
         self.engine = create_async_engine(database_url, **engine_config)
+
+        # Apply SQLite PRAGMA optimizations on each connection
+        if self.db_type == "sqlite":
+            try:
+                # Only register event listeners for real engines, not mocks
+                if hasattr(self.engine, "sync_engine") and hasattr(
+                    self.engine.sync_engine, "pool"
+                ):
+
+                    @event.listens_for(self.engine.sync_engine, "connect")
+                    def set_sqlite_pragma(dbapi_connection, connection_record):
+                        cursor = dbapi_connection.cursor()
+                        for pragma in _SQLITE_PRAGMAS:
+                            try:
+                                cursor.execute(pragma)
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to execute PRAGMA {pragma}: {e}"
+                                )
+                        cursor.close()
+                else:
+                    logger.debug("Skipping PRAGMA event listener setup for mock engine")
+            except Exception as e:
+                logger.warning(f"Failed to set up SQLite PRAGMA event listener: {e}")
+
         self.is_initialized = False
         self._connection_count = 0
 
@@ -455,7 +492,10 @@ class SimpleSQLAlchemyManager:
             return {
                 "pool_pre_ping": True,
                 "pool_recycle": 3600,
-                # Keep existing SQLite optimizations
+                # Apply the same PRAGMA optimizations as aiosqlite implementation
+                "connect_args": {
+                    "isolation_level": None,  # Enable autocommit mode for better performance
+                },
             }
         if self.db_type == "postgresql":
             return {

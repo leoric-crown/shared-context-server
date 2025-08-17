@@ -66,7 +66,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return non-admin user
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "test_user",
@@ -96,7 +96,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return admin user
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -106,7 +106,7 @@ class TestPerformanceMetricsAccessControl:
 
             # Mock get_performance_metrics_dict to return fake metrics
             with patch(
-                "shared_context_server.server.get_performance_metrics_dict"
+                "shared_context_server.utils.performance.get_performance_metrics_dict"
             ) as mock_get_metrics:
                 mock_get_metrics.return_value = {
                     "success": True,
@@ -143,7 +143,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return admin user
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -153,7 +153,7 @@ class TestPerformanceMetricsAccessControl:
 
             # Mock get_performance_metrics_dict to raise exception
             with patch(
-                "shared_context_server.server.get_performance_metrics_dict",
+                "shared_context_server.utils.performance.get_performance_metrics_dict",
                 side_effect=Exception("Metrics system error"),
             ):
                 result = await call_fastmcp_tool(
@@ -178,7 +178,7 @@ class TestPerformanceMetricsAccessControl:
 
         # Mock validate_agent_context_or_error to return validation error
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "success": False,
@@ -211,7 +211,7 @@ class TestPerformanceMetricsAccessControl:
 
         for agent_id, agent_type, permissions in admin_types:
             with patch(
-                "shared_context_server.server.validate_agent_context_or_error"
+                "shared_context_server.admin_tools.validate_agent_context_or_error"
             ) as mock_validate:
                 mock_validate.return_value = {
                     "agent_id": agent_id,
@@ -220,7 +220,7 @@ class TestPerformanceMetricsAccessControl:
                 }
 
                 with patch(
-                    "shared_context_server.server.get_performance_metrics_dict"
+                    "shared_context_server.utils.performance.get_performance_metrics_dict"
                 ) as mock_get_metrics:
                     mock_get_metrics.return_value = {"success": True, "test": True}
 
@@ -242,7 +242,7 @@ class TestPerformanceMetricsAccessControl:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -252,7 +252,7 @@ class TestPerformanceMetricsAccessControl:
 
             # Mock get_performance_metrics_dict to return metrics without success field
             with patch(
-                "shared_context_server.server.get_performance_metrics_dict"
+                "shared_context_server.utils.performance.get_performance_metrics_dict"
             ) as mock_get_metrics:
                 mock_get_metrics.return_value = {
                     # No success field
@@ -281,7 +281,7 @@ class TestPerformanceMetricsAccessControl:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "comprehensive_admin",
@@ -290,7 +290,7 @@ class TestPerformanceMetricsAccessControl:
             }
 
             with patch(
-                "shared_context_server.server.get_performance_metrics_dict"
+                "shared_context_server.utils.performance.get_performance_metrics_dict"
             ) as mock_get_metrics:
                 mock_get_metrics.return_value = {
                     "success": True,
@@ -360,7 +360,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "admin_user",
@@ -370,7 +370,7 @@ class TestPerformanceMetricsEdgeCases:
 
             # Mock import error for get_performance_metrics_dict
             with patch(
-                "shared_context_server.server.get_performance_metrics_dict",
+                "shared_context_server.utils.performance.get_performance_metrics_dict",
                 side_effect=ImportError("Performance module not available"),
             ):
                 result = await call_fastmcp_tool(
@@ -393,7 +393,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "debug_user",
@@ -422,7 +422,7 @@ class TestPerformanceMetricsEdgeCases:
         ctx.headers = {"X-API-Key": "test-key"}
 
         with patch(
-            "shared_context_server.server.validate_agent_context_or_error"
+            "shared_context_server.admin_tools.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "agent_id": "no_perms_user",

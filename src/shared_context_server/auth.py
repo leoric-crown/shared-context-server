@@ -27,8 +27,14 @@ if TYPE_CHECKING:
     import aiosqlite
 
 import jwt
-from fastmcp import Context
-from fastmcp.server.dependencies import get_http_request
+
+# Lazy import FastMCP to avoid performance overhead
+if TYPE_CHECKING:
+    from fastmcp import Context
+    from fastmcp.server.dependencies import get_http_request
+else:
+    Context = None
+    get_http_request = None
 
 from .database import get_db_connection
 from .models import create_error_response
@@ -219,7 +225,9 @@ def require_permission(permission: str) -> Callable[[Callable], Callable]:
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             ctx = None
             for arg in args:
-                if hasattr(arg, "_auth_info") or isinstance(arg, Context):
+                if hasattr(arg, "_auth_info") or (
+                    hasattr(arg, "__class__") and "Context" in str(type(arg))
+                ):
                     ctx = arg
                     break
 
@@ -367,13 +375,22 @@ def validate_api_key_header(ctx: Context) -> bool:
         # Try various header extraction methods for MCP context
         api_key = None
 
-        # Use the new FastMCP 2.x API to get HTTP request
+        # Use the new FastMCP 2.x API to get HTTP request with lazy import
         try:
-            http_request = get_http_request()
+            from fastmcp.server.dependencies import (
+                get_http_request as _get_http_request,
+            )
+
+            http_request = _get_http_request()
             if http_request and hasattr(http_request, "headers"):
                 headers = http_request.headers
                 api_key = headers.get("x-api-key") or headers.get("X-API-Key")
-        except Exception:
+        except ImportError:
+            # FastMCP dependencies not available
+            pass
+        except Exception as e:
+            # Log other exceptions for debugging but continue
+            logger.debug(f"Failed to get HTTP request from FastMCP: {e}")
             pass
 
         if not api_key and hasattr(ctx, "headers"):

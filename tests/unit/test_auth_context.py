@@ -139,7 +139,8 @@ class TestValidateAPIKeyHeader:
             mock_request.headers = {"X-API-Key": "valid_key"}
 
             with patch(
-                "shared_context_server.auth.get_http_request", return_value=mock_request
+                "fastmcp.server.dependencies.get_http_request",
+                return_value=mock_request,
             ):
                 result = validate_api_key_header(ctx)
                 assert result is True
