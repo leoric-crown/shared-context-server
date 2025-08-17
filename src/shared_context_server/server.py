@@ -504,5 +504,3 @@ def _get_create_server():
 
 
 # Export aliases through __getattr__ magic method
-# server = mcp (lazy)
-# create_server = initialize_server (lazy)

@@ -941,7 +941,7 @@ def sanitize_memory_key(key: str) -> str:
     return key
 
 
-def parse_mcp_metadata(metadata: Any) -> Optional[dict[str, Any]]:
+def parse_mcp_metadata(metadata: Any) -> dict[str, Any] | None:
     """
     Parse metadata parameter from MCP client requests.
 
@@ -964,7 +964,7 @@ def parse_mcp_metadata(metadata: Any) -> Optional[dict[str, Any]]:
         try:
             parsed = json.loads(metadata)
             if not isinstance(parsed, dict):
-                raise ValueError(
+                raise TypeError(
                     f"Metadata string must parse to a dictionary object, got {type(parsed).__name__}"
                 )
             return cast("dict[str, Any]", parsed)
@@ -973,7 +973,7 @@ def parse_mcp_metadata(metadata: Any) -> Optional[dict[str, Any]]:
 
     # Validate that non-string metadata is actually a dict
     if not isinstance(metadata, dict):
-        raise ValueError(
+        raise TypeError(
             f"Metadata must be a dictionary object or null, got {type(metadata).__name__}"
         )
 

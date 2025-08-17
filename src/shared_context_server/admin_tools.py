@@ -22,10 +22,13 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import aiosqlite
-from fastmcp import Context
+
+if TYPE_CHECKING:
+    from fastmcp import Context
+else:
+    Context = None
 
 # Lazy import WebSocket manager to avoid performance overhead
-# from .websocket_handlers import websocket_manager
 from fastmcp.resources import Resource, TextResource
 from pydantic import Field
 
@@ -44,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 # Audit logging utility
 async def audit_log(
-    conn: aiosqlite.Connection,
+    _conn: aiosqlite.Connection,
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -1008,10 +1011,6 @@ async def cleanup_expired_memory_task() -> None:
 # ============================================================================
 # SERVER LIFECYCLE MANAGEMENT
 # ============================================================================
-
-
-if TYPE_CHECKING:
-    from contextlib import asynccontextmanager
 
 
 @asynccontextmanager  # type: ignore[misc]

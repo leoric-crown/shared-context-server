@@ -15,12 +15,16 @@ from __future__ import annotations
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import aiosqlite
-from fastmcp import Context
 from pydantic import Field
+
+if TYPE_CHECKING:
+    from fastmcp import Context
+else:
+    Context = None
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -51,7 +55,7 @@ def get_websocket_imports():
             "yes",
         ):
 
-            async def noop_notifier(*args, **kwargs):
+            async def noop_notifier(*_args, **_kwargs):
                 logger.debug("WebSocket disabled for testing, skipping notification")
 
             _websocket_imports = {
@@ -68,7 +72,7 @@ def get_websocket_imports():
                 }
             except ImportError:
                 # Create no-op implementation for testing
-                async def noop_notifier(*args, **kwargs):
+                async def noop_notifier(*_args, **_kwargs):
                     logger.debug(
                         "WebSocket support not available, skipping notification"
                     )
@@ -85,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 # Audit logging utility
 async def audit_log(
-    conn: aiosqlite.Connection,
+    _conn: aiosqlite.Connection,
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -109,7 +113,7 @@ async def audit_log(
 async def create_session(
     ctx: Context,
     purpose: str = Field(description="Purpose or description of the session"),
-    metadata: Optional[dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
@@ -268,7 +272,7 @@ async def add_message(
         default="public",
         description="Message visibility: public, private, agent_only, or admin_only",
     ),
-    metadata: Optional[dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None,
         description="Optional message metadata (JSON object or null)",
         examples=[{"message_type": "test", "priority": "high"}, None],

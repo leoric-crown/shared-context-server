@@ -14,8 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import aiosqlite
+    from fastmcp import Context
+else:
+    Context = None
 
-from fastmcp import Context
 from pydantic import Field
 
 from .auth import (

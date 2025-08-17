@@ -16,12 +16,16 @@ import logging
 import time
 import traceback
 from datetime import datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import aiosqlite
-from fastmcp import Context
 from pydantic import Field
 from rapidfuzz import fuzz, process
+
+if TYPE_CHECKING:
+    from fastmcp import Context
+else:
+    Context = None
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -34,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Audit logging utility
 async def audit_log(
-    conn: aiosqlite.Connection,
+    _conn: aiosqlite.Connection,
     action: str,
     agent_id: str,
     session_id: str | None = None,

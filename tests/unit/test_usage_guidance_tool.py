@@ -6,9 +6,13 @@ workflow testing, and performance validation according to PRP specifications.
 """
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastmcp import Context
+if TYPE_CHECKING:
+    from fastmcp import Context
+else:
+    Context = None
 
 # Import the MCP tool and testing utilities
 from shared_context_server.server import get_usage_guidance

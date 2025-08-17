@@ -15,11 +15,15 @@ import json
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
-from fastmcp import Context
 from pydantic import Field
+
+if TYPE_CHECKING:
+    from fastmcp import Context
+else:
+    Context = None
 
 # PERFORMANCE OPTIMIZATION: Pre-import commonly used modules
 # to avoid repeated import overhead during function execution
@@ -58,7 +62,7 @@ def _get_websocket_handlers():
             }
         except ImportError:
 
-            async def _no_op_notify(*args, **kwargs):
+            async def _no_op_notify(*_args, **_kwargs):
                 logger.debug("WebSocket support not available, skipping notification")
 
             class _NoOpWebSocketManager:
@@ -87,7 +91,7 @@ def _get_admin_tools():
             }
         except ImportError:
 
-            async def _no_op_notifications(*args, **kwargs):
+            async def _no_op_notifications(*_args, **_kwargs):
                 logger.debug("Admin tools not available, skipping notifications")
 
             _lazy_imports["admin"] = {
@@ -104,7 +108,7 @@ def _get_admin_tools():
 
 # Audit logging utility
 async def audit_log(
-    conn: aiosqlite.Connection,
+    _conn: aiosqlite.Connection,
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -142,7 +146,7 @@ async def set_memory(
         default=None,
         description="TTL in seconds (null for permanent)",
     ),
-    metadata: Optional[dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None,
         description="Optional metadata for the memory entry (JSON object or null)",
         examples=[{"source": "user_input", "tags": ["important"]}, None],
