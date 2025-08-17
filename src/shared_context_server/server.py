@@ -32,7 +32,7 @@ from typing import Any
 
 
 # Lazy import core server to avoid FastMCP initialization
-def _lazy_import_core_server():
+def _lazy_import_core_server() -> Any:
     """Lazy import core_server module."""
     if "core_server" not in _LAZY_IMPORTS:
         from .core_server import initialize_server, mcp
@@ -45,10 +45,10 @@ def _lazy_import_core_server():
 
 
 # Lazy import storage for cached modules
-_LAZY_IMPORTS = {}
+_LAZY_IMPORTS: dict[str, Any] = {}
 
 
-def _lazy_import_auth():
+def _lazy_import_auth() -> Any:
     """Lazy import auth module."""
     if "auth" not in _LAZY_IMPORTS:
         from .auth import audit_log_auth_event, validate_agent_context_or_error
@@ -60,7 +60,7 @@ def _lazy_import_auth():
     return _LAZY_IMPORTS["auth"]
 
 
-def _lazy_import_auth_tools():
+def _lazy_import_auth_tools() -> Any:
     """Lazy import auth_tools module."""
     if "auth_tools" not in _LAZY_IMPORTS:
         from .auth_tools import (
@@ -83,7 +83,7 @@ def _lazy_import_auth_tools():
     return _LAZY_IMPORTS["auth_tools"]
 
 
-def _lazy_import_session_tools():
+def _lazy_import_session_tools() -> Any:
     """Lazy import session_tools module."""
     if "session_tools" not in _LAZY_IMPORTS:
         from .session_tools import (
@@ -102,7 +102,7 @@ def _lazy_import_session_tools():
     return _LAZY_IMPORTS["session_tools"]
 
 
-def _lazy_import_search_tools():
+def _lazy_import_search_tools() -> Any:
     """Lazy import search_tools module."""
     if "search_tools" not in _LAZY_IMPORTS:
         from .search_tools import (
@@ -135,7 +135,7 @@ def _lazy_import_search_tools():
     return _LAZY_IMPORTS["search_tools"]
 
 
-def _lazy_import_memory_tools():
+def _lazy_import_memory_tools() -> Any:
     """Lazy import memory_tools module."""
     if "memory_tools" not in _LAZY_IMPORTS:
         from .memory_tools import get_memory, list_memory, set_memory
@@ -148,7 +148,7 @@ def _lazy_import_memory_tools():
     return _LAZY_IMPORTS["memory_tools"]
 
 
-def _lazy_import_admin_tools():
+def _lazy_import_admin_tools() -> Any:
     """Lazy import admin_tools module."""
     if "admin_tools" not in _LAZY_IMPORTS:
         # Import the admin tools module to trigger tool registration
@@ -158,7 +158,7 @@ def _lazy_import_admin_tools():
     return _LAZY_IMPORTS["admin_tools"]
 
 
-def _lazy_import_websocket_handlers():
+def _lazy_import_websocket_handlers() -> Any:
     """Lazy import websocket_handlers module."""
     if "websocket_handlers" not in _LAZY_IMPORTS:
         from .websocket_handlers import (
@@ -177,7 +177,7 @@ def _lazy_import_websocket_handlers():
     return _LAZY_IMPORTS["websocket_handlers"]
 
 
-def _lazy_import_web_endpoints():
+def _lazy_import_web_endpoints() -> Any:
     """Lazy import web_endpoints module."""
     if "web_endpoints" not in _LAZY_IMPORTS:
         from . import web_endpoints
@@ -186,7 +186,7 @@ def _lazy_import_web_endpoints():
     return _LAZY_IMPORTS["web_endpoints"]
 
 
-def _lazy_import_httpx():
+def _lazy_import_httpx() -> Any:
     """Lazy import httpx module."""
     if "httpx" not in _LAZY_IMPORTS:
         import httpx
@@ -196,7 +196,7 @@ def _lazy_import_httpx():
 
 
 # Provide backward compatibility through module-level getattr
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy loading of tools and modules on demand."""
 
     # Auth tools
@@ -322,7 +322,7 @@ def __getattr__(name: str):
 
 
 # Lazy import utility modules
-def _lazy_import_models():
+def _lazy_import_models() -> Any:
     """Lazy import models module."""
     if "models" not in _LAZY_IMPORTS:
         from .models import parse_mcp_metadata, sanitize_text_input, serialize_metadata
@@ -335,7 +335,7 @@ def _lazy_import_models():
     return _LAZY_IMPORTS["models"]
 
 
-def _lazy_import_caching():
+def _lazy_import_caching() -> Any:
     """Lazy import caching module."""
     if "caching" not in _LAZY_IMPORTS:
         from .utils.caching import (
@@ -356,7 +356,7 @@ def _lazy_import_caching():
     return _LAZY_IMPORTS["caching"]
 
 
-def _lazy_import_llm_errors():
+def _lazy_import_llm_errors() -> Any:
     """Lazy import llm_errors module."""
     if "llm_errors" not in _LAZY_IMPORTS:
         from .utils.llm_errors import (
@@ -375,7 +375,7 @@ def _lazy_import_llm_errors():
     return _LAZY_IMPORTS["llm_errors"]
 
 
-def _lazy_import_performance():
+def _lazy_import_performance() -> Any:
     """Lazy import performance module."""
     if "performance" not in _LAZY_IMPORTS:
         from .utils.performance import get_performance_metrics_dict
@@ -388,7 +388,7 @@ def _lazy_import_performance():
 
 # Ensure tool modules are imported when server is used in production
 # but NOT during initial import (for performance tests)
-def ensure_all_tools_registered():
+def ensure_all_tools_registered() -> Any:
     """Ensure all tools are registered. Call this in production startup."""
     # Initialize FastMCP server and register all tools
     _lazy_import_core_server()
@@ -442,7 +442,7 @@ def _raise_unauthorized_access_error(agent_id: str) -> None:
 # ============================================================================
 
 
-def _lazy_import_resource_classes():
+def _lazy_import_resource_classes() -> Any:
     """Lazy import resource classes."""
     if "resource_classes" not in _LAZY_IMPORTS:
         # Import ConcreteResource from backup file (temporarily)
@@ -488,15 +488,15 @@ def _lazy_import_resource_classes():
 
 
 # Lazy server instance and backward compatibility aliases
-def _get_server():
+def _get_server() -> Any:
     """Get the FastMCP server instance (lazy loaded)."""
     return _lazy_import_core_server()["mcp"]
 
 
-def _get_create_server():
+def _get_create_server() -> Any:
     """Get the create_server function (lazy loaded)."""
 
-    def create_server():
+    def create_server() -> Any:
         """Create and return the mcp server instance."""
         return _lazy_import_core_server()["mcp"]
 

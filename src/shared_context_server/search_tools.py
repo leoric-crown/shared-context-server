@@ -24,8 +24,11 @@ from rapidfuzz import fuzz, process
 
 if TYPE_CHECKING:
     from fastmcp import Context
+
+    TestConnectionType = aiosqlite.Connection | None
 else:
     Context = None
+    TestConnectionType = Any
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -78,7 +81,7 @@ async def search_context(
         default=None,
         description="Optional JWT token for elevated permissions",
     ),
-    _test_connection: str | None = Field(
+    _test_connection: TestConnectionType = Field(
         default=None, exclude=True
     ),  # Hidden test parameter
 ) -> dict[str, Any]:
@@ -527,7 +530,7 @@ async def search_context_tool(
         default=None,
         description="Optional JWT token for elevated permissions",
     ),
-    _test_connection: str | None = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(default=None, exclude=True),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_context function."""
     return await search_context(
@@ -548,7 +551,7 @@ async def search_by_sender(
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
-    _test_connection: str | None = Field(
+    _test_connection: TestConnectionType = Field(
         default=None, exclude=True
     ),  # Hidden test parameter
 ) -> dict[str, Any]:
@@ -639,7 +642,7 @@ async def search_by_sender_tool(
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
-    _test_connection: str | None = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(default=None, exclude=True),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_sender function."""
     return await search_by_sender(ctx, session_id, sender, limit, _test_connection)
@@ -651,7 +654,7 @@ async def search_by_timerange(
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
     limit: int = Field(default=50, ge=1, le=200),
-    _test_connection: str | None = Field(
+    _test_connection: TestConnectionType = Field(
         default=None, exclude=True
     ),  # Hidden test parameter
 ) -> dict[str, Any]:
@@ -762,7 +765,7 @@ async def search_by_timerange_tool(
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
     limit: int = Field(default=50, ge=1, le=200),
-    _test_connection: str | None = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(default=None, exclude=True),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_timerange function."""
     return await search_by_timerange(

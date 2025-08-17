@@ -468,16 +468,17 @@ class SimpleSQLAlchemyManager:
                 ):
 
                     @event.listens_for(self.engine.sync_engine, "connect")
-                    def set_sqlite_pragma(dbapi_connection, connection_record):
+                    def set_sqlite_pragma(
+                        dbapi_connection: Any, _connection_record: Any
+                    ) -> None:
                         cursor = dbapi_connection.cursor()
-                        for pragma in _SQLITE_PRAGMAS:
-                            try:
+                        try:
+                            for pragma in _SQLITE_PRAGMAS:
                                 cursor.execute(pragma)
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to execute PRAGMA {pragma}: {e}"
-                                )
-                        cursor.close()
+                        except Exception as e:
+                            logger.warning(f"Failed to execute SQLite PRAGMAs: {e}")
+                        finally:
+                            cursor.close()
                 else:
                     logger.debug("Skipping PRAGMA event listener setup for mock engine")
             except Exception as e:

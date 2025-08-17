@@ -30,7 +30,7 @@ else:
 
 # Lazy import WebSocket manager to avoid performance overhead
 from fastmcp.resources import Resource, TextResource
-from pydantic import Field
+from pydantic import AnyUrl, Field
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -60,6 +60,24 @@ async def audit_log(
         await audit_log_auth_event(action, agent_id, session_id, details)
     except Exception as e:
         logger.warning(f"Failed to write audit log: {e}")
+
+
+# ============================================================================
+# ERROR HELPER FUNCTIONS
+# ============================================================================
+
+
+def _raise_session_not_found_error(session_id: str) -> None:
+    """Helper function to raise session not found error."""
+    from .utils.llm_errors import create_resource_not_found_error
+
+    error_response = create_resource_not_found_error("session", session_id)
+    raise ValueError(error_response.get("error", f"Session {session_id} not found"))
+
+
+def _raise_unauthorized_access_error(agent_id: str) -> None:
+    """Helper function to raise unauthorized access error."""
+    raise ValueError(f"Unauthorized access to agent {agent_id} memory")
 
 
 # ============================================================================
@@ -679,7 +697,7 @@ notification_manager = ResourceNotificationManager()
 
 
 @mcp.resource("session://{session_id}")
-async def get_session_resource(session_id: str, ctx: Context = None) -> Resource:
+async def get_session_resource(session_id: str, ctx: Any = None) -> Resource:
     """
     Provide session as an MCP resource with real-time updates.
 
@@ -688,16 +706,12 @@ async def get_session_resource(session_id: str, ctx: Context = None) -> Resource
 
     try:
         # Extract agent_id from MCP context
-        try:
-            if ctx is not None:
-                agent_id = getattr(ctx, "agent_id", None)
-                if agent_id is None:
-                    agent_id = f"agent_{ctx.session_id[:8]}"
-            else:
-                # Fallback for direct function calls or test environment
-                agent_id = "current_agent"
-        except (AttributeError, ValueError):
-            # Fallback for test environment or contexts without request
+        if ctx is not None:
+            agent_id = getattr(ctx, "agent_id", None)
+            if agent_id is None:
+                agent_id = f"agent_{ctx.session_id[:8]}"
+        else:
+            # Fallback for direct function calls or test environment
             agent_id = "current_agent"
 
         async with get_db_connection() as conn:
@@ -711,12 +725,7 @@ async def get_session_resource(session_id: str, ctx: Context = None) -> Resource
             session = await cursor.fetchone()
 
             if not session:
-                from .utils.llm_errors import create_resource_not_found_error
-
-                error_response = create_resource_not_found_error("session", session_id)
-                raise ValueError(
-                    error_response.get("error", f"Session {session_id} not found")
-                )
+                _raise_session_not_found_error(session_id)
             assert session is not None
 
             # Get visible messages for this agent
@@ -787,7 +796,7 @@ async def get_session_resource(session_id: str, ctx: Context = None) -> Resource
             }
 
             return TextResource(
-                uri=f"session://{session_id}",
+                uri=AnyUrl(f"session://{session_id}"),
                 name=f"Session: {session['purpose']}",
                 description=f"Shared context session with {len(messages)} visible messages",
                 mime_type="application/json",
@@ -800,7 +809,7 @@ async def get_session_resource(session_id: str, ctx: Context = None) -> Resource
 
 
 @mcp.resource("agent://{agent_id}/memory")
-async def get_agent_memory_resource(agent_id: str, ctx: Context = None) -> Resource:
+async def get_agent_memory_resource(agent_id: str, ctx: Any = None) -> Resource:
     """
     Provide agent memory as a resource with security controls.
 
@@ -824,7 +833,7 @@ async def get_agent_memory_resource(agent_id: str, ctx: Context = None) -> Resou
 
         # Security check: only allow agents to access their own memory
         if requesting_agent != agent_id:
-            raise ValueError(f"Unauthorized access to agent {agent_id} memory")
+            _raise_unauthorized_access_error(agent_id)
 
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
@@ -905,7 +914,7 @@ async def get_agent_memory_resource(agent_id: str, ctx: Context = None) -> Resou
             }
 
             return TextResource(
-                uri=f"agent://{agent_id}/memory",
+                uri=AnyUrl(f"agent://{agent_id}/memory"),
                 name=f"Agent Memory: {agent_id}",
                 description=f"Private memory store with {len(memories)} entries",
                 mime_type="application/json",
@@ -1013,7 +1022,7 @@ async def cleanup_expired_memory_task() -> None:
 # ============================================================================
 
 
-@asynccontextmanager  # type: ignore[misc]
+@asynccontextmanager
 async def lifespan() -> Any:
     """FastMCP server lifespan management."""
 

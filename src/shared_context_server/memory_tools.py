@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 _lazy_imports = {}
 
 
-def _get_websocket_handlers():
+def _get_websocket_handlers() -> dict[str, Any]:
     """Lazy load WebSocket handlers to avoid import overhead."""
     if "websocket" not in _lazy_imports:
         try:
@@ -62,7 +62,7 @@ def _get_websocket_handlers():
             }
         except ImportError:
 
-            async def _no_op_notify(*_args, **_kwargs):
+            async def _no_op_notify(*_args: Any, **_kwargs: Any) -> None:
                 logger.debug("WebSocket support not available, skipping notification")
 
             class _NoOpWebSocketManager:
@@ -79,7 +79,7 @@ def _get_websocket_handlers():
     return _lazy_imports["websocket"]
 
 
-def _get_admin_tools():
+def _get_admin_tools() -> dict[str, Any]:
     """Lazy load admin tools to avoid import overhead."""
     if "admin" not in _lazy_imports:
         try:
@@ -91,7 +91,7 @@ def _get_admin_tools():
             }
         except ImportError:
 
-            async def _no_op_notifications(*_args, **_kwargs):
+            async def _no_op_notifications(*_args: Any, **_kwargs: Any) -> None:
                 logger.debug("Admin tools not available, skipping notifications")
 
             _lazy_imports["admin"] = {

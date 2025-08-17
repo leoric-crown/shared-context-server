@@ -23,8 +23,11 @@ from pydantic import Field
 
 if TYPE_CHECKING:
     from fastmcp import Context
+
+    TestConnectionType = aiosqlite.Connection | None
 else:
     Context = None
+    TestConnectionType = Any
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -42,7 +45,7 @@ from .utils.llm_errors import (
 _websocket_imports = None
 
 
-def get_websocket_imports():
+def get_websocket_imports() -> dict:
     """Get WebSocket imports with caching to avoid repeated import overhead."""
     import os
 
@@ -55,7 +58,7 @@ def get_websocket_imports():
             "yes",
         ):
 
-            async def noop_notifier(*_args, **_kwargs):
+            async def noop_notifier(*_args: Any, **_kwargs: Any) -> None:
                 logger.debug("WebSocket disabled for testing, skipping notification")
 
             _websocket_imports = {
@@ -72,7 +75,7 @@ def get_websocket_imports():
                 }
             except ImportError:
                 # Create no-op implementation for testing
-                async def noop_notifier(*_args, **_kwargs):
+                async def noop_notifier(*_args: Any, **_kwargs: Any) -> None:
                     logger.debug(
                         "WebSocket support not available, skipping notification"
                     )
@@ -464,7 +467,7 @@ async def get_messages(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
-    _test_connection: str | None = Field(
+    _test_connection: TestConnectionType = Field(
         default=None, exclude=True
     ),  # Hidden test parameter
 ) -> dict[str, Any]:

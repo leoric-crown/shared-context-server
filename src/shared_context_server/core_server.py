@@ -126,7 +126,7 @@ async def shutdown_server() -> None:
     # Additional cleanup logic can be added here as needed
 
 
-def _register_web_routes():
+def _register_web_routes() -> None:
     """Register web UI routes by importing the web_endpoints module."""
     try:
         from . import web_endpoints  # noqa: F401
@@ -136,7 +136,7 @@ def _register_web_routes():
         logger.warning(f"Failed to register web UI routes: {e}")
 
 
-def _register_mcp_tools():
+def _register_mcp_tools() -> None:
     """Register MCP tools by importing all tool modules."""
     try:
         # Import all tool modules to register their @mcp.tool() decorated functions
