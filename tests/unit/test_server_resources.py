@@ -561,14 +561,18 @@ class TestMCPResourceSystem:
         memory_ctx.agent_id = "test_agent"
 
         # Test database connection error during resource generation
-        with patch("shared_context_server.database.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.admin_resources.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             with pytest.raises(ValueError, match="Failed to get session resource"):
                 await get_session_resource.fn("session_test123", session_ctx)
 
         # Test agent memory resource with database error
-        with patch("shared_context_server.database.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.admin_resources.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             with pytest.raises(ValueError, match="Failed to get agent memory resource"):
