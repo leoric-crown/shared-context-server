@@ -253,7 +253,28 @@ async def test_search_with_metadata_performance(
 
     session_id, ctx = search_test_session
 
-    # Test with metadata search enabled
+    # WARMUP: Run search operations once to cache imports and initialize modules
+    # This eliminates cold-start penalties and measures steady-state performance
+    await call_fastmcp_tool(
+        server_with_db.search_context,
+        ctx,
+        session_id=session_id,
+        query="warmup search",
+        fuzzy_threshold=60.0,
+        search_metadata=True,
+        limit=10,
+    )
+    await call_fastmcp_tool(
+        server_with_db.search_context,
+        ctx,
+        session_id=session_id,
+        query="warmup search",
+        fuzzy_threshold=60.0,
+        search_metadata=False,
+        limit=10,
+    )
+
+    # Test with metadata search enabled (steady-state performance)
     start_time = time.time()
     result_with_metadata = await call_fastmcp_tool(
         server_with_db.search_context,
@@ -266,7 +287,7 @@ async def test_search_with_metadata_performance(
     )
     time_with_metadata = (time.time() - start_time) * 1000
 
-    # Test with metadata search disabled
+    # Test with metadata search disabled (steady-state performance)
     start_time = time.time()
     result_without_metadata = await call_fastmcp_tool(
         server_with_db.search_context,
@@ -279,7 +300,7 @@ async def test_search_with_metadata_performance(
     )
     time_without_metadata = (time.time() - start_time) * 1000
 
-    # Both should complete quickly
+    # Both should complete quickly (steady-state performance)
     assert time_with_metadata < 100, (
         f"Search with metadata took {time_with_metadata:.2f}ms"
     )
