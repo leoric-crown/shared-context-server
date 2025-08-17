@@ -73,14 +73,7 @@ class JWTAuthenticationManager:
         """Initialize JWT authentication manager with secure configuration."""
         secret_key = os.getenv("JWT_SECRET_KEY")
         if not secret_key:
-            if os.getenv("ENVIRONMENT", "development") == "production":
-                raise ValueError(
-                    "JWT_SECRET_KEY environment variable must be set for production"
-                )
-            secret_key = "dev-secret-key-not-for-production-use"
-            logger.warning(
-                "Using development JWT secret key - not suitable for production!"
-            )
+            raise ValueError("JWT_SECRET_KEY environment variable must be set")
 
         self.secret_key: str = secret_key
         self.algorithm = "HS256"
