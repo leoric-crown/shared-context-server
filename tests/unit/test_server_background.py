@@ -53,7 +53,7 @@ class TestBackgroundTaskSystem:
                     '{"data": "expired"}',
                     "{}",
                     current_time - 100,
-                    current_time - 1,  # Expired 1 second ago
+                    current_time - 10,  # Expired 10 seconds ago
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -103,6 +103,9 @@ class TestBackgroundTaskSystem:
             )
             count_before = (await cursor.fetchone())[0]
             assert count_before == 3
+
+        # Small delay to ensure timing precision
+        await asyncio.sleep(0.1)
 
         # Perform memory cleanup
         await _perform_memory_cleanup()
@@ -240,7 +243,7 @@ class TestBackgroundTaskSystem:
 
     async def test_server_lifespan_management(self, server_with_db, test_db_manager):
         """Test server lifespan context manager basic functionality."""
-        from shared_context_server.admin_tools import lifespan
+        from shared_context_server.admin_lifecycle import lifespan
 
         # Track database initialization calls
         init_calls = []

@@ -28,7 +28,7 @@ class TestUsageGuidanceSecurity:
 
         # Mock validation to return format error for malformed token
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_guidance.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "error": "Invalid token format",
@@ -51,9 +51,9 @@ class TestUsageGuidanceSecurity:
         # Mock READ_ONLY agent context
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -90,9 +90,9 @@ class TestUsageGuidanceSecurity:
         # Test AGENT level permissions
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -133,7 +133,7 @@ class TestUsageGuidanceSecurity:
         ctx = MagicMock(spec=Context)
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_guidance.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "error": "Malformed token format",
@@ -160,9 +160,9 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -201,9 +201,9 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -233,9 +233,9 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -265,9 +265,9 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -296,7 +296,7 @@ class TestUsageGuidanceOperations:
         ctx = MagicMock(spec=Context)
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_guidance.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "authenticated": True,
@@ -327,9 +327,9 @@ class TestMultiAgentCoordinationWorkflow:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             # Admin agent context
             mock_validate.return_value = {
@@ -363,9 +363,9 @@ class TestMultiAgentCoordinationWorkflow:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             # Agent context
             mock_validate.return_value = {
@@ -403,9 +403,9 @@ class TestMultiAgentCoordinationWorkflow:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             # Read-only agent context
             mock_validate.return_value = {
@@ -449,9 +449,9 @@ class TestPerformanceValidation:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -491,9 +491,9 @@ class TestPerformanceValidation:
 
             with (
                 patch(
-                    "shared_context_server.admin_tools.validate_agent_context_or_error"
+                    "shared_context_server.admin_guidance.validate_agent_context_or_error"
                 ) as mock_validate,
-                patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+                patch("shared_context_server.database.get_db_connection") as mock_db,
             ):
                 mock_validate.return_value = {
                     "authenticated": True,
@@ -547,10 +547,10 @@ class TestAuditLogging:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
-            patch("shared_context_server.admin_tools.audit_log") as mock_audit,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
+            patch("shared_context_server.admin_guidance.audit_log") as mock_audit,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -593,9 +593,9 @@ class TestResponseFormat:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -653,9 +653,9 @@ class TestErrorHandling:
 
         with (
             patch(
-                "shared_context_server.admin_tools.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error"
             ) as mock_validate,
-            patch("shared_context_server.admin_tools.get_db_connection") as mock_db,
+            patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
             mock_validate.return_value = {
                 "authenticated": True,
@@ -681,7 +681,7 @@ class TestErrorHandling:
         ctx = MagicMock(spec=Context)
 
         with patch(
-            "shared_context_server.admin_tools.validate_agent_context_or_error"
+            "shared_context_server.admin_guidance.validate_agent_context_or_error"
         ) as mock_validate:
             mock_validate.return_value = {
                 "error": "Token validation failed",

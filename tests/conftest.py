@@ -598,7 +598,15 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
             mock_get_db_connection,
         ),
         patch(
-            "shared_context_server.admin_tools.get_db_connection",
+            "shared_context_server.admin_guidance.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_lifecycle.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_resources.get_db_connection",
             mock_get_db_connection,
         ),
         # Auth module imports
