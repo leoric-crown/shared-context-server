@@ -195,16 +195,17 @@ uv run pytest tests/integration/test_api_stability_validation.py tests/security/
 
 ## Next Steps
 
-1. **Environment Preparation**: Establish baseline metrics and git branching strategy
-2. **Module Extraction Sequence**: Begin with session management module (lowest risk)
+1. **Environment Preparation**: Work in `/Users/Ricardo_Leon1/TestIO/scs/1.1.0-refactor/` worktree, establish baseline metrics
+2. **Module Extraction Sequence**: Begin with session management module (lowest risk) in refactor branch
 3. **Validation Protocol**: Execute comprehensive test suite after each extraction
-4. **Quality Assurance**: Continuous performance monitoring and rollback readiness
+4. **Quality Assurance**: Continuous performance monitoring and rollback readiness within worktree
 5. **Security Hardening**: JWT development fallback removal after core refactoring
 6. **Complete Compliance**: Systematic approach to remaining 12 files
 
 **Recommended Agent**: `cfw-refactor` - Complex refactoring specialist with maintainability focus
 **Coordination Level**: Single agent with comprehensive validation framework
 **Session Context**: Continue using session_593bb84a27204f59 for coordination and progress tracking
+**Working Directory**: Execute all refactoring in `/Users/Ricardo_Leon1/TestIO/scs/1.1.0-refactor/` worktree
 **Quality Assurance**: Zero-regression guarantee with established testing infrastructure
 
 ---
