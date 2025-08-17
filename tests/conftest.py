@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 from shared_context_server.auth import AuthInfo
 
@@ -296,7 +297,9 @@ def extract_field_defaults(fastmcp_tool) -> dict[str, Any]:
 
         if isinstance(param.default, FieldInfo):
             # Extract the actual default from FieldInfo
-            defaults[name] = param.default.default
+            # Skip parameters with PydanticUndefined (required parameters)
+            if param.default.default is not PydanticUndefined:
+                defaults[name] = param.default.default
         elif param.default is not inspect.Parameter.empty:
             defaults[name] = param.default
 
@@ -317,12 +320,32 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
 
     Returns:
         Result of the function call
+
+    Raises:
+        TypeError: If required parameters are missing
     """
     # Get the actual defaults
     defaults = extract_field_defaults(fastmcp_tool)
 
     # Merge defaults with provided kwargs (kwargs override defaults)
     call_args = {**defaults, **kwargs}
+
+    # Check for required parameters that are missing
+    sig = inspect.signature(fastmcp_tool.fn)
+    for name, param in sig.parameters.items():
+        if name == "ctx":  # Skip context parameter
+            continue
+
+        # Check if parameter is required (no default and not in call_args)
+        has_default = param.default is not inspect.Parameter.empty and (
+            not isinstance(param.default, FieldInfo)
+            or param.default.default is not PydanticUndefined
+        )
+
+        if not has_default and name not in call_args:
+            raise TypeError(
+                f"create_session() missing 1 required positional argument: '{name}'"
+            )
 
     # Call the function with context as first parameter
     return await fastmcp_tool.fn(ctx, **call_args)
