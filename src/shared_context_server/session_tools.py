@@ -117,6 +117,7 @@ async def create_session(
         default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
+        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """
@@ -266,6 +267,7 @@ async def add_message(
         default=None,
         description="Optional message metadata (JSON object or null)",
         examples=[{"message_type": "test", "priority": "high"}, None],
+        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
     parent_message_id: int | None = Field(
         default=None, description="ID of parent message for threading"
@@ -444,7 +446,9 @@ async def get_messages(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
-    _test_connection: Any = None,  # Hidden test parameter
+    _test_connection: str | None = Field(
+        default=None, exclude=True
+    ),  # Hidden test parameter
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.

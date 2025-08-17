@@ -128,7 +128,13 @@ async def audit_log(
 async def set_memory(
     ctx: Context,
     key: str = Field(description="Memory key", min_length=1, max_length=255),
-    value: Any = Field(description="Value to store (JSON serializable)"),
+    value: Any = Field(
+        description="Value to store (JSON serializable)",
+        json_schema_extra={
+            "type": "string",
+            "description": "Value to store (JSON serializable - objects will be auto-converted)",
+        },
+    ),
     session_id: str | None = Field(
         default=None, description="Session scope (null for global memory)"
     ),
@@ -140,6 +146,7 @@ async def set_memory(
         default=None,
         description="Optional metadata for the memory entry (JSON object or null)",
         examples=[{"source": "user_input", "tags": ["important"]}, None],
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"

@@ -738,8 +738,14 @@ class SecureTokenManager:
                     expires_at_raw = row[1]
                     if isinstance(expires_at_raw, str):
                         expires_at = datetime.fromisoformat(expires_at_raw)
+                        # Ensure timezone awareness for naive datetime objects
+                        if expires_at.tzinfo is None:
+                            expires_at = expires_at.replace(tzinfo=timezone.utc)
                     else:
                         expires_at = expires_at_raw
+                        # Ensure timezone awareness for naive datetime objects
+                        if expires_at.tzinfo is None:
+                            expires_at = expires_at.replace(tzinfo=timezone.utc)
 
                     if expires_at <= datetime.now(timezone.utc):
                         await _handle_token_error(conn, is_sqlalchemy)
@@ -826,9 +832,15 @@ class SecureTokenManager:
             expires_at_raw = row[1]
             if isinstance(expires_at_raw, str):
                 expires_at = datetime.fromisoformat(expires_at_raw)
+                # Ensure timezone awareness for naive datetime objects
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
             else:
                 # Already a datetime object (from datetime adapter)
                 expires_at = expires_at_raw
+                # Ensure timezone awareness for naive datetime objects
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
             if expires_at <= datetime.now(timezone.utc):
                 return None
 

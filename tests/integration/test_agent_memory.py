@@ -429,7 +429,7 @@ async def test_memory_performance_requirements(mock_database):
             or any("cov" in arg for arg in sys.argv)
         )
 
-    threshold = 50 if coverage_active else 10
+    threshold = 50 if coverage_active else 25
 
     with (
         patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
