@@ -103,7 +103,7 @@ class TestTokenFormatValidation:
         assert "validation_error" in result
         assert "Malformed token format" in result["validation_error"]
 
-    @patch("shared_context_server.auth.get_secure_token_manager")
+    @patch("shared_context_server.auth_secure.get_secure_token_manager")
     async def test_validate_jwt_token_parameter_protected_token_not_found(
         self, mock_get_manager
     ):
@@ -124,8 +124,8 @@ class TestTokenFormatValidation:
         # Verify token manager was called
         mock_manager.resolve_protected_token.assert_called_once_with(valid_sct_token)
 
-    @patch("shared_context_server.auth.get_secure_token_manager")
-    @patch("shared_context_server.auth.auth_manager")
+    @patch("shared_context_server.auth_secure.get_secure_token_manager")
+    @patch("shared_context_server.auth_secure.auth_manager")
     async def test_validate_jwt_token_parameter_protected_token_invalid_jwt(
         self, mock_auth_manager, mock_get_manager
     ):
@@ -150,7 +150,7 @@ class TestTokenFormatValidation:
         assert "JWT validation failed" in result["authentication_error"]
         assert "Invalid JWT signature" in result["authentication_error"]
 
-    @patch("shared_context_server.auth.auth_manager")
+    @patch("shared_context_server.auth_secure.auth_manager")
     async def test_validate_jwt_token_parameter_direct_jwt_expired(
         self, mock_auth_manager
     ):
@@ -174,7 +174,7 @@ class TestTokenFormatValidation:
         """Test exception handling in validate_jwt_token_parameter."""
         # Use a token that will trigger an exception during processing
         with patch(
-            "shared_context_server.auth._is_valid_token_format",
+            "shared_context_server.auth_core._is_valid_token_format",
             side_effect=Exception("Validation error"),
         ):
             result = await validate_jwt_token_parameter("some.jwt.token")
@@ -199,7 +199,7 @@ class TestSecureTokenManagerErrorScenarios:
 
             SecureTokenManager()
 
-    @patch("shared_context_server.auth.get_db_connection")
+    @patch("shared_context_server.auth_secure.get_db_connection")
     async def test_create_protected_token_database_error(self, mock_get_db):
         """Test create_protected_token with database connection failure."""
         # Mock database connection to fail
@@ -226,7 +226,9 @@ class TestSecureTokenManagerErrorScenarios:
             manager = get_secure_token_manager()
 
             # Mock database to return no rows
-            with patch("shared_context_server.auth.get_db_connection") as mock_get_db:
+            with patch(
+                "shared_context_server.auth_secure.get_db_connection"
+            ) as mock_get_db:
                 mock_conn = AsyncMock()
                 mock_cursor = AsyncMock()
                 mock_cursor.fetchone.return_value = None
@@ -248,7 +250,9 @@ class TestSecureTokenManagerErrorScenarios:
             manager = get_secure_token_manager()
 
             # Mock database to return corrupted encrypted data
-            with patch("shared_context_server.auth.get_db_connection") as mock_get_db:
+            with patch(
+                "shared_context_server.auth_secure.get_db_connection"
+            ) as mock_get_db:
                 mock_conn = AsyncMock()
                 mock_cursor = AsyncMock()
                 # Return row with corrupted encrypted data
@@ -282,7 +286,7 @@ class TestSecureTokenManagerErrorScenarios:
             result = await manager.extract_agent_info_for_recovery("sct_invalid")
             assert result is None
 
-    @patch("shared_context_server.auth.get_db_connection")
+    @patch("shared_context_server.auth_secure.get_db_connection")
     async def test_cleanup_expired_tokens_database_error(self, mock_get_db):
         """Test cleanup_expired_tokens with database error."""
         with patch.dict(

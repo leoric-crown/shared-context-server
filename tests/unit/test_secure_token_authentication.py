@@ -24,13 +24,21 @@ from shared_context_server.database import (
 @pytest.fixture(scope="function")
 async def temp_database():
     """Create temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+    # Create unique temp file with process ID and thread ID for parallel safety
+    import threading
+
+    pid = os.getpid()
+    tid = threading.get_ident()
+
+    with tempfile.NamedTemporaryFile(
+        suffix=f"_test_{pid}_{tid}.db", delete=False, prefix="scs_test_"
+    ) as f:
         temp_path = f.name
 
     # Initialize the database and reset global managers
     with patch.dict(os.environ, {"DATABASE_PATH": temp_path}):
         # Clear both global database managers to force reinitialization
-        import shared_context_server.database as db_module
+        import shared_context_server.database_connection as db_module
 
         db_module._db_manager = None
         # Reset SQLAlchemy manager for USE_SQLALCHEMY=true tests
@@ -39,27 +47,43 @@ async def temp_database():
                 await db_module._sqlalchemy_manager.close()
             db_module._sqlalchemy_manager = None
 
-        # Use the same backend initialization logic as get_db_connection()
-        from shared_context_server.database import initialize_database
+        try:
+            # Use the same backend initialization logic as get_db_connection()
+            from shared_context_server.database import initialize_database
 
-        await initialize_database()
+            await initialize_database()
 
-        yield temp_path
+            yield temp_path
+        finally:
+            # Cleanup - close SQLAlchemy manager if it exists
+            if (
+                hasattr(db_module, "_sqlalchemy_manager")
+                and db_module._sqlalchemy_manager
+            ):
+                with contextlib.suppress(Exception):
+                    await db_module._sqlalchemy_manager.close()
 
-    # Cleanup - close SQLAlchemy manager if it exists
-    import shared_context_server.database as db_module
+            # Close aiosqlite manager if it exists
+            if hasattr(db_module, "_db_manager") and db_module._db_manager:
+                # The manager doesn't have a close method, but connections auto-close
+                pass
 
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with contextlib.suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
+            # Reset both global managers after test
+            db_module._db_manager = None
+            db_module._sqlalchemy_manager = None
 
-    # Cleanup temp file
-    with contextlib.suppress(FileNotFoundError):
-        Path(temp_path).unlink()
+    # Cleanup temp file with retry logic for Windows
+    import time
 
-    # Reset both global managers after test
-    db_module._db_manager = None
-    db_module._sqlalchemy_manager = None
+    for attempt in range(3):
+        try:
+            Path(temp_path).unlink()
+            break
+        except (FileNotFoundError, PermissionError):
+            if attempt < 2:
+                time.sleep(0.1)  # Brief pause before retry
+            else:
+                pass  # Give up after 3 attempts
 
 
 @pytest.fixture

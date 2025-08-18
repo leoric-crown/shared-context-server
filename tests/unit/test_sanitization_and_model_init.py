@@ -59,7 +59,7 @@ class TestModelInitialization:
         )
         assert memory.agent_id == "a"
         assert memory.key == "k"
-        assert memory.value == "{}"
+        assert memory.value == {}
 
     def test_message_model_with_minimal_data(self):
         """Test MessageModel with minimal required data."""

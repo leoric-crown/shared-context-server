@@ -614,6 +614,14 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
         patch(
             "src.shared_context_server.auth.get_db_connection", mock_get_db_connection
         ),
+        # Auth core module imports (where audit_log_auth_event is defined)
+        patch(
+            "shared_context_server.auth_core.get_db_connection", mock_get_db_connection
+        ),
+        patch(
+            "src.shared_context_server.auth_core.get_db_connection",
+            mock_get_db_connection,
+        ),
         # WebSocket module imports
         patch(
             "shared_context_server.websocket_server.get_db_connection",

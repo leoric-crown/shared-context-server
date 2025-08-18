@@ -375,7 +375,7 @@ class TestGlobalManagerFunctions:
 
             with patch.dict(os.environ, {"DATABASE_PATH": "/custom/path.db"}):
                 # Clear global manager
-                import src.shared_context_server.database as db_module
+                import src.shared_context_server.database_connection as db_module
 
                 original_manager = db_module._db_manager
                 db_module._db_manager = None
@@ -396,7 +396,7 @@ class TestGlobalManagerFunctions:
 
             with patch.dict(os.environ, {"DATABASE_PATH": "/custom/path.db"}):
                 # Clear global manager
-                import src.shared_context_server.database as db_module
+                import src.shared_context_server.database_connection as db_module
 
                 original_manager = db_module._sqlalchemy_manager
                 db_module._sqlalchemy_manager = None
@@ -419,7 +419,7 @@ class TestGlobalManagerFunctions:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
                 patch(
-                    "src.shared_context_server.database.get_database_manager"
+                    "src.shared_context_server.database_connection.get_database_manager"
                 ) as mock_get_manager,
             ):
                 mock_manager = Mock()
@@ -439,7 +439,7 @@ class TestGlobalManagerFunctions:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
                 patch(
-                    "src.shared_context_server.database._get_sqlalchemy_manager"
+                    "src.shared_context_server.database_connection._get_sqlalchemy_manager"
                 ) as mock_get_manager,
             ):
                 mock_manager = Mock()
@@ -459,7 +459,7 @@ class TestGlobalManagerFunctions:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
                 patch(
-                    "src.shared_context_server.database.get_database_manager"
+                    "src.shared_context_server.database_connection.get_database_manager"
                 ) as mock_get_manager,
             ):
                 mock_manager = Mock()
@@ -486,7 +486,7 @@ class TestGlobalManagerFunctions:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
                 patch(
-                    "src.shared_context_server.database._get_sqlalchemy_manager"
+                    "src.shared_context_server.database_connection._get_sqlalchemy_manager"
                 ) as mock_get_manager,
             ):
                 mock_manager = Mock()
@@ -519,10 +519,10 @@ class TestHealthCheck:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
                 patch(
-                    "src.shared_context_server.database.get_database_manager"
+                    "src.shared_context_server.database_connection.get_database_manager"
                 ) as mock_get_manager,
                 patch(
-                    "src.shared_context_server.database.get_db_connection"
+                    "src.shared_context_server.database_utilities.get_db_connection"
                 ) as mock_get_conn,
             ):
                 mock_manager = Mock()
@@ -551,7 +551,7 @@ class TestHealthCheck:
     async def test_health_check_query_returns_none(self):
         """Test health check when query returns None."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_utilities.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -566,22 +566,35 @@ class TestHealthCheck:
     async def test_health_check_query_returns_coroutine(self):
         """Test health check when query incorrectly returns coroutine."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_utilities.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
 
-            # Create a coroutine that will be returned as the result
+            # Create a coroutine function that returns 1
             async def fake_coro():
                 return 1
 
-            mock_cursor.fetchone = AsyncMock(return_value=fake_coro())
-            mock_conn.execute = AsyncMock(return_value=mock_cursor)
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            # Return the coroutine object itself (not the result)
+            # This simulates a bug where a coroutine is returned instead of the actual value
+            import types
 
-            result = await health_check()
-            assert result["status"] == "unhealthy"
+            coro_obj = fake_coro()
+
+            try:
+                mock_cursor.fetchone = AsyncMock(return_value=coro_obj)
+                mock_conn.execute = AsyncMock(return_value=mock_cursor)
+                mock_get_conn.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_conn
+                )
+                mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                result = await health_check()
+                assert result["status"] == "unhealthy"
+            finally:
+                # Clean up the coroutine to avoid warnings
+                if isinstance(coro_obj, types.CoroutineType):
+                    coro_obj.close()
 
     async def test_health_check_sqlalchemy_backend(self):
         """Test health check with SQLAlchemy backend."""
@@ -593,10 +606,10 @@ class TestHealthCheck:
             with (
                 patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
                 patch(
-                    "src.shared_context_server.database._get_sqlalchemy_manager"
+                    "src.shared_context_server.database_utilities._get_sqlalchemy_manager"
                 ) as mock_get_manager,
                 patch(
-                    "src.shared_context_server.database.get_db_connection"
+                    "src.shared_context_server.database_utilities.get_db_connection"
                 ) as mock_get_conn,
             ):
                 mock_manager = Mock()
@@ -623,7 +636,7 @@ class TestHealthCheck:
         """Test health check exception handling."""
         # Mock the database connection itself to fail, which will definitely cause unhealthy status
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_utilities.get_db_connection"
         ) as mock_get_conn:
             mock_get_conn.side_effect = Exception("Database connection failed")
 
@@ -638,7 +651,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_dict_result(self):
         """Test get_schema_version with dict result."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -653,7 +666,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_row_like_result(self):
         """Test get_schema_version with row-like result."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -675,7 +688,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_none_result(self):
         """Test get_schema_version with None result."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -690,7 +703,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_exception(self):
         """Test get_schema_version with exception."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_get_conn.side_effect = Exception("Connection failed")
 
@@ -711,7 +724,7 @@ class TestCleanupFunctions:
             with (
                 patch.dict(os.environ, {"AUDIT_LOG_RETENTION_DAYS": "7"}),
                 patch(
-                    "src.shared_context_server.database.execute_update"
+                    "src.shared_context_server.database_utilities.execute_update"
                 ) as mock_execute,
             ):
                 mock_execute.return_value = 5
@@ -722,7 +735,9 @@ class TestCleanupFunctions:
 
     async def test_cleanup_expired_data_exception(self):
         """Test cleanup with exception during execution."""
-        with patch("src.shared_context_server.database.execute_update") as mock_execute:
+        with patch(
+            "src.shared_context_server.database_utilities.execute_update"
+        ) as mock_execute:
             mock_execute.side_effect = Exception("Cleanup failed")
 
             result = await cleanup_expired_data()
@@ -736,7 +751,7 @@ class TestExecuteFunctions:
     async def test_execute_query(self):
         """Test execute_query function."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -757,7 +772,7 @@ class TestExecuteFunctions:
     async def test_execute_update(self):
         """Test execute_update function."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -773,7 +788,7 @@ class TestExecuteFunctions:
     async def test_execute_insert(self):
         """Test execute_insert function."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -784,14 +799,15 @@ class TestExecuteFunctions:
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await execute_insert(
-                "INSERT INTO test (name) VALUES (?)", ("new",)
+                "INSERT INTO sessions (id, purpose, created_by) VALUES (?, ?, ?)",
+                ("test_session_id", "test purpose", "test_agent"),
             )
             assert result == 42
 
     async def test_execute_insert_none_lastrowid(self):
         """Test execute_insert when lastrowid is None."""
         with patch(
-            "src.shared_context_server.database.get_db_connection"
+            "src.shared_context_server.database_operations.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()

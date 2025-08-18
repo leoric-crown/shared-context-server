@@ -15,7 +15,7 @@ import json
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 
 import aiosqlite
 from pydantic import Field
@@ -139,24 +139,31 @@ async def set_memory(
             "description": "Value to store (JSON serializable - objects will be auto-converted)",
         },
     ),
-    session_id: str | None = Field(
-        default=None, description="Session scope (null for global memory)"
+    session_id: Union[str, None] = Field(
+        default=None,
+        description="Session scope (null for global memory)",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    expires_in: int | str | None = Field(
+    expires_in: Union[int, str, None] = Field(
         default=None,
         description="TTL in seconds (null for permanent)",
+        json_schema_extra={
+            "anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "null"}]
+        },
     ),
     metadata: dict[str, Any] | None = Field(
         default=None,
         description="Optional metadata for the memory entry (JSON object or null)",
         examples=[{"source": "user_input", "tags": ["important"]}, None],
+        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """
@@ -424,12 +431,15 @@ async def set_memory(
 async def get_memory(
     ctx: Context,
     key: str = Field(description="Memory key to retrieve"),
-    session_id: str | None = Field(
-        default=None, description="Session scope (null for global memory)"
+    session_id: Union[str, None] = Field(
+        default=None,
+        description="Session scope (null for global memory)",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """
@@ -519,14 +529,19 @@ async def get_memory(
 @mcp.tool()
 async def list_memory(
     ctx: Context,
-    session_id: str | None = Field(
+    session_id: Union[str, None] = Field(
         default=None, description="Session scope (null for global, 'all' for both)"
     ),
-    prefix: str | None = Field(default=None, description="Key prefix filter"),
+    prefix: Union[str, None] = Field(
+        default=None,
+        description="Key prefix filter",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
+    ),
     limit: int = Field(default=50, ge=1, le=200),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """

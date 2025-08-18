@@ -16,7 +16,7 @@ import logging
 import time
 import traceback
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 import aiosqlite
 from pydantic import Field
@@ -25,7 +25,7 @@ from rapidfuzz import fuzz, process
 if TYPE_CHECKING:
     from fastmcp import Context
 
-    TestConnectionType = aiosqlite.Connection | None
+    TestConnectionType = Union[aiosqlite.Connection, None]
 else:
     Context = None
     TestConnectionType = Any
@@ -77,9 +77,10 @@ async def search_context(
     search_scope: Literal["all", "public", "private"] = Field(
         default="all", description="Search scope: all, public, private"
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
     _test_connection: TestConnectionType = Field(
         default=None, exclude=True
@@ -526,11 +527,16 @@ async def search_context_tool(
     search_scope: Literal["all", "public", "private"] = Field(
         default="all", description="Search scope: all, public, private"
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    _test_connection: TestConnectionType = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(
+        default=None,
+        exclude=True,
+        json_schema_extra={"type": "null"},
+    ),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_context function."""
     return await search_context(
@@ -642,7 +648,11 @@ async def search_by_sender_tool(
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
-    _test_connection: TestConnectionType = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(
+        default=None,
+        exclude=True,
+        json_schema_extra={"type": "null"},
+    ),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_sender function."""
     return await search_by_sender(ctx, session_id, sender, limit, _test_connection)
@@ -765,7 +775,11 @@ async def search_by_timerange_tool(
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
     limit: int = Field(default=50, ge=1, le=200),
-    _test_connection: TestConnectionType = Field(default=None, exclude=True),
+    _test_connection: TestConnectionType = Field(
+        default=None,
+        exclude=True,
+        json_schema_extra={"type": "null"},
+    ),
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_timerange function."""
     return await search_by_timerange(

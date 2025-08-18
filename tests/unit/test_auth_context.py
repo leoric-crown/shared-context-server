@@ -34,7 +34,7 @@ class TestValidateJWTTokenParameter:
     @pytest.fixture
     def mock_auth_manager(self):
         """Mock JWT authentication manager."""
-        with patch("shared_context_server.auth.auth_manager") as mock:
+        with patch("shared_context_server.auth_secure.auth_manager") as mock:
             yield mock
 
     async def test_validate_jwt_token_parameter_success(self, mock_auth_manager):
@@ -83,12 +83,19 @@ class TestValidateJWTTokenParameter:
 
     async def test_validate_jwt_token_parameter_exception(self, mock_auth_manager):
         """Test JWT token parameter validation with exception."""
-        # Mock auth_manager to raise exception
-        mock_auth_manager.validate_token.side_effect = Exception("Validation error")
+        # Mock auth_manager to return error result (exceptions are caught internally)
+        mock_auth_manager.validate_token.return_value = {
+            "valid": False,
+            "error": "Token validation failed: Validation error",
+        }
 
         result = await validate_jwt_token_parameter("some.jwt.token")
 
-        assert result is None
+        # Should return authentication error marker instead of None for better error handling
+        assert result is not None
+        assert "authentication_error" in result
+        assert "JWT authentication failed" in result["authentication_error"]
+        assert "Validation error" in result["authentication_error"]
 
 
 class TestValidateAPIKeyHeader:

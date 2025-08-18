@@ -162,9 +162,13 @@ class TestErrorEnvelopeValidation:
         use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
 
         if use_sqlalchemy:
-            patch_target = "src.shared_context_server.database._get_sqlalchemy_manager"
+            patch_target = (
+                "src.shared_context_server.database_utilities._get_sqlalchemy_manager"
+            )
         else:
-            patch_target = "src.shared_context_server.database.get_database_manager"
+            patch_target = (
+                "src.shared_context_server.database_utilities.get_database_manager"
+            )
 
         with patch(patch_target) as mock_get_db:
             mock_manager = mock_get_db.return_value
@@ -996,11 +1000,15 @@ async def test_integration_with_global_functions(patched_db_connection):
     assert "sessions" in table_names
 
     # Test execute_insert
+    import uuid
+
+    session_unique_id = f"session_global_test_{uuid.uuid4().hex[:8]}"
     session_id = await execute_insert(
         """
         INSERT INTO sessions (id, purpose, created_by)
-        VALUES ('session_global_test12', 'global test', 'test_agent')
-        """
+        VALUES (?, 'global test', 'test_agent')
+        """,
+        (session_unique_id,),
     )
     assert session_id is not None
 
@@ -1008,7 +1016,8 @@ async def test_integration_with_global_functions(patched_db_connection):
     affected_rows = await execute_update(
         """
         UPDATE sessions SET purpose = 'updated global test'
-        WHERE id = 'session_global_test12'
-        """
+        WHERE id = ?
+        """,
+        (session_unique_id,),
     )
     assert affected_rows == 1

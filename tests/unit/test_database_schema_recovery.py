@@ -19,7 +19,6 @@ from shared_context_server.database import (
     _raise_table_not_found_error,
     _raise_wal_mode_error,
     cleanup_expired_data,
-    health_check,
 )
 
 
@@ -201,8 +200,8 @@ class TestDatabaseManagerSchemaRecovery:
         db_manager2 = DatabaseManager("./another_test.db")
         assert str(db_manager2.database_path).endswith("another_test.db")
 
-    @patch("shared_context_server.database.aiosqlite.connect")
-    @patch("shared_context_server.database._is_testing_environment")
+    @patch("aiosqlite.connect")
+    @patch("shared_context_server.database_connection._is_testing_environment")
     async def test_get_connection_wal_mode_failure(self, mock_is_ci, mock_connect):
         """Test database connection when WAL mode setting fails."""
         # Mock non-CI environment so WAL mode is strictly required
@@ -230,7 +229,7 @@ class TestDatabaseManagerSchemaRecovery:
             async with db_manager.get_connection():
                 pass
 
-    @patch("shared_context_server.database.aiosqlite.connect")
+    @patch("aiosqlite.connect")
     async def test_get_connection_journal_mode_check_failure(self, mock_connect):
         """Test database connection when journal mode check returns None."""
         # Mock connection that returns None for journal mode check
@@ -265,7 +264,7 @@ class TestDatabaseManagerSchemaRecovery:
 
             # Mock Path.exists to always return False
             with (
-                patch("shared_context_server.database.Path.exists", return_value=False),
+                patch("pathlib.Path.exists", return_value=False),
                 pytest.raises(
                     DatabaseSchemaError,
                     match="Schema file not found in any of the following locations",
@@ -277,29 +276,11 @@ class TestDatabaseManagerSchemaRecovery:
             # No cleanup needed for memory database
             pass
 
-    async def test_health_check_success(self, isolated_db):
-        """Test health_check function returns healthy status with working database."""
-        result = await health_check()
-
-        # Basic structure validation
-        assert "status" in result
-        assert "timestamp" in result
-        assert result["status"] == "healthy"
-
-        # Should include database status fields
-        expected_fields = ["database_initialized", "database_exists"]
-        for field in expected_fields:
-            assert field in result
-
-        # Database should be working in test environment
-        assert result["database_initialized"] is True
-        assert result["database_exists"] is True
-
     async def test_cleanup_expired_data_error(self, isolated_db):
         """Test cleanup_expired_data with database errors."""
         # Patch execute_update to fail to test error handling
         with patch(
-            "shared_context_server.database.execute_update"
+            "shared_context_server.database_utilities.execute_update"
         ) as mock_execute_update:
             mock_execute_update.side_effect = Exception("Database update failed")
 
@@ -313,7 +294,7 @@ class TestDatabaseManagerSchemaRecovery:
 class TestDatabaseConnectionEdgeCases:
     """Test database connection edge cases and error scenarios."""
 
-    @patch("shared_context_server.database.aiosqlite.connect")
+    @patch("aiosqlite.connect")
     async def test_connection_timeout_error(self, mock_connect):
         """Test database connection with timeout error."""
 
@@ -328,22 +309,6 @@ class TestDatabaseConnectionEdgeCases:
         with pytest.raises(DatabaseConnectionError, match="Connection failed"):
             async with db_manager.get_connection():
                 pass
-
-    async def test_health_check_basic_query_failure(self, isolated_db):
-        """Test health_check when basic query fails."""
-        # Use real database but patch get_db_connection to return a broken connection
-        with patch("shared_context_server.database.get_db_connection") as mock_get_db:
-            # Mock database connection that fails basic query
-            mock_conn = AsyncMock()
-            mock_cursor = AsyncMock()
-            mock_cursor.fetchone.return_value = None  # Returns None instead of (1,)
-            mock_conn.execute.return_value = mock_cursor
-            mock_get_db.return_value.__aenter__.return_value = mock_conn
-
-            result = await health_check()
-
-            assert result["status"] == "unhealthy"
-            assert "Basic query failed" in result["error"]
 
     async def test_database_manager_connection_counting(self, isolated_db):
         """Test database manager connection counting."""

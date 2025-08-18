@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 from uuid import uuid4
 
 import aiosqlite
@@ -24,7 +24,7 @@ from pydantic import Field
 if TYPE_CHECKING:
     from fastmcp import Context
 
-    TestConnectionType = aiosqlite.Connection | None
+    TestConnectionType = Union[aiosqlite.Connection, None]
 else:
     Context = None
     TestConnectionType = Any
@@ -120,6 +120,7 @@ async def create_session(
         default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
+        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
 ) -> dict[str, Any]:
     """
@@ -279,11 +280,14 @@ async def add_message(
         default=None,
         description="Optional message metadata (JSON object or null)",
         examples=[{"message_type": "test", "priority": "high"}, None],
+        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
-    parent_message_id: int | None = Field(
-        default=None, description="ID of parent message for threading"
+    parent_message_id: Union[int, None] = Field(
+        default=None,
+        description="ID of parent message for threading",
+        json_schema_extra={"anyOf": [{"type": "integer"}, {"type": "null"}]},
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
@@ -460,15 +464,20 @@ async def get_messages(
         default=50, description="Maximum messages to return", ge=1, le=1000
     ),
     offset: int = Field(default=0, description="Offset for pagination", ge=0),
-    visibility_filter: str | None = Field(
-        default=None, description="Filter by visibility: public, private, agent_only"
+    visibility_filter: Union[str, None] = Field(
+        default=None,
+        description="Filter by visibility: public, private, agent_only",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    auth_token: str | None = Field(
+    auth_token: Union[str, None] = Field(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
+        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
     _test_connection: TestConnectionType = Field(
-        default=None, exclude=True
+        default=None,
+        exclude=True,
+        json_schema_extra={"type": "null"},
     ),  # Hidden test parameter
 ) -> dict[str, Any]:
     """
