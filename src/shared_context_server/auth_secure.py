@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +57,7 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
         if auth_token.startswith("sct_"):
             # Resolve protected token to JWT using ContextVar-based manager
             from .auth_context import get_secure_token_manager
+
             token_manager = get_secure_token_manager()
             jwt_token = await token_manager.resolve_protected_token(auth_token)
 
@@ -305,7 +305,7 @@ class SecureTokenManager:
 
     Implements protected token format (sct_<uuid>) with multi-agent concurrency
     safety and race-condition-safe refresh patterns.
-    
+
     Note: Previously used global singleton pattern with test mode management.
     Now instantiated via ContextVar in auth_context.py for better thread safety.
     """
@@ -638,6 +638,7 @@ class SecureTokenManager:
 # Note: Global singleton removed in favor of ContextVar approach in auth_context.py
 # This provides better thread safety and eliminates the need for test reset patterns
 
+
 # Backward compatibility stubs for tests during migration
 def reset_secure_token_manager() -> None:
     """Legacy function - no longer needed with ContextVar approach."""
@@ -645,12 +646,15 @@ def reset_secure_token_manager() -> None:
     # No global state to reset
     pass
 
+
 def set_test_mode(enabled: bool) -> None:
     """Legacy function - no longer needed with ContextVar approach."""
     # ContextVar provides perfect test isolation automatically
     pass
 
-def get_secure_token_manager(force_recreate: bool = False) -> 'SecureTokenManager':
+
+def get_secure_token_manager(force_recreate: bool = False) -> SecureTokenManager:
     """Legacy function - redirects to ContextVar implementation."""
     from .auth_context import get_secure_token_manager as get_context_manager
+
     return get_context_manager()

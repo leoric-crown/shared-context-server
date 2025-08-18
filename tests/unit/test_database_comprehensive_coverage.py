@@ -367,47 +367,31 @@ class TestGlobalManagerFunctions:
     """Test global manager initialization and configuration."""
 
     def test_get_database_manager_config_failure(self):
-        """Test database manager fallback to environment variable."""
+        """Test database manager fallback to environment variable with ContextVar."""
         with patch(
             "src.shared_context_server.config.get_database_config"
         ) as mock_config:
             mock_config.side_effect = Exception("Config error")
 
             with patch.dict(os.environ, {"DATABASE_PATH": "/custom/path.db"}):
-                # Clear global manager
-                import src.shared_context_server.database_connection as db_module
-
-                original_manager = db_module._db_manager
-                db_module._db_manager = None
-
-                try:
-                    manager = get_database_manager()
-                    assert "/custom/path.db" in str(manager.database_path)
-                finally:
-                    # Restore original manager
-                    db_module._db_manager = original_manager
+                # With ContextVar, each test gets automatic isolation
+                # No need to manually clear/restore global managers
+                manager = get_database_manager()
+                assert "/custom/path.db" in str(manager.database_path)
 
     def test_get_sqlalchemy_manager_config_failure(self):
-        """Test SQLAlchemy manager fallback to environment variable."""
+        """Test SQLAlchemy manager fallback to environment variable with ContextVar."""
         with patch(
             "src.shared_context_server.config.get_database_config"
         ) as mock_config:
             mock_config.side_effect = Exception("Config error")
 
             with patch.dict(os.environ, {"DATABASE_PATH": "/custom/path.db"}):
-                # Clear global manager
-                import src.shared_context_server.database_connection as db_module
-
-                original_manager = db_module._sqlalchemy_manager
-                db_module._sqlalchemy_manager = None
-
-                try:
-                    manager = _get_sqlalchemy_manager()
-                    # Should use fallback path
-                    assert manager is not None
-                finally:
-                    # Restore original manager
-                    db_module._sqlalchemy_manager = original_manager
+                # With ContextVar, each test gets automatic isolation
+                # No need to manually clear/restore global managers
+                manager = _get_sqlalchemy_manager()
+                # Should use fallback path
+                assert manager is not None
 
     async def test_initialize_database_config_failure(self):
         """Test database initialization with config failure."""

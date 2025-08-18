@@ -191,7 +191,6 @@ class TestRefreshTokenEdgeCases:
             get_secure_token_manager,
         )
 
-
         ctx = MockContext()
 
         with patch.dict(
@@ -256,7 +255,6 @@ class TestRefreshTokenEdgeCases:
     ):
         """Test token recovery when agent info extraction fails."""
         from shared_context_server.auth import get_secure_token_manager
-
 
         ctx = MockContext()
 
@@ -331,7 +329,6 @@ class TestRefreshTokenEdgeCases:
             get_secure_token_manager,
         )
 
-
         ctx = MockContext()
 
         with patch.dict(
@@ -386,7 +383,6 @@ class TestRefreshTokenEdgeCases:
     ):
         """Test refresh_token with ValueError from token operations."""
 
-
         ctx = MockContext()
 
         with patch.dict(
@@ -436,7 +432,6 @@ class TestRefreshTokenEdgeCases:
     ):
         """Test refresh_token with unexpected system error."""
 
-
         ctx = MockContext()
 
         with patch.dict(
@@ -468,7 +463,6 @@ class TestRefreshTokenEdgeCases:
 
     async def test_refresh_token_audit_logging(self, server_with_db, test_db_manager):
         """Test that refresh_token performs proper audit logging."""
-
 
         ctx = MockContext()
 

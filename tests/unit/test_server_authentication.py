@@ -46,7 +46,6 @@ class TestAuthenticateAgentTool:
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
         """Test successful agent authentication with valid API key header."""
 
-
         ctx = MockContext(session_id="test_session", agent_id="test_agent")
         ctx.headers = {"X-API-Key": "valid_test_key"}  # Add API key header
 
@@ -155,7 +154,6 @@ class TestAuthenticateAgentTool:
     ):
         """Test authentication with different agent types."""
 
-
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
         agent_types = ["claude", "gemini", "custom", "test", "system"]
@@ -190,7 +188,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with different permission requests."""
-
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -230,7 +227,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that successful authentication is properly audit logged."""
-
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -307,7 +303,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that token expiry timestamps are properly formatted."""
-
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -479,7 +474,6 @@ class TestAuthenticateAgentTool:
         """Test multiple concurrent authentication requests."""
         import asyncio
 
-
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
@@ -525,7 +519,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication when no permissions are explicitly requested."""
-
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header

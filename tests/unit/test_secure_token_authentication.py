@@ -346,8 +346,6 @@ class TestSecureTokenIntegration:
         import os
         from unittest.mock import patch
 
-
-
         with patch.dict(
             os.environ,
             {
@@ -356,7 +354,6 @@ class TestSecureTokenIntegration:
             },
             clear=False,
         ):
-
             from shared_context_server.auth import (
                 auth_manager,
                 validate_jwt_token_parameter,

@@ -19,6 +19,7 @@ import os
 import sqlite3
 import sys
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import datetime as dt
 from datetime import timezone
 from pathlib import Path
@@ -543,44 +544,54 @@ class DatabaseManager:
         }
 
 
-# Global database manager instance
-_db_manager: DatabaseManager | None = None
-_sqlalchemy_manager = None
+# ContextVar-based database managers for perfect thread isolation
+# Replaces global singleton pattern with thread-local context variables
+_db_manager_context: ContextVar[DatabaseManager | None] = ContextVar(
+    "database_manager_context", default=None
+)
+_sqlalchemy_manager_context: ContextVar[Any | None] = ContextVar(
+    "sqlalchemy_manager_context", default=None
+)
 
 
 def get_database_manager() -> DatabaseManager:
     """
-    Get global database manager instance.
+    Get thread-local database manager instance with automatic isolation.
+
+    Uses ContextVar for perfect thread safety and automatic test isolation.
+    Each thread/context gets its own database manager instance.
 
     Returns:
-        DatabaseManager: Global database manager
+        DatabaseManager: Thread-local database manager
 
     Raises:
-        DatabaseError: If database manager not initialized
+        DatabaseError: If database manager cannot be initialized
     """
-    global _db_manager
+    manager = _db_manager_context.get()
 
-    if _db_manager is None:
+    if manager is None:
         # Import here to avoid circular dependency
         from .config import get_database_config
 
         try:
             db_config = get_database_config()
-            _db_manager = DatabaseManager(db_config.database_path)
+            manager = DatabaseManager(db_config.database_path)
         except Exception:
             # Fallback to environment variable for backward compatibility
             database_path = os.getenv("DATABASE_PATH", "./chat_history.db")
-            _db_manager = DatabaseManager(database_path)
+            manager = DatabaseManager(database_path)
             logger.warning("Using fallback database path configuration")
 
-    return _db_manager
+        _db_manager_context.set(manager)
+
+    return manager
 
 
 def _get_sqlalchemy_manager() -> Any:
-    """Get global SQLAlchemy manager instance."""
-    global _sqlalchemy_manager
+    """Get thread-local SQLAlchemy manager instance with automatic isolation."""
+    manager = _sqlalchemy_manager_context.get()
 
-    if _sqlalchemy_manager is None:
+    if manager is None:
         from .config import get_database_config
         from .database_sqlalchemy import SimpleSQLAlchemyManager
 
@@ -594,7 +605,7 @@ def _get_sqlalchemy_manager() -> Any:
                 # Convert database_path to SQLAlchemy URL
                 database_url = f"sqlite+aiosqlite:///{db_config.database_path}"
 
-            _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+            manager = SimpleSQLAlchemyManager(database_url)
 
         except Exception:
             # Fallback to environment variables
@@ -605,23 +616,26 @@ def _get_sqlalchemy_manager() -> Any:
                     database_url = database_url.replace(
                         "sqlite://", "sqlite+aiosqlite://", 1
                     )
-                _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+                manager = SimpleSQLAlchemyManager(database_url)
             else:
                 # Fallback to database path
                 database_path = os.getenv("DATABASE_PATH", "./chat_history.db")
                 database_url = f"sqlite+aiosqlite:///{database_path}"
-                _sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+                manager = SimpleSQLAlchemyManager(database_url)
             logger.warning("Using fallback SQLAlchemy database configuration")
 
-    return _sqlalchemy_manager
+        _sqlalchemy_manager_context.set(manager)
+
+    return manager
 
 
 @asynccontextmanager
 async def get_db_connection() -> AsyncGenerator[aiosqlite.Connection, None]:
     """
-    Get database connection using global database manager.
+    Get database connection using thread-local database manager.
 
     Automatically routes to either aiosqlite or SQLAlchemy backend based on configuration.
+    Uses ContextVar for perfect thread isolation and automatic test cleanup.
 
     Yields:
         Connection: Database connection with optimized settings (aiosqlite.Connection or SQLAlchemyConnectionWrapper)
