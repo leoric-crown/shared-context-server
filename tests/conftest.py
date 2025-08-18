@@ -670,7 +670,7 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
 
 
 @pytest.fixture(autouse=True)
-async def cleanup_background_tasks():
+async def cleanup_background_tasks(request):
     """
     Automatically clean up background tasks after each test.
 
@@ -683,10 +683,34 @@ async def cleanup_background_tasks():
     # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
     import os
 
+    # Performance tests get faster cleanup to reduce teardown time
+    is_performance_test = False
+    if hasattr(request, "node"):
+        # Check for performance marker
+        if hasattr(request.node, "iter_markers"):
+            is_performance_test = any(
+                marker.name == "performance" for marker in request.node.iter_markers()
+            )
+
+        # Also check for concurrent/performance test patterns in test names
+        if not is_performance_test and hasattr(request.node, "name"):
+            test_name = request.node.name.lower()
+            is_performance_test = any(
+                pattern in test_name
+                for pattern in ["concurrent", "performance", "load", "stress"]
+            )
+
     if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
         cancelled_tasks = 0  # Skip asyncio cleanup in CI environments
+    elif is_performance_test:
+        cancelled_tasks = (
+            0  # Skip cleanup entirely for performance tests to avoid 5s+ teardown
+        )
+        print(
+            f"⚡ Skipped async cleanup for performance test: {getattr(request.node, 'name', 'unknown')}"
+        )
     else:
-        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=2.0)
+        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=0.5)
 
     cleaned_threads = cleanup_threads_with_timeout(timeout=1.0)
     cleaned_observers = cleanup_observers()
@@ -743,6 +767,20 @@ async def reset_global_singletons():
             # Clear all subscribers and client tracking
             notification_manager.subscribers.clear()
             notification_manager.client_last_seen.clear()
+    except ImportError:
+        pass
+
+    # Reset authentication secure token manager to prevent singleton state pollution
+    try:
+        from shared_context_server.auth_secure import (
+            reset_secure_token_manager,
+            set_test_mode,
+        )
+
+        with suppress(Exception):
+            # Enable test mode for proper singleton lifecycle management
+            set_test_mode(True)
+            reset_secure_token_manager()
     except ImportError:
         pass
 
@@ -1151,3 +1189,52 @@ async def search_test_session(server_with_db, test_db_manager):
         )
 
     yield session_id, ctx
+
+
+# =============================================================================
+# SINGLETON ISOLATION FOR TEST STABILITY
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def singleton_isolation():
+    """
+    Ensure clean singleton state for each test.
+
+    Prevents authentication service state pollution between tests by:
+    1. Setting required environment variables for SecureTokenManager
+    2. Enabling test mode for proper singleton lifecycle management
+    3. Resetting ALL singleton state (auth_manager and secure_token_manager)
+
+    This fixture resolves the "authentication_service temporarily unavailable"
+    errors caused by singleton state corruption across multiple managers.
+    """
+    import os
+    from unittest.mock import patch
+
+    from shared_context_server.auth_core import reset_auth_manager
+    from shared_context_server.auth_secure import (
+        reset_secure_token_manager,
+        set_test_mode,
+    )
+
+    # Set required environment variables before resetting singletons
+    # This ensures that when SecureTokenManager is recreated, it has proper config
+    with patch.dict(
+        os.environ,
+        {
+            "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+            "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        },
+        clear=False,
+    ):
+        # Enable test mode and reset all managers before test
+        set_test_mode(True)
+        reset_secure_token_manager()
+        reset_auth_manager()
+
+        yield
+
+        # Reset all managers after test for cleanup
+        reset_secure_token_manager()
+        reset_auth_manager()

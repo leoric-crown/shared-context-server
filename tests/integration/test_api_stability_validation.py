@@ -22,10 +22,15 @@ import pytest
 
 from shared_context_server.auth import AuthInfo
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
+from tests.fixtures.database import is_sqlalchemy_backend
 
 
 class TestAPIStabilityValidation:
     """Comprehensive API stability validation for refactoring."""
+
+    def _get_backend(self) -> str:
+        """Get the correct backend based on environment variable."""
+        return "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
 
     @pytest.fixture
     def authenticated_context(self):
@@ -48,7 +53,7 @@ class TestAPIStabilityValidation:
         """Test session management tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test create_session API stability
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -94,7 +99,7 @@ class TestAPIStabilityValidation:
         """Test message storage tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Create session for message testing
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Message API test"
@@ -147,7 +152,7 @@ class TestAPIStabilityValidation:
         """Test search tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Setup test data
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Search API test"
@@ -199,7 +204,7 @@ class TestAPIStabilityValidation:
         """Test agent memory tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Setup session
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Memory API test"
@@ -266,7 +271,7 @@ class TestAPIStabilityValidation:
         """Test admin tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test get_performance_metrics API stability
             metrics_result = await call_fastmcp_tool(
                 server.get_performance_metrics, authenticated_context
@@ -310,8 +315,12 @@ class TestAPIStabilityValidation:
         from unittest.mock import patch
 
         from shared_context_server import server
+        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        # Ensure clean singleton state before test
+        reset_secure_token_manager()
+
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test authenticate_agent API stability
             mock_ctx = MockContext()
             mock_ctx.headers = {"X-API-Key": "test_api_key"}  # Add API key header
@@ -324,6 +333,8 @@ class TestAPIStabilityValidation:
                     "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
                 },
             ):
+                # Force singleton recreation with new environment
+                reset_secure_token_manager()
                 auth_result = await call_fastmcp_tool(
                     server.authenticate_agent,
                     mock_ctx,  # Unauthenticated context with API key
@@ -355,7 +366,7 @@ class TestAPIStabilityValidation:
         """Test that error responses maintain consistent structure across all tools."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test invalid session_id error consistency
             try:
                 error_result = await call_fastmcp_tool(
@@ -386,7 +397,7 @@ class TestAPIStabilityValidation:
         """Test that parameter validation is consistent across all tools."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test missing required parameters
             with pytest.raises((TypeError, ValueError, AssertionError)) as exc_info:
                 await call_fastmcp_tool(
@@ -404,7 +415,7 @@ class TestAPIStabilityValidation:
         """Test API stability under concurrent load."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Create session for concurrent testing
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -483,7 +494,7 @@ class TestAPIStabilityValidation:
         """Test that performance contracts are maintained during refactoring."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Setup test data
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -569,8 +580,12 @@ class TestAPIStabilityValidation:
         from unittest.mock import patch
 
         from shared_context_server import server
+        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        # Ensure clean singleton state before test
+        reset_secure_token_manager()
+
+        with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test complete authentication flow
 
             # 1. Authenticate agent
@@ -585,6 +600,8 @@ class TestAPIStabilityValidation:
                     "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
                 },
             ):
+                # Force singleton recreation with new environment
+                reset_secure_token_manager()
                 auth_result = await call_fastmcp_tool(
                     server.authenticate_agent,
                     mock_ctx,

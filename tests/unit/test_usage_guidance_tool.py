@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 if TYPE_CHECKING:
     from fastmcp import Context
 else:
@@ -482,9 +484,11 @@ class TestPerformanceValidation:
                 f"Guidance generation took {execution_time_ms:.2f}ms, should be <50ms"
             )
 
+    @pytest.mark.performance
     async def test_concurrent_agent_access(self):
         """Test concurrent agent access without performance degradation."""
         import asyncio
+        import gc
 
         async def single_guidance_request(agent_id: str, permissions: list[str]):
             ctx = MagicMock(spec=Context)
@@ -536,6 +540,9 @@ class TestPerformanceValidation:
         assert total_time_ms < 500, (
             f"Concurrent requests took {total_time_ms:.2f}ms, should be <500ms"
         )
+
+        # Force garbage collection to reduce teardown time
+        gc.collect()
 
 
 class TestAuditLogging:

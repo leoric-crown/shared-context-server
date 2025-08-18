@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -304,6 +305,20 @@ class SecureTokenManager:
     Implements protected token format (sct_<uuid>) with multi-agent concurrency
     safety and race-condition-safe refresh patterns.
     """
+
+    _test_mode: bool = False
+
+    @classmethod
+    def enable_test_mode(cls) -> None:
+        """Enable test mode for singleton management."""
+        cls._test_mode = True
+        cls.reset()
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset singleton instance for test isolation."""
+        global secure_token_manager
+        secure_token_manager = None
 
     def __init__(self) -> None:
         """Initialize SecureTokenManager with Fernet encryption."""
@@ -630,15 +645,39 @@ class SecureTokenManager:
             return 0
 
 
-# Global secure token manager
+# Global secure token manager with thread safety
+
 secure_token_manager: SecureTokenManager | None = None
+_manager_lock = threading.Lock()
+_test_mode: bool = False
 
 
-def get_secure_token_manager() -> SecureTokenManager:
-    """Get global secure token manager instance."""
+def get_secure_token_manager(force_recreate: bool = False) -> SecureTokenManager:
+    """Get global secure token manager instance with thread safety."""
     global secure_token_manager
 
-    if secure_token_manager is None:
-        secure_token_manager = SecureTokenManager()
+    # Always recreate in test mode OR when explicitly requested
+    if SecureTokenManager._test_mode or force_recreate or secure_token_manager is None:
+        with _manager_lock:
+            # Double-check pattern for thread safety
+            if (
+                SecureTokenManager._test_mode
+                or force_recreate
+                or secure_token_manager is None
+            ):
+                secure_token_manager = SecureTokenManager()
 
     return secure_token_manager
+
+
+def reset_secure_token_manager() -> None:
+    """Reset singleton for test isolation."""
+    global secure_token_manager
+    secure_token_manager = None
+
+
+def set_test_mode(enabled: bool) -> None:
+    """Enable/disable test mode for singleton management."""
+    SecureTokenManager._test_mode = enabled
+    if enabled:
+        reset_secure_token_manager()

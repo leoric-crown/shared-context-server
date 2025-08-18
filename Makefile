@@ -19,7 +19,7 @@ dev: ## Start development server with hot reload
 test: ## Run tests with coverage
 	@echo "🧪 Running tests with coverage..."
 	@start=$$(date +%s); \
-	if uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml; then \
+	if USE_SQLALCHEMY=true uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml; then \
 		end=$$(date +%s); \
 		duration=$$((end - start)); \
 		echo "✅ Tests with coverage completed ($${duration}s)"; \

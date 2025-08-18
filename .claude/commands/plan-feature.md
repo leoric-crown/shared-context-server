@@ -35,9 +35,11 @@ Initiates a collaborative, multi-phase process to define, research, and plan any
    - `CLAUDE.md`, `README.md`, `SECURITY.md`
 3. **Load Technical Standards**: Read the content of all tech guides to understand established patterns and best practices:
    - `.claude/guides/` (all guides)
-   - `.claude/guides/testing-patterns.md`
-   - `.claude/guides/framework-integration.md`
-   - `.claude/guides/data-architecture.md`
+   - `.claude/guides/testing-architecture-stability.md`
+   - `.claude/guides/development-standards.md`
+   - `.claude/guides/shared-context-integration.md`
+   - `.claude/guides/mcp-toolkit-architecture.md`
+   - `.claude/guides/browser-automation.md`
 4. **Analyze Codebase Structure**: Read the output of a tree-like command listing the structure of the source directory to understand the current architecture.
 5. **Store Project Context**: Add loaded project context to the planning session:
    - Project structure and architectural patterns

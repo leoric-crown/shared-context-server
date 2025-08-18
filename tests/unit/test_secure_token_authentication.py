@@ -343,30 +343,49 @@ class TestSecureTokenIntegration:
         self, sample_jwt
     ):
         """Test backward compatibility with raw JWT tokens."""
-        from shared_context_server.auth import (
-            auth_manager,
-            validate_jwt_token_parameter,
-        )
+        import os
+        from unittest.mock import patch
 
-        # Mock JWT validation to return valid result
-        with patch.object(auth_manager, "validate_token") as mock_validate:
-            mock_validate.return_value = {
-                "valid": True,
-                "agent_id": "test_agent",
-                "agent_type": "claude",
-                "permissions": ["read", "write"],
-                "token_id": "test_token_id",
-            }
+        from shared_context_server.auth_secure import reset_secure_token_manager
 
-            # Validate raw JWT token
-            result = await validate_jwt_token_parameter(sample_jwt)
+        # Reset singleton before test to ensure clean state
+        reset_secure_token_manager()
 
-            # Verify successful validation
-            assert result is not None
-            assert result["agent_id"] == "test_agent"
-            assert result["agent_type"] == "claude"
-            assert result["auth_method"] == "jwt"
-            assert "protected_token" not in result
+        with patch.dict(
+            os.environ,
+            {
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
+            # Force singleton recreation with proper environment
+            reset_secure_token_manager()
+
+            from shared_context_server.auth import (
+                auth_manager,
+                validate_jwt_token_parameter,
+            )
+
+            # Mock JWT validation to return valid result
+            with patch.object(auth_manager, "validate_token") as mock_validate:
+                mock_validate.return_value = {
+                    "valid": True,
+                    "agent_id": "test_agent",
+                    "agent_type": "claude",
+                    "permissions": ["read", "write"],
+                    "token_id": "test_token_id",
+                }
+
+                # Validate raw JWT token
+                result = await validate_jwt_token_parameter(sample_jwt)
+
+                # Verify successful validation
+                assert result is not None
+                assert result["agent_id"] == "test_agent"
+                assert result["agent_type"] == "claude"
+                assert result["auth_method"] == "jwt"
+                assert "protected_token" not in result
 
             # Verify JWT validation was called with original token
             mock_validate.assert_called_once_with(sample_jwt)

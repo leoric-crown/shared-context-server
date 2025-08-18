@@ -29,6 +29,14 @@ repos:
         entry: uv
         args: ["run", "mypy", "src"]
 
+      - id: singleton-patterns
+        name: Validate singleton testing patterns
+        language: system
+        entry: python3
+        args: ["scripts/validate_singleton_patterns.py"]
+        files: '^tests/.*\.py$'
+        description: "Ensure authentication tests follow singleton isolation patterns"
+
   # Essential file hygiene (fast, prevents diff noise)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
