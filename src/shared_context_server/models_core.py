@@ -14,7 +14,7 @@ import json
 import re
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from pydantic import (
     BaseModel,
@@ -127,6 +127,11 @@ def validate_json_metadata(metadata: dict[str, Any] | None) -> str | None:
 def _raise_metadata_too_large_error() -> None:
     """Raise metadata size error."""
     raise ValueError("Metadata JSON too large")
+
+
+def _raise_invalid_json_type_error() -> None:
+    """Raise error for JSON that doesn't deserialize to a dictionary."""
+    raise TypeError("JSON string must deserialize to a dictionary")
 
 
 def _is_json_serializable(value: Any) -> bool:
@@ -366,7 +371,7 @@ class MessageModel(BaseModel):
     def serialize_created_at(self, value: datetime) -> str:
         return value.isoformat()
 
-    def model_dump(self, **kwargs):
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
         """Override model_dump to include timestamp alias."""
         data = super().model_dump(**kwargs)
         # Add timestamp as alias for created_at for backwards compatibility
@@ -458,11 +463,14 @@ class AgentMemoryModel(BaseModel):
             try:
                 import json
 
-                v = json.loads(v)
+                parsed_v = json.loads(v)
+                if not isinstance(parsed_v, dict):
+                    _raise_invalid_json_type_error()
+                v = cast("dict[str, Any]", parsed_v)
             except (json.JSONDecodeError, TypeError) as e:
                 raise ValueError(f"Invalid JSON string: {e}") from e
 
-        # Validate the value is JSON serializable
+        # At this point, v is guaranteed to be dict[str, Any]
         validate_json_metadata(v)
         return v
 

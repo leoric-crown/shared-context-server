@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastmcp import Context
+from fastmcp import Context  # noqa: TC002
 from pydantic import Field
 
 from .auth import validate_agent_context_or_error

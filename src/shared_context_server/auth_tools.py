@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import aiosqlite
 
-from fastmcp import Context
+from fastmcp import Context  # noqa: TC002
 from pydantic import Field
 
 from .auth import (

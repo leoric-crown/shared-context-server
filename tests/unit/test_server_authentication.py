@@ -21,8 +21,12 @@ class TestAuthenticateAgentTool:
     async def server_with_db(self, test_db_manager):
         """Create server instance with test database."""
         from shared_context_server import server
+        from tests.fixtures.database import is_sqlalchemy_backend
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        # Use the correct backend based on environment variable
+        backend = "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
+
+        with patch_database_connection(test_db_manager, backend=backend):
             yield server
 
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
@@ -139,7 +143,9 @@ class TestAuthenticateAgentTool:
                     requested_permissions=["read", "write"],
                 )
 
-                assert result["success"] is True
+                if not result.get("success"):
+                    print(f"Authentication failed for {agent_type}: {result}")
+                assert result["success"] is True, f"Authentication failed for {agent_type}: {result}"
                 assert result["agent_type"] == agent_type
                 assert "permissions" in result
 
