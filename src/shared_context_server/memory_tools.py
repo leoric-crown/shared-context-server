@@ -20,10 +20,7 @@ from typing import TYPE_CHECKING, Any, Union
 import aiosqlite
 from pydantic import Field
 
-if TYPE_CHECKING:
-    from fastmcp import Context
-else:
-    Context = None
+from fastmcp import Context
 
 # PERFORMANCE OPTIMIZATION: Pre-import commonly used modules
 # to avoid repeated import overhead during function execution
@@ -128,9 +125,8 @@ async def audit_log(
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def set_memory(
-    ctx: Context,
     key: str = Field(description="Memory key", min_length=1, max_length=255),
     value: Any = Field(
         description="Value to store (JSON serializable)",
@@ -165,6 +161,7 @@ async def set_memory(
         description="Optional JWT token for elevated permissions",
         json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Store value in agent's private memory with TTL and scope management.
@@ -427,9 +424,8 @@ async def set_memory(
         return create_system_error("set_memory", "database", temporary=True)
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def get_memory(
-    ctx: Context,
     key: str = Field(description="Memory key to retrieve"),
     session_id: Union[str, None] = Field(
         default=None,
@@ -441,6 +437,7 @@ async def get_memory(
         description="Optional JWT token for elevated permissions",
         json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Retrieve value from agent's private memory with automatic cleanup.
@@ -526,9 +523,8 @@ async def get_memory(
         return create_system_error("get_memory", "database", temporary=True)
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def list_memory(
-    ctx: Context,
     session_id: Union[str, None] = Field(
         default=None, description="Session scope (null for global, 'all' for both)"
     ),
@@ -543,6 +539,7 @@ async def list_memory(
         description="Optional JWT token for elevated permissions",
         json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     List agent's memory entries with filtering options.

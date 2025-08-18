@@ -16,10 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
-if TYPE_CHECKING:
-    from fastmcp import Context
-else:
-    Context = None
+from fastmcp import Context
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -73,9 +70,8 @@ async def audit_log(
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def get_usage_guidance(
-    ctx: Context,
     auth_token: str | None = Field(
         default=None,
         description="JWT token to analyze. If not provided, uses current request context",
@@ -84,6 +80,7 @@ async def get_usage_guidance(
         default="operations",
         description="Type of guidance: operations, coordination, security, troubleshooting",
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Get contextual operational guidance based on JWT access level.

@@ -347,8 +347,8 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
                 f"create_session() missing 1 required positional argument: '{name}'"
             )
 
-    # Call the function with context as first parameter
-    return await fastmcp_tool.fn(ctx, **call_args)
+    # Call the function with context as keyword parameter
+    return await fastmcp_tool.fn(ctx=ctx, **call_args)
 
 
 class MockContext:

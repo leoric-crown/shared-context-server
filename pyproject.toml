@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 dependencies = [
-    "fastmcp>=2.0.0",
+    "fastmcp>=2.11.3",
     "aiosqlite>=0.19.0",
     "rapidfuzz>=3.0.0",
     "pydantic>=2.0.0",

@@ -23,12 +23,11 @@ from pydantic import Field
 from rapidfuzz import fuzz, process
 
 if TYPE_CHECKING:
-    from fastmcp import Context
-
     TestConnectionType = Union[aiosqlite.Connection, None]
 else:
-    Context = None
     TestConnectionType = Any
+
+from fastmcp import Context
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -510,9 +509,8 @@ async def search_context(
 
 
 # FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_context")
+@mcp.tool(name="search_context", exclude_args=["ctx"])
 async def search_context_tool(
-    ctx: Context,
     session_id: str = Field(description="Session ID to search within"),
     query: str = Field(description="Search query"),
     fuzzy_threshold: float = Field(
@@ -521,6 +519,7 @@ async def search_context_tool(
     limit: int = Field(
         default=10, description="Maximum results to return", ge=1, le=100
     ),
+    ctx: Context = None,
     search_metadata: bool = Field(
         default=True, description="Include metadata in search"
     ),
@@ -642,9 +641,8 @@ async def search_by_sender(
 
 
 # FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_by_sender")
+@mcp.tool(name="search_by_sender", exclude_args=["ctx"])
 async def search_by_sender_tool(
-    ctx: Context,
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
@@ -653,6 +651,7 @@ async def search_by_sender_tool(
         exclude=True,
         json_schema_extra={"type": "null"},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_sender function."""
     return await search_by_sender(ctx, session_id, sender, limit, _test_connection)
@@ -768,9 +767,8 @@ async def search_by_timerange(
 
 
 # FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_by_timerange")
+@mcp.tool(name="search_by_timerange", exclude_args=["ctx"])
 async def search_by_timerange_tool(
-    ctx: Context,
     session_id: str = Field(description="Session ID to search within"),
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
@@ -780,6 +778,7 @@ async def search_by_timerange_tool(
         exclude=True,
         json_schema_extra={"type": "null"},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """FastMCP wrapper for search_by_timerange function."""
     return await search_by_timerange(

@@ -21,10 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
-if TYPE_CHECKING:
-    from fastmcp import Context
-else:
-    Context = None
+from fastmcp import Context
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -42,12 +39,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def get_performance_metrics(
-    ctx: Context,
     auth_token: str | None = Field(
         default=None, description="Optional JWT token for admin access"
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Get comprehensive performance metrics for monitoring.

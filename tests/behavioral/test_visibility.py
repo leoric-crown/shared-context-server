@@ -23,6 +23,7 @@ from shared_context_server.server import (
 
 def extract_field_defaults(fastmcp_tool):
     """Extract actual default values from FastMCP tool function."""
+    from pydantic_core import PydanticUndefined
     defaults = {}
     sig = inspect.signature(fastmcp_tool.fn)
 
@@ -30,7 +31,9 @@ def extract_field_defaults(fastmcp_tool):
         if param_name == "ctx":  # Skip context parameter
             continue
         if isinstance(param.default, FieldInfo):
-            defaults[param_name] = param.default.default
+            # Only include if it has a real default value (not required)
+            if param.default.default is not PydanticUndefined:
+                defaults[param_name] = param.default.default
         elif param.default != inspect.Parameter.empty:
             defaults[param_name] = param.default
     return defaults
@@ -39,8 +42,11 @@ def extract_field_defaults(fastmcp_tool):
 async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
     """Call FastMCP tool with proper default handling."""
     defaults = extract_field_defaults(fastmcp_tool)
+    # kwargs should override defaults, not the other way around
     call_args = {**defaults, **kwargs}
-    return await fastmcp_tool.fn(ctx, **call_args)
+    
+    # Pass ctx as keyword argument to avoid positional conflicts with exclude_args
+    return await fastmcp_tool.fn(ctx=ctx, **call_args)
 
 
 class MockContext:

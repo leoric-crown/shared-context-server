@@ -22,12 +22,11 @@ import aiosqlite
 from pydantic import Field
 
 if TYPE_CHECKING:
-    from fastmcp import Context
-
     TestConnectionType = Union[aiosqlite.Connection, None]
 else:
-    Context = None
     TestConnectionType = Any
+
+from fastmcp import Context
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -112,9 +111,8 @@ async def audit_log(
 # ============================================================================
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def create_session(
-    ctx: Context,
     purpose: str = Field(description="Purpose or description of the session"),
     metadata: dict[str, Any] | None = Field(
         default=None,
@@ -122,6 +120,7 @@ async def create_session(
         examples=[{"test": True, "version": 1}, None],
         json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Create a new shared context session.
@@ -203,9 +202,10 @@ async def create_session(
         return create_system_error("create_session", "database", temporary=True)
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def get_session(
-    ctx: Context, session_id: str = Field(description="Session ID to retrieve")
+    session_id: str = Field(description="Session ID to retrieve"),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Retrieve session information and recent messages.
@@ -267,9 +267,8 @@ async def get_session(
         return create_system_error("get_session", "database", temporary=True)
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def add_message(
-    ctx: Context,
     session_id: str = Field(description="Session ID to add message to"),
     content: str = Field(description="Message content"),
     visibility: str = Field(
@@ -291,6 +290,7 @@ async def add_message(
         default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Add a message to the shared context session.
@@ -456,9 +456,8 @@ async def add_message(
         return create_system_error("add_message", "database", temporary=True)
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def get_messages(
-    ctx: Context,
     session_id: str = Field(description="Session ID to retrieve messages from"),
     limit: int = Field(
         default=50, description="Maximum messages to return", ge=1, le=1000
@@ -479,6 +478,7 @@ async def get_messages(
         exclude=True,
         json_schema_extra={"type": "null"},
     ),  # Hidden test parameter
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.

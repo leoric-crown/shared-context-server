@@ -14,9 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import aiosqlite
-    from fastmcp import Context
-else:
-    Context = None
+
+from fastmcp import Context
 
 from pydantic import Field
 
@@ -179,9 +178,8 @@ def _create_authenticate_agent_tool() -> Any:
     # Generate dynamic field description
     agent_type_description = _generate_agent_type_field_description()
 
-    @mcp.tool()
+    @mcp.tool(exclude_args=["ctx"])
     async def authenticate_agent(
-        ctx: Context,
         agent_id: str = Field(
             description="Agent identifier", min_length=1, max_length=100
         ),
@@ -189,6 +187,7 @@ def _create_authenticate_agent_tool() -> Any:
         requested_permissions: list[str] = Field(
             default=["read", "write"], description="Requested permissions for the agent"
         ),
+        ctx: Context = None,
     ) -> dict[str, Any]:
         # Dynamic docstring generation would be handled here if needed by introspection tools
         return await _authenticate_agent_impl(
@@ -273,12 +272,12 @@ async def _authenticate_agent_impl(
         )
 
 
-@mcp.tool()
+@mcp.tool(exclude_args=["ctx"])
 async def refresh_token(
-    ctx: Context,
     current_token: str = Field(
         description="Current protected token to refresh", pattern=r"^sct_[a-f0-9-]{36}$"
     ),
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Refresh a protected token (PRP-006: Secure Token Authentication).
