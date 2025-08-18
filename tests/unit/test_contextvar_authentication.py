@@ -174,7 +174,7 @@ class TestThreadSafety:
 
         # Each thread should get its own instance
         assert len(results) == 5
-        assert len(set(id(r) for r in results)) == 5  # All different instances
+        assert len({id(r) for r in results}) == 5  # All different instances
 
 
 @pytest.mark.asyncio
@@ -273,10 +273,12 @@ class TestBackwardCompatibility:
 
         # Should handle missing environment variables appropriately
         reset_token_context()
-        with patch.dict(os.environ, {}, clear=True):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(ValueError, match="JWT_ENCRYPTION_KEY"),
+        ):
             # Should raise ValueError for missing JWT_ENCRYPTION_KEY as expected
-            with pytest.raises(ValueError, match="JWT_ENCRYPTION_KEY"):
-                get_secure_token_manager()
+            get_secure_token_manager()
 
 
 class TestPerformance:

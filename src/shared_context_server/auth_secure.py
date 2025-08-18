@@ -653,7 +653,7 @@ def set_test_mode(enabled: bool) -> None:
     pass
 
 
-def get_secure_token_manager(force_recreate: bool = False) -> SecureTokenManager:
+def get_secure_token_manager(_force_recreate: bool = False) -> SecureTokenManager:
     """Legacy function - redirects to ContextVar implementation."""
     from .auth_context import get_secure_token_manager as get_context_manager
 

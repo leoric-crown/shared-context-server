@@ -122,8 +122,12 @@ def unregister_observer(observer):
 # =============================================================================
 
 
-async def cleanup_async_tasks_with_timeout(timeout: float = 2.0) -> int:
-    """Clean up asyncio tasks with proper timeout handling."""
+async def cleanup_async_tasks_with_timeout(timeout: float = 0.5) -> int:
+    """
+    Clean up asyncio tasks with robust timeout handling.
+
+    Based on pytest-asyncio community best practices for preventing hanging tests.
+    """
     global _task_registry
 
     try:
@@ -133,55 +137,76 @@ async def cleanup_async_tasks_with_timeout(timeout: float = 2.0) -> int:
         _task_registry.clear()
         return 0
 
-    # Only cancel tasks that belong to the current event loop
-    tasks_to_cancel = []
+    # Get all tasks except current one (more robust approach)
+    try:
+        all_tasks = asyncio.all_tasks(current_loop)
+        current_task = asyncio.current_task(current_loop)
+        tasks_to_cancel = [
+            task for task in all_tasks if not task.done() and task != current_task
+        ]
+    except Exception:
+        # Fallback to registry-based approach
+        tasks_to_cancel = []
+        for task in list(_task_registry):
+            try:
+                if (
+                    hasattr(task, "_loop")
+                    and task._loop is current_loop
+                    and not task.done()
+                ):
+                    tasks_to_cancel.append(task)
+            except Exception:  # noqa: PERF203
+                _task_registry.discard(task)
+                continue
+
+    if not tasks_to_cancel:
+        _task_registry.clear()
+        return 0
+
+    # Cancel all tasks
     cancelled_count = 0
-
-    for task in list(_task_registry):
-        try:
-            # Check if task belongs to current loop
-            if hasattr(task, "_loop") and task._loop is current_loop:
-                tasks_to_cancel.append(task)
-            elif not hasattr(task, "_loop"):
-                # Legacy task, try to cancel anyway
-                tasks_to_cancel.append(task)
-        except Exception:
-            # Task might be corrupted, remove from registry
-            _task_registry.discard(task)
-            continue
-
     for task in tasks_to_cancel:
         if not task.done():
             task.cancel()
             cancelled_count += 1
 
-    # Wait for cancellation with timeout, only for current loop tasks
+    # Wait for cancellation with proper timeout handling
     if tasks_to_cancel:
         try:
+            # Use asyncio.wait_for for more reliable timeout
             await asyncio.wait_for(
                 asyncio.gather(*tasks_to_cancel, return_exceptions=True),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
+            # Force cancel remaining tasks
+            remaining_tasks = [t for t in tasks_to_cancel if not t.done()]
             _quiet_print(
-                f"⚠️ {len([t for t in tasks_to_cancel if not t.done()])} tasks didn't cancel within {timeout}s"
+                f"⚠️ {len(remaining_tasks)} tasks didn't cancel within {timeout}s, force cancelling"
             )
+            for task in remaining_tasks:
+                if not task.done():
+                    task.cancel()
+
+            # Give a final brief moment for force cancellation
+            with suppress(asyncio.TimeoutError, Exception):
+                # Final fallback - tasks are stuck, just continue
+                await asyncio.wait_for(
+                    asyncio.gather(*remaining_tasks, return_exceptions=True),
+                    timeout=0.1,
+                )
+
         except ValueError as e:
             if "different loop" in str(e):
                 _quiet_print(
                     "⚠️ Skipping cross-loop task cleanup to avoid event loop conflicts"
                 )
             else:
-                raise
+                # Log error but don't fail the test
+                _quiet_print(f"⚠️ Task cleanup error: {e}")
 
-    # Clean up tasks from registry that belong to current loop
-    current_loop_tasks = {
-        task
-        for task in _task_registry
-        if hasattr(task, "_loop") and task._loop is current_loop
-    }
-    _task_registry -= current_loop_tasks
-
+    # Clean up task registry
+    _task_registry.clear()
     return cancelled_count
 
 
@@ -730,21 +755,52 @@ async def cleanup_background_tasks(request):
     import os
 
     # Performance tests get faster cleanup to reduce teardown time
-    is_performance_test = False
-    if hasattr(request, "node"):
-        # Check for performance marker
-        if hasattr(request.node, "iter_markers"):
-            is_performance_test = any(
-                marker.name == "performance" for marker in request.node.iter_markers()
-            )
+    def is_performance_test_robust(request):
+        """Reliable performance test detection across pytest-xdist and different execution modes."""
+        if not hasattr(request, "node"):
+            return False
 
-        # Also check for concurrent/performance test patterns in test names
-        if not is_performance_test and hasattr(request.node, "name"):
-            test_name = request.node.name.lower()
-            is_performance_test = any(
-                pattern in test_name
-                for pattern in ["concurrent", "performance", "load", "stress"]
-            )
+        # Method 1: Use get_closest_marker (more reliable than iter_markers)
+        try:
+            perf_marker = request.node.get_closest_marker("performance")
+            if perf_marker:
+                return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 2: Fallback to iter_markers for compatibility
+        try:
+            if hasattr(request.node, "iter_markers") and any(
+                marker.name == "performance" for marker in request.node.iter_markers()
+            ):
+                return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 3: Check test name patterns
+        try:
+            if hasattr(request.node, "name"):
+                test_name = request.node.name.lower()
+                if any(
+                    pattern in test_name
+                    for pattern in ["concurrent", "performance", "load", "stress"]
+                ):
+                    return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 4: Check class name patterns for additional reliability
+        try:
+            if hasattr(request.node, "cls") and request.node.cls:
+                class_name = request.node.cls.__name__.lower()
+                if "performance" in class_name:
+                    return True
+        except (AttributeError, TypeError):
+            pass
+
+        return False
+
+    is_performance_test = is_performance_test_robust(request)
 
     if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
         cancelled_tasks = 0  # Skip asyncio cleanup in CI environments
@@ -758,7 +814,11 @@ async def cleanup_background_tasks(request):
     else:
         cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=0.5)
 
-    cleaned_threads = cleanup_threads_with_timeout(timeout=1.0)
+    # Skip thread cleanup for performance tests to avoid hanging
+    if is_performance_test:
+        cleaned_threads = 0  # Skip thread cleanup for performance tests
+    else:
+        cleaned_threads = cleanup_threads_with_timeout(timeout=0.5)
     cleaned_observers = cleanup_observers()
 
     # Log detailed information about cleanup

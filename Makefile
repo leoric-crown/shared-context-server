@@ -19,7 +19,7 @@ dev: ## Start development server with hot reload
 test: ## Run tests with coverage
 	@echo "🧪 Running tests with coverage..."
 	@start=$$(date +%s); \
-	if USE_SQLALCHEMY=true uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml; then \
+	if USE_SQLALCHEMY=true uv run pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml --timeout=30 --dist=loadscope; then \
 		end=$$(date +%s); \
 		duration=$$((end - start)); \
 		echo "✅ Tests with coverage completed ($${duration}s)"; \
@@ -33,7 +33,7 @@ test: ## Run tests with coverage
 test-quick: ## Run tests without coverage (faster)
 	@echo "⚡ Running tests without coverage tracking..."
 	@start=$$(date +%s); \
-	if uv run pytest -x --tb=short; then \
+	if uv run pytest -x --tb=short --timeout=30 --dist=loadscope; then \
 		end=$$(date +%s); \
 		duration=$$((end - start)); \
 		echo "✅ Quick tests completed ($${duration}s)"; \
@@ -63,11 +63,11 @@ test-backend: ## Test both database backends
 	@start=$$(date +%s); \
 	aio_status="❌"; sql_status="❌"; \
 	echo "  → Testing aiosqlite backend..."; \
-	if USE_SQLALCHEMY=false uv run pytest -q --maxfail=3; then \
+	if USE_SQLALCHEMY=false uv run pytest -q --maxfail=3 --timeout=30 --dist=loadscope; then \
 		aio_status="✅"; \
 	fi; \
 	echo "  → Testing SQLAlchemy backend..."; \
-	if USE_SQLALCHEMY=true uv run pytest -q --maxfail=3; then \
+	if USE_SQLALCHEMY=true uv run pytest -q --maxfail=3 --timeout=30 --dist=loadscope; then \
 		sql_status="✅"; \
 	fi; \
 	end=$$(date +%s); \

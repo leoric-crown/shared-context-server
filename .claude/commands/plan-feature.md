@@ -1,5 +1,7 @@
 # Feature Planning Command
 
+## User Prompt: $ARGUMENTS
+
 ## Description
 
 **PRP Lifecycle Stage: 1-planning (Initial Planning)**

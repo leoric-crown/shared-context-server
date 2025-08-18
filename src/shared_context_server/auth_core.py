@@ -169,37 +169,65 @@ class JWTAuthenticationManager:
         return granted_permissions
 
 
-# Global auth manager with lazy initialization
+# LEGACY: LazyAuthManager singleton anti-pattern (DEPRECATED)
+# Maintained for backward compatibility only
 class LazyAuthManager:
-    """Lazy-initialized auth manager that behaves like the actual manager."""
+    """
+    DEPRECATED: Legacy lazy-initialized auth manager.
+
+    This class is maintained for backward compatibility only.
+    New code should use get_jwt_auth_manager() from auth_core_context.py
+    which provides proper thread-safe ContextVar-based management.
+    """
 
     def __init__(self) -> None:
-        self._instance: JWTAuthenticationManager | None = None
+        # Deferred import to avoid circular import issues
+        pass
 
     def _get_instance(self) -> JWTAuthenticationManager:
-        if self._instance is None:
-            self._instance = JWTAuthenticationManager()
-        return self._instance
+        """Get instance from ContextVar (thread-safe)."""
+        from .auth_core_context import get_jwt_auth_manager
+
+        return get_jwt_auth_manager()
 
     def __getattr__(self, name: str) -> Any:
+        """Proxy all attributes to ContextVar-managed instance."""
         return getattr(self._get_instance(), name)
 
     def reset(self) -> None:
-        """Reset the auth manager instance (for testing)."""
-        self._instance = None
+        """
+        DEPRECATED: No-op for backward compatibility.
+
+        ContextVar provides automatic isolation, making manual resets unnecessary.
+        This method is retained for backward compatibility but does nothing.
+        """
+        pass  # No-op - ContextVar provides automatic isolation
 
 
+# LEGACY: Global instance for backward compatibility
 auth_manager = LazyAuthManager()
 
 
 def get_auth_manager() -> JWTAuthenticationManager:
-    """Get the global auth manager, initializing lazily."""
-    return auth_manager._get_instance()
+    """
+    DEPRECATED: Get auth manager (redirects to ContextVar implementation).
+
+    This function is maintained for backward compatibility.
+    New code should use get_jwt_auth_manager() from auth_core_context.py
+    """
+    from .auth_core_context import get_jwt_auth_manager
+
+    return get_jwt_auth_manager()
 
 
 def reset_auth_manager() -> None:
-    """Reset the global auth manager (for testing)."""
-    auth_manager.reset()
+    """
+    DEPRECATED: No-op for backward compatibility.
+
+    ContextVar provides automatic isolation, making manual resets unnecessary.
+    This function is retained for backward compatibility but does nothing.
+    """
+    pass  # No-op - ContextVar provides automatic isolation
 
 
 def require_permission(permission: str) -> Callable[[Callable], Callable]:

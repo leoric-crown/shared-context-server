@@ -27,6 +27,7 @@ class TestBackgroundTaskSystem:
         with patch_database_connection(test_db_manager, backend="aiosqlite"):
             yield server
 
+    @pytest.mark.performance
     async def test_cleanup_expired_memory_task_functionality(
         self, server_with_db, test_db_manager
     ):

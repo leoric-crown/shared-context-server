@@ -63,16 +63,16 @@ class TestDatabaseFileRegressionPrevention:
             patch.dict(os.environ, {}, clear=True),
             patch.dict(os.environ, {"API_KEY": "test-key"}),
         ):
-            from shared_context_server import config
+            from shared_context_server.config_context import reset_config_context
 
-            with patch.object(config, "_config", None):
-                db_url = get_database_url()
-                assert "chat_history" in db_url, (
-                    f"Database URL doesn't use chat_history: {db_url}"
-                )
-                assert "shared_context" not in db_url, (
-                    f"Database URL uses shared_context: {db_url}"
-                )
+            reset_config_context()
+            db_url = get_database_url()
+            assert "chat_history" in db_url, (
+                f"Database URL doesn't use chat_history: {db_url}"
+            )
+            assert "shared_context" not in db_url, (
+                f"Database URL uses shared_context: {db_url}"
+            )
 
     def test_sqlalchemy_backend_default_uses_chat_history(self):
         """Ensure SQLAlchemy backend defaults use chat_history pattern."""
@@ -204,14 +204,15 @@ class TestDatabaseFileRegressionPrevention:
             }
 
             # Clear any cached config and database manager
-            from shared_context_server import config, database
+            from shared_context_server.config_context import reset_config_context
+            from shared_context_server.database_connection import reset_database_context
 
             with (
                 patch.dict(os.environ, test_env),
                 patch("shared_context_server.config.dotenv.load_dotenv"),
-                patch.object(config, "_config", None),
-                patch.object(database, "_db_manager", None),
             ):
+                reset_config_context()
+                reset_database_context()
                 # Initialize database in isolated environment
                 try:
                     from shared_context_server.database import (
@@ -274,14 +275,14 @@ class TestDatabaseFileRegressionPrevention:
 
         for case in test_cases:
             # Clear all environment variables first, then set only what we want
-            from shared_context_server import config
+            from shared_context_server.config_context import reset_config_context
 
             with (
                 patch.dict(os.environ, {}, clear=True),
                 patch.dict(os.environ, {**case["env"], "API_KEY": "test"}),
-                patch.object(config, "_config", None),
                 patch("shared_context_server.config.dotenv.load_dotenv"),
             ):
+                reset_config_context()
                 from shared_context_server.config import get_database_url
 
                 db_url = get_database_url()

@@ -207,7 +207,7 @@ class TestSecureTokenManagerErrorScenarios:
 
             SecureTokenManager()
 
-    @patch("shared_context_server.database.get_db_connection")
+    @patch("shared_context_server.auth_secure.get_db_connection")
     async def test_create_protected_token_database_error(self, mock_get_db):
         """Test create_protected_token with database connection failure."""
         # Mock database connection to fail
@@ -302,7 +302,7 @@ class TestSecureTokenManagerErrorScenarios:
             result = await manager.extract_agent_info_for_recovery("sct_invalid")
             assert result is None
 
-    @patch("shared_context_server.database.get_db_connection")
+    @patch("shared_context_server.auth_secure.get_db_connection")
     async def test_cleanup_expired_tokens_database_error(self, mock_get_db):
         """Test cleanup_expired_tokens with database error."""
         with patch.dict(

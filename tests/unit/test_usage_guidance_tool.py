@@ -442,9 +442,12 @@ class TestMultiAgentCoordinationWorkflow:
             )
 
 
+@pytest.mark.performance
 class TestPerformanceValidation:
     """Performance tests for guidance generation."""
 
+    @pytest.mark.timeout(5)
+    @pytest.mark.performance
     async def test_guidance_generation_performance(self):
         """Test guidance generation completes within 50ms target."""
         ctx = MagicMock(spec=Context)
@@ -485,6 +488,7 @@ class TestPerformanceValidation:
             )
 
     @pytest.mark.performance
+    @pytest.mark.timeout(10)
     async def test_concurrent_agent_access(self):
         """Test concurrent agent access without performance degradation."""
         import asyncio
@@ -545,6 +549,7 @@ class TestPerformanceValidation:
         gc.collect()
 
 
+@pytest.mark.performance
 class TestAuditLogging:
     """Test audit logging for security monitoring."""
 
@@ -596,6 +601,7 @@ class TestAuditLogging:
 class TestResponseFormat:
     """Test response format compliance."""
 
+    @pytest.mark.performance
     async def test_response_format_compliance(self):
         """Test response format matches specification exactly."""
         ctx = MagicMock(spec=Context)
@@ -653,9 +659,11 @@ class TestResponseFormat:
             assert isinstance(result["examples"], dict)
 
 
+@pytest.mark.performance
 class TestErrorHandling:
     """Test comprehensive error handling."""
 
+    @pytest.mark.performance
     async def test_system_error_handling(self):
         """Test system error handling when database fails."""
         ctx = MagicMock(spec=Context)

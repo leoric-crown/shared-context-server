@@ -495,6 +495,13 @@ class TestHealthCheck:
 
     async def test_health_check_config_failure(self):
         """Test health check with config failure."""
+        # Reset contexts to ensure clean test state
+        from src.shared_context_server.config_context import reset_config_context
+        from src.shared_context_server.database_connection import reset_database_context
+
+        reset_config_context()
+        reset_database_context()
+
         with patch(
             "src.shared_context_server.config.get_database_config"
         ) as mock_config:
@@ -530,7 +537,7 @@ class TestHealthCheck:
                 mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 result = await health_check()
-                assert result["status"] == "healthy"
+                assert result["status"] == "healthy"  # Fallback to env vars should work
 
     async def test_health_check_query_returns_none(self):
         """Test health check when query returns None."""

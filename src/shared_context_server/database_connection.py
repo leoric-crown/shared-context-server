@@ -629,6 +629,20 @@ def _get_sqlalchemy_manager() -> Any:
     return manager
 
 
+def reset_database_context() -> None:
+    """
+    Reset database context - automatic isolation for tests.
+
+    Clears both aiosqlite and SQLAlchemy manager contexts, forcing the next call
+    to get_database_manager() or _get_sqlalchemy_manager() to create fresh instances.
+
+    This is useful for test isolation, though in most cases the automatic context
+    isolation should be sufficient.
+    """
+    _db_manager_context.set(None)
+    _sqlalchemy_manager_context.set(None)
+
+
 @asynccontextmanager
 async def get_db_connection() -> AsyncGenerator[aiosqlite.Connection, None]:
     """

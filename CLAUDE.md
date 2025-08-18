@@ -106,7 +106,7 @@ Tests automatically use in-memory SQLite with WAL mode for isolation. Backend sw
 #### ContextVar Implementation
 The `SecureTokenManager` uses Python's ContextVar system for thread-local token management:
 - **Thread Safety**: Perfect isolation between concurrent requests without locks
-- **Test Isolation**: Automatic cleanup between tests, no manual resets needed  
+- **Test Isolation**: Automatic cleanup between tests, no manual resets needed
 - **Performance**: Zero overhead context switching
 - **Simplicity**: No complex singleton management patterns required
 
@@ -127,11 +127,11 @@ manager = get_secure_token_manager()
 ```python
 async def test_authentication_functionality(self, test_db_manager):
     # No reset needed - ContextVar handles isolation automatically
-    
+
     # Set required environment variables
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-jwt-signing-123456"
     os.environ["JWT_ENCRYPTION_KEY"] = "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
-    
+
     # ... test logic
 ```
 
@@ -140,7 +140,7 @@ async def test_authentication_functionality(self, test_db_manager):
 async def test_integration_with_auth(self, server_with_db, test_db_manager):
     with patch.dict(os.environ, {
         "API_KEY": "test-key",
-        "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456", 
+        "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
         "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
     }, clear=False):
         # ... test logic (automatic isolation)
@@ -148,7 +148,7 @@ async def test_integration_with_auth(self, server_with_db, test_db_manager):
 
 #### Migration Complete
 - ✅ **Legacy singleton removed**: No more global state management
-- ✅ **86 reset calls eliminated**: From 7 test files across the codebase  
+- ✅ **86 reset calls eliminated**: From 7 test files across the codebase
 - ✅ **Thread safety improved**: ContextVar provides perfect isolation
 - ✅ **Test complexity reduced**: No manual state management required
 - ✅ **Performance maintained**: Zero overhead context switching
@@ -158,7 +158,7 @@ Legacy functions remain available but are no-ops:
 ```python
 # These functions exist for backward compatibility but do nothing
 reset_secure_token_manager()  # No-op
-set_test_mode(enabled)        # No-op  
+set_test_mode(enabled)        # No-op
 ```
 
 The `get_secure_token_manager()` function in `auth_secure.py` redirects to the ContextVar implementation.

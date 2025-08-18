@@ -507,6 +507,7 @@ async def test_memory_performance_requirements(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.performance
 async def test_memory_json_serialization(mock_database):
     """Test JSON serialization of complex data types."""
 

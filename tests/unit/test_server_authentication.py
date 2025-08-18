@@ -14,6 +14,7 @@ import pytest
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
 
 
+@pytest.mark.performance
 class TestAuthenticateAgentTool:
     """Test the authenticate_agent tool with comprehensive scenarios."""
 
@@ -350,35 +351,34 @@ class TestAuthenticateAgentTool:
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         # Mock audit_log_auth_event to raise exception
-        with patch.dict(
-            os.environ,
-            {
-                "API_KEY": "valid_key",
-                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
-                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "API_KEY": "valid_key",
+                    "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                    "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+                },
+                clear=False,
+            ),
+            patch("shared_context_server.server.audit_log_auth_event") as mock_audit,
         ):
             # Reset singleton AFTER environment is set to ensure clean state
+            mock_audit.side_effect = Exception("Database error during audit")
 
-            with patch(
-                "shared_context_server.server.audit_log_auth_event"
-            ) as mock_audit:
-                mock_audit.side_effect = Exception("Database error during audit")
+            result = await call_fastmcp_tool(
+                server_with_db.authenticate_agent,
+                ctx,
+                agent_id="db_error_test",
+                agent_type="claude",
+                requested_permissions=["read"],
+            )
 
-                result = await call_fastmcp_tool(
-                    server_with_db.authenticate_agent,
-                    ctx,
-                    agent_id="db_error_test",
-                    agent_type="claude",
-                    requested_permissions=["read"],
-                )
-
-                # Authentication should succeed even if audit logging fails
-                assert result["success"] is True
-                assert "token" in result
-                assert result["agent_id"] == "db_error_test"
-                assert result["agent_type"] == "claude"
+            # Authentication should succeed even if audit logging fails
+            assert result["success"] is True
+            assert "token" in result
+            assert result["agent_id"] == "db_error_test"
+            assert result["agent_type"] == "claude"
 
     async def test_authenticate_agent_auth_manager_error(
         self, server_with_db, test_db_manager
