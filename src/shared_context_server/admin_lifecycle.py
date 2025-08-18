@@ -43,7 +43,7 @@ async def get_performance_metrics(
     auth_token: str | None = Field(
         default=None, description="Optional JWT token for admin access"
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Get comprehensive performance metrics for monitoring.

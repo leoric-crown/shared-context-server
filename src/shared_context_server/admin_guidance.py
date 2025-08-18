@@ -79,7 +79,7 @@ async def get_usage_guidance(
         default="operations",
         description="Type of guidance: operations, coordination, security, troubleshooting",
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Get contextual operational guidance based on JWT access level.

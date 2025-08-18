@@ -101,8 +101,24 @@ async def token_manager(temp_database, encryption_key):
         os.environ,
         {"JWT_ENCRYPTION_KEY": encryption_key, "DATABASE_PATH": temp_database},
     ):
+        # Reset global singletons to prevent test isolation issues
+        import shared_context_server.auth_secure as auth_secure_module
+        from shared_context_server.auth_core import reset_auth_manager
+
+        # Reset both auth manager and secure token manager
+        reset_auth_manager()
+        auth_secure_module.secure_token_manager = None
+
         manager = SecureTokenManager()
+
+        # Set the global singleton to our test instance
+        auth_secure_module.secure_token_manager = manager
+
         yield manager
+
+        # Clean up: reset both global singletons after test
+        reset_auth_manager()
+        auth_secure_module.secure_token_manager = None
 
 
 @pytest.fixture
@@ -286,7 +302,13 @@ class TestSecureTokenIntegration:
         )
 
         with (
-            patch.dict(os.environ, {"JWT_ENCRYPTION_KEY": encryption_key}),
+            patch.dict(
+                os.environ,
+                {
+                    "JWT_ENCRYPTION_KEY": encryption_key,
+                    "JWT_SECRET_KEY": "test-secret-key-for-auth-manager",
+                },
+            ),
             patch.object(auth_manager, "validate_token") as mock_validate,
         ):
             mock_validate.return_value = {

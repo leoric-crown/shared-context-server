@@ -186,7 +186,7 @@ def _create_authenticate_agent_tool() -> Any:
         requested_permissions: list[str] = Field(
             default=["read", "write"], description="Requested permissions for the agent"
         ),
-        ctx: Context = None,
+        ctx: Context = None,  # type: ignore[assignment]
     ) -> dict[str, Any]:
         # Dynamic docstring generation would be handled here if needed by introspection tools
         return await _authenticate_agent_impl(
@@ -276,7 +276,7 @@ async def refresh_token(
     current_token: str = Field(
         description="Current protected token to refresh", pattern=r"^sct_[a-f0-9-]{36}$"
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Refresh a protected token (PRP-006: Secure Token Authentication).

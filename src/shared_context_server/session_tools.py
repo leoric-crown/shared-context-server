@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 else:
     TestConnectionType = Any
 
-from fastmcp import Context
+from fastmcp import Context  # noqa: TC002
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -114,11 +114,13 @@ async def audit_log(
 @mcp.tool(exclude_args=["ctx"])
 async def create_session(
     purpose: str = Field(description="Purpose or description of the session"),
-    metadata: dict[str, Any] | None = Field(
+    metadata: Any = Field(
+        default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
+        json_schema_extra={"type": "object", "additionalProperties": True},
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Create a new shared context session.
@@ -203,7 +205,7 @@ async def create_session(
 @mcp.tool(exclude_args=["ctx"])
 async def get_session(
     session_id: str = Field(description="Session ID to retrieve"),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Retrieve session information and recent messages.
@@ -269,21 +271,25 @@ async def get_session(
 async def add_message(
     session_id: str = Field(description="Session ID to add message to"),
     content: str = Field(description="Message content"),
+    metadata: Any = Field(
+        default=None,
+        description="Optional message metadata (JSON object or null)",
+        examples=[{"message_type": "test", "priority": "high"}, None],
+        json_schema_extra={"type": "object", "additionalProperties": True},
+    ),
+    parent_message_id: int | None = Field(
+        default=None,
+        description="ID of parent message for threading",
+    ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
+    ),
     visibility: str = Field(
         default="public",
         description="Message visibility: public, private, agent_only, or admin_only",
     ),
-    metadata: dict[str, Any] | None = Field(
-        description="Optional message metadata (JSON object or null)",
-        examples=[{"message_type": "test", "priority": "high"}, None],
-    ),
-    parent_message_id: int | None = Field(
-        description="ID of parent message for threading",
-    ),
-    auth_token: Union[str, None] = Field(
-        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
-    ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Add a message to the shared context session.
@@ -452,17 +458,19 @@ async def add_message(
 @mcp.tool(exclude_args=["ctx"])
 async def get_messages(
     session_id: str = Field(description="Session ID to retrieve messages from"),
+    visibility_filter: str | None = Field(
+        default=None,
+        description="Filter by visibility: public, private, agent_only",
+    ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
+    ),
     limit: int = Field(
         default=50, description="Maximum messages to return", ge=1, le=1000
     ),
     offset: int = Field(default=0, description="Offset for pagination", ge=0),
-    visibility_filter: str | None = Field(
-        description="Filter by visibility: public, private, agent_only",
-    ),
-    auth_token: str | None = Field(
-        description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
-    ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.

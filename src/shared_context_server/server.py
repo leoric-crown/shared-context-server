@@ -106,31 +106,15 @@ def _lazy_import_search_tools() -> Any:
     """Lazy import search_tools module."""
     if "search_tools" not in _LAZY_IMPORTS:
         from .search_tools import (
-            search_by_sender as search_by_sender_function,
-        )
-        from .search_tools import (
-            search_by_sender_tool as search_by_sender,
-        )
-        from .search_tools import (
-            search_by_timerange as search_by_timerange_function,
-        )
-        from .search_tools import (
-            search_by_timerange_tool as search_by_timerange,
-        )
-        from .search_tools import (
-            search_context as search_context_function,
-        )
-        from .search_tools import (
-            search_context_tool as search_context,
+            search_by_sender,
+            search_by_timerange,
+            search_context,
         )
 
         _LAZY_IMPORTS["search_tools"] = {
             "search_context": search_context,
             "search_by_sender": search_by_sender,
             "search_by_timerange": search_by_timerange,
-            "search_context_function": search_context_function,
-            "search_by_sender_function": search_by_sender_function,
-            "search_by_timerange_function": search_by_timerange_function,
         }
     return _LAZY_IMPORTS["search_tools"]
 

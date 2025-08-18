@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 else:
     TestConnectionType = Any
 
-from fastmcp import Context
+from fastmcp import Context  # noqa: TC002
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
@@ -64,6 +64,10 @@ async def audit_log(
 async def search_context(
     session_id: str = Field(description="Session ID to search within"),
     query: str = Field(description="Search query"),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
     fuzzy_threshold: float = Field(
         default=60.0, description="Minimum similarity score (0-100)", ge=0, le=100
     ),
@@ -76,10 +80,7 @@ async def search_context(
     search_scope: Literal["all", "public", "private"] = Field(
         default="all", description="Search scope: all, public, private"
     ),
-    auth_token: str | None = Field(
-        description="Optional JWT token for elevated permissions",
-    ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Fuzzy search messages using RapidFuzz for 5-10x performance improvement.
@@ -113,7 +114,7 @@ async def search_context(
             logger.debug(f"Cache hit for search_context: {cache_key}")
             # Update search_time_ms to reflect cache hit
             cached_result["search_time_ms"] = round(
-            (time.time() - start_time) * 1000, 2
+                (time.time() - start_time) * 1000, 2
             )
             cached_result["cache_hit"] = True
             return cached_result  # type: ignore[no-any-return]
@@ -152,9 +153,7 @@ async def search_context(
                 params.append(agent_id)
             else:  # all accessible messages
                 # Check if agent has admin permissions using extracted agent context
-                has_admin_permission = "admin" in agent_context.get(
-                    "permissions", []
-                )
+                has_admin_permission = "admin" in agent_context.get("permissions", [])
 
                 if has_admin_permission:
                     # ADMIN: Unrestricted access to all messages
@@ -324,46 +323,12 @@ async def search_context(
         return result
 
 
-# FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_context", exclude_args=["ctx"])
-async def search_context_tool(
-    session_id: str = Field(description="Session ID to search within"),
-    query: str = Field(description="Search query"),
-    fuzzy_threshold: float = Field(
-        default=60.0, description="Minimum similarity score (0-100)", ge=0, le=100
-    ),
-    limit: int = Field(
-        default=10, description="Maximum results to return", ge=1, le=100
-    ),
-    ctx: Context = None,
-    search_metadata: bool = Field(
-        default=True, description="Include metadata in search"
-    ),
-    search_scope: Literal["all", "public", "private"] = Field(
-        default="all", description="Search scope: all, public, private"
-    ),
-    auth_token: str | None = Field(
-        description="Optional JWT token for elevated permissions",
-    ),
-) -> dict[str, Any]:
-    """FastMCP wrapper for search_context function."""
-    return await search_context(
-        session_id=session_id,
-        query=query,
-        fuzzy_threshold=fuzzy_threshold,
-        limit=limit,
-        search_metadata=search_metadata,
-        search_scope=search_scope,
-        auth_token=auth_token,
-        ctx=ctx
-    )
-
-
+@mcp.tool(exclude_args=["ctx"])
 async def search_by_sender(
-    ctx: Context,
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """Search messages by specific sender with agent visibility controls."""
 
@@ -372,7 +337,7 @@ async def search_by_sender(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-            aiosqlite.Row
+                aiosqlite.Row
             )  # CRITICAL: Set row factory for dict access
 
             # First, verify session exists
@@ -383,7 +348,7 @@ async def search_by_sender(
                 return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             cursor = await conn.execute(
-            """
+                """
                 SELECT * FROM messages
                 WHERE session_id = ? AND sender = ?
                 AND (visibility = 'public' OR
@@ -392,17 +357,17 @@ async def search_by_sender(
                 ORDER BY timestamp DESC
                 LIMIT ?
             """,
-            (session_id, sender, agent_id, agent_id, limit),
+                (session_id, sender, agent_id, agent_id, limit),
             )
 
             messages_rows = await cursor.fetchall()
             messages = [dict(msg) for msg in messages_rows]
 
             return {
-            "success": True,
-            "messages": messages,
-            "sender": sender,
-            "count": len(messages),
+                "success": True,
+                "messages": messages,
+                "sender": sender,
+                "count": len(messages),
             }
 
     except Exception:
@@ -411,24 +376,13 @@ async def search_by_sender(
         return create_system_error("search_by_sender", "database", temporary=True)
 
 
-# FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_by_sender", exclude_args=["ctx"])
-async def search_by_sender_tool(
-    session_id: str = Field(description="Session ID to search within"),
-    sender: str = Field(description="Sender to search for"),
-    limit: int = Field(default=20, ge=1, le=100),
-    ctx: Context = None,
-) -> dict[str, Any]:
-    """FastMCP wrapper for search_by_sender function."""
-    return await search_by_sender(ctx, session_id, sender, limit, None)
-
-
+@mcp.tool(exclude_args=["ctx"])
 async def search_by_timerange(
-    ctx: Context,
     session_id: str = Field(description="Session ID to search within"),
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
     limit: int = Field(default=50, ge=1, le=200),
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """Search messages within a specific time range."""
 
@@ -438,21 +392,21 @@ async def search_by_timerange(
         # Convert ISO datetime strings to Unix timestamps for comparison
         try:
             start_unix = datetime.fromisoformat(
-            start_time.replace("Z", "+00:00")
+                start_time.replace("Z", "+00:00")
             ).timestamp()
             end_unix = datetime.fromisoformat(
-            end_time.replace("Z", "+00:00")
+                end_time.replace("Z", "+00:00")
             ).timestamp()
         except ValueError:
             return {
-            "success": False,
-            "error": "Invalid datetime format",
-            "code": "INVALID_DATETIME",
+                "success": False,
+                "error": "Invalid datetime format",
+                "code": "INVALID_DATETIME",
             }
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-            aiosqlite.Row
+                aiosqlite.Row
             )  # CRITICAL: Set row factory for dict access
 
             # First, verify session exists
@@ -463,7 +417,7 @@ async def search_by_timerange(
                 return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
 
             cursor = await conn.execute(
-            """
+                """
                 SELECT * FROM messages
                 WHERE session_id = ?
                 AND timestamp >= ?
@@ -474,35 +428,20 @@ async def search_by_timerange(
                 ORDER BY timestamp ASC
                 LIMIT ?
             """,
-            (session_id, start_unix, end_unix, agent_id, agent_id, limit),
+                (session_id, start_unix, end_unix, agent_id, agent_id, limit),
             )
 
             messages_rows = await cursor.fetchall()
             messages = [dict(msg) for msg in messages_rows]
 
             return {
-            "success": True,
-            "messages": messages,
-            "timerange": {"start": start_time, "end": end_time},
-            "count": len(messages),
+                "success": True,
+                "messages": messages,
+                "timerange": {"start": start_time, "end": end_time},
+                "count": len(messages),
             }
 
     except Exception:
         logger.exception("Failed to search by timerange")
         logger.debug(traceback.format_exc())
         return create_system_error("search_by_timerange", "database", temporary=True)
-
-
-# FastMCP wrapper for backward compatibility
-@mcp.tool(name="search_by_timerange", exclude_args=["ctx"])
-async def search_by_timerange_tool(
-    session_id: str = Field(description="Session ID to search within"),
-    start_time: str = Field(description="Start time (ISO format)"),
-    end_time: str = Field(description="End time (ISO format)"),
-    limit: int = Field(default=50, ge=1, le=200),
-    ctx: Context = None,
-) -> dict[str, Any]:
-    """FastMCP wrapper for search_by_timerange function."""
-    return await search_by_timerange(
-        ctx, session_id, start_time, end_time, limit, None
-    )

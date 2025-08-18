@@ -134,6 +134,31 @@ USE_SQLALCHEMY=true/false       # Backend selection (default: false)
 3. Run migration via `initialize_database(reset=True)` in dev
 4. Test with `make test-backend`
 
+### Gemini CLI MCP Schema Compatibility
+
+**CRITICAL**: This is a recurring issue that has broken Gemini CLI compatibility 3 times.
+
+**Problem**: Gemini CLI fails with "missing types in parameter schema" for metadata parameters.
+
+**Root Cause**: Gemini CLI requires explicit JSON schema types for all parameters, cannot handle Union types.
+
+**CORRECT PATTERN** for optional object parameters:
+```python
+metadata: Any = Field(
+    default=None,
+    description="Optional metadata (JSON object or null)",
+    examples=[{"key": "value"}, None],
+    json_schema_extra={"type": "object", "additionalProperties": True},
+)
+```
+
+**Requirements**:
+- Use `Any` type annotation (NOT `dict[str, Any] | None`)
+- Add explicit `json_schema_extra={"type": "object", "additionalProperties": True}`
+- Maintain `default=None` for optional behavior
+
+**Files affected**: `session_tools.py`, `memory_tools.py` (any tool with metadata parameters)
+
 ### WebSocket Integration
 
 WebSocket server runs alongside FastAPI for real-time updates:

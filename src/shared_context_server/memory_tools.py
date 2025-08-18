@@ -15,10 +15,10 @@ import json
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Union
+from typing import Any
 
 import aiosqlite
-from fastmcp import Context
+from fastmcp import Context  # noqa: TC002
 from pydantic import Field
 
 # PERFORMANCE OPTIMIZATION: Pre-import commonly used modules
@@ -135,22 +135,27 @@ async def set_memory(
         },
     ),
     session_id: str | None = Field(
+        default=None,
         description="Session scope (null for global memory)",
     ),
     expires_in: int | str | None = Field(
+        default=None,
         description="TTL in seconds (null for permanent)",
     ),
-    metadata: dict[str, Any] | None = Field(
+    metadata: Any = Field(
+        default=None,
         description="Optional metadata for the memory entry (JSON object or null)",
         examples=[{"source": "user_input", "tags": ["important"]}, None],
+        json_schema_extra={"type": "object", "additionalProperties": True},
     ),
     overwrite: bool = Field(
         default=True, description="Whether to overwrite existing key"
     ),
     auth_token: str | None = Field(
+        default=None,
         description="Optional JWT token for elevated permissions",
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Store value in agent's private memory with TTL and scope management.
@@ -417,12 +422,14 @@ async def set_memory(
 async def get_memory(
     key: str = Field(description="Memory key to retrieve"),
     session_id: str | None = Field(
+        default=None,
         description="Session scope (null for global memory)",
     ),
     auth_token: str | None = Field(
+        default=None,
         description="Optional JWT token for elevated permissions",
     ),
-    ctx: Context = None,
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Retrieve value from agent's private memory with automatic cleanup.
@@ -511,16 +518,18 @@ async def get_memory(
 @mcp.tool(exclude_args=["ctx"])
 async def list_memory(
     session_id: str | None = Field(
-        description="Session scope (null for global, 'all' for both)"
+        default=None, description="Session scope (null for global, 'all' for both)"
     ),
     prefix: str | None = Field(
+        default=None,
         description="Key prefix filter",
     ),
-    limit: int = Field(default=50, ge=1, le=200),
     auth_token: str | None = Field(
+        default=None,
         description="Optional JWT token for elevated permissions",
     ),
-    ctx: Context = None,
+    limit: int = Field(default=50, ge=1, le=200),
+    ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     List agent's memory entries with filtering options.
