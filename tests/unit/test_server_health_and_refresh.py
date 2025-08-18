@@ -190,10 +190,7 @@ class TestRefreshTokenEdgeCases:
             generate_agent_jwt_token,
             get_secure_token_manager,
         )
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -206,8 +203,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             # Create an expired token
@@ -261,10 +256,7 @@ class TestRefreshTokenEdgeCases:
     ):
         """Test token recovery when agent info extraction fails."""
         from shared_context_server.auth import get_secure_token_manager
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -277,8 +269,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             valid_token = "sct_12345678-90ab-cdef-1234-567890abcdef"
@@ -340,10 +330,7 @@ class TestRefreshTokenEdgeCases:
             generate_agent_jwt_token,
             get_secure_token_manager,
         )
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -356,8 +343,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             # Create a valid token
@@ -400,10 +385,7 @@ class TestRefreshTokenEdgeCases:
         self, server_with_db, test_db_manager
     ):
         """Test refresh_token with ValueError from token operations."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -416,8 +398,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             # Mock extract_agent_context to return authenticated context
@@ -455,10 +435,7 @@ class TestRefreshTokenEdgeCases:
         self, server_with_db, test_db_manager
     ):
         """Test refresh_token with unexpected system error."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -471,8 +448,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             # Mock extract_agent_context to raise unexpected exception
@@ -493,10 +468,7 @@ class TestRefreshTokenEdgeCases:
 
     async def test_refresh_token_audit_logging(self, server_with_db, test_db_manager):
         """Test that refresh_token performs proper audit logging."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
 
@@ -509,8 +481,6 @@ class TestRefreshTokenEdgeCases:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             ctx.headers = {"X-API-Key": "test-key"}
 
             # Create a valid token first to ensure proper token format
@@ -520,7 +490,6 @@ class TestRefreshTokenEdgeCases:
             )
 
             # Additional singleton reset before token creation to ensure clean state
-            reset_secure_token_manager()
 
             # Create a proper protected token
             jwt_token = await generate_agent_jwt_token(

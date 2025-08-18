@@ -346,10 +346,7 @@ class TestSecureTokenIntegration:
         import os
         from unittest.mock import patch
 
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         with patch.dict(
             os.environ,
@@ -359,8 +356,6 @@ class TestSecureTokenIntegration:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
 
             from shared_context_server.auth import (
                 auth_manager,

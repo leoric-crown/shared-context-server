@@ -23,9 +23,9 @@ from .auth import (
     auth_manager,
     extract_agent_context,
     generate_agent_jwt_token,
-    get_secure_token_manager,
     validate_api_key_header,
 )
+from .auth_context import get_secure_token_manager
 from .core_server import mcp
 from .utils.llm_errors import (
     ERROR_MESSAGE_PATTERNS,

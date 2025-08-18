@@ -38,11 +38,13 @@ from .auth_core import (
 from .auth_secure import (
     SecureTokenManager,
     extract_agent_context,
-    get_secure_token_manager,
     validate_agent_context_or_error,
     validate_api_key_header,
     validate_jwt_token_parameter,
 )
+
+# Import ContextVar-based token manager
+from .auth_context import get_secure_token_manager
 
 # Import database connection for backward compatibility with tests
 from .database import get_db_connection

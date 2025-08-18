@@ -315,10 +315,8 @@ class TestAPIStabilityValidation:
         from unittest.mock import patch
 
         from shared_context_server import server
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
         # Ensure clean singleton state before test
-        reset_secure_token_manager()
 
         with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test authenticate_agent API stability
@@ -334,7 +332,6 @@ class TestAPIStabilityValidation:
                 },
             ):
                 # Force singleton recreation with new environment
-                reset_secure_token_manager()
                 auth_result = await call_fastmcp_tool(
                     server.authenticate_agent,
                     mock_ctx,  # Unauthenticated context with API key
@@ -580,10 +577,8 @@ class TestAPIStabilityValidation:
         from unittest.mock import patch
 
         from shared_context_server import server
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
         # Ensure clean singleton state before test
-        reset_secure_token_manager()
 
         with patch_database_connection(test_db_manager, backend=self._get_backend()):
             # Test complete authentication flow
@@ -601,7 +596,6 @@ class TestAPIStabilityValidation:
                 },
             ):
                 # Force singleton recreation with new environment
-                reset_secure_token_manager()
                 auth_result = await call_fastmcp_tool(
                     server.authenticate_agent,
                     mock_ctx,

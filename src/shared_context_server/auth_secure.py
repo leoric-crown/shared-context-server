@@ -56,7 +56,8 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
 
         # Check if this is a protected token (sct_*)
         if auth_token.startswith("sct_"):
-            # Resolve protected token to JWT
+            # Resolve protected token to JWT using ContextVar-based manager
+            from .auth_context import get_secure_token_manager
             token_manager = get_secure_token_manager()
             jwt_token = await token_manager.resolve_protected_token(auth_token)
 
@@ -304,21 +305,10 @@ class SecureTokenManager:
 
     Implements protected token format (sct_<uuid>) with multi-agent concurrency
     safety and race-condition-safe refresh patterns.
+    
+    Note: Previously used global singleton pattern with test mode management.
+    Now instantiated via ContextVar in auth_context.py for better thread safety.
     """
-
-    _test_mode: bool = False
-
-    @classmethod
-    def enable_test_mode(cls) -> None:
-        """Enable test mode for singleton management."""
-        cls._test_mode = True
-        cls.reset()
-
-    @classmethod
-    def reset(cls) -> None:
-        """Reset singleton instance for test isolation."""
-        global secure_token_manager
-        secure_token_manager = None
 
     def __init__(self) -> None:
         """Initialize SecureTokenManager with Fernet encryption."""
@@ -645,39 +635,22 @@ class SecureTokenManager:
             return 0
 
 
-# Global secure token manager with thread safety
+# Note: Global singleton removed in favor of ContextVar approach in auth_context.py
+# This provides better thread safety and eliminates the need for test reset patterns
 
-secure_token_manager: SecureTokenManager | None = None
-_manager_lock = threading.Lock()
-_test_mode: bool = False
-
-
-def get_secure_token_manager(force_recreate: bool = False) -> SecureTokenManager:
-    """Get global secure token manager instance with thread safety."""
-    global secure_token_manager
-
-    # Always recreate in test mode OR when explicitly requested
-    if SecureTokenManager._test_mode or force_recreate or secure_token_manager is None:
-        with _manager_lock:
-            # Double-check pattern for thread safety
-            if (
-                SecureTokenManager._test_mode
-                or force_recreate
-                or secure_token_manager is None
-            ):
-                secure_token_manager = SecureTokenManager()
-
-    return secure_token_manager
-
-
+# Backward compatibility stubs for tests during migration
 def reset_secure_token_manager() -> None:
-    """Reset singleton for test isolation."""
-    global secure_token_manager
-    secure_token_manager = None
-
+    """Legacy function - no longer needed with ContextVar approach."""
+    # With ContextVar, each context automatically gets fresh instances
+    # No global state to reset
+    pass
 
 def set_test_mode(enabled: bool) -> None:
-    """Enable/disable test mode for singleton management."""
-    SecureTokenManager._test_mode = enabled
-    if enabled:
-        reset_secure_token_manager()
+    """Legacy function - no longer needed with ContextVar approach."""
+    # ContextVar provides perfect test isolation automatically
+    pass
+
+def get_secure_token_manager(force_recreate: bool = False) -> 'SecureTokenManager':
+    """Legacy function - redirects to ContextVar implementation."""
+    from .auth_context import get_secure_token_manager as get_context_manager
+    return get_context_manager()

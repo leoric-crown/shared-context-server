@@ -165,8 +165,6 @@ class TestDatabaseIntegration:
 Always include singleton reset for authentication tests:
 ```python
 async def test_auth_functionality(self):
-    from shared_context_server.auth_secure import reset_secure_token_manager
-    reset_secure_token_manager()  # CRITICAL for test isolation
     # ... test logic
 ```
 

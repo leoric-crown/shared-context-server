@@ -26,13 +26,11 @@ class TestSingletonLifecycle:
         """Test that singleton reset works correctly."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Ensure NOT in test mode for this test
         set_test_mode(False)
-        reset_secure_token_manager()
 
         # Set required environment variables
         with patch.dict(
@@ -52,7 +50,6 @@ class TestSingletonLifecycle:
             assert manager1 is manager2
 
             # Reset and get new manager - should be different instance
-            reset_secure_token_manager()
             manager3 = get_secure_token_manager()
             assert manager3 is not manager1
             assert manager3 is not manager2
@@ -61,7 +58,6 @@ class TestSingletonLifecycle:
         """Test that test mode enables proper singleton management."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
@@ -88,7 +84,6 @@ class TestSingletonLifecycle:
 
             # Disable test mode and reset
             set_test_mode(False)
-            reset_secure_token_manager()
 
             # Now should get singleton behavior again
             manager3 = get_secure_token_manager()
@@ -122,11 +117,9 @@ class TestSingletonLifecycle:
         """Test that singleton handles missing environment variables gracefully."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
         )
 
         # Reset to clean state
-        reset_secure_token_manager()
 
         # Test with missing JWT_ENCRYPTION_KEY
         with patch.dict(
@@ -154,13 +147,11 @@ class TestSingletonLifecycle:
 
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Disable test mode for singleton behavior
         set_test_mode(False)
-        reset_secure_token_manager()
 
         managers = []
         exceptions = []
@@ -207,13 +198,11 @@ class TestSingletonLifecycle:
         """Test force_recreate parameter in get_secure_token_manager."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Disable test mode for singleton behavior
         set_test_mode(False)
-        reset_secure_token_manager()
 
         with patch.dict(
             os.environ,
@@ -240,17 +229,14 @@ class TestSingletonLifecycle:
         """Test the complete test isolation pattern used in conftest.py."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Simulate the conftest.py pattern
         def simulate_test_setup():
             set_test_mode(True)
-            reset_secure_token_manager()
 
         def simulate_test_teardown():
-            reset_secure_token_manager()
 
         with patch.dict(
             os.environ,
@@ -277,13 +263,11 @@ class TestSingletonLifecycle:
         """Test that singleton state persists correctly when not in test mode."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Ensure not in test mode
         set_test_mode(False)
-        reset_secure_token_manager()
 
         with patch.dict(
             os.environ,
@@ -310,13 +294,11 @@ class TestSingletonErrorScenarios:
         """Test that singleton can recover from initialization errors."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
         # Disable test mode for this test
         set_test_mode(False)
-        reset_secure_token_manager()
 
         # First attempt without proper environment - may or may not fail depending on environment
         # We'll check if it gets a manager, and if so, it means environment is already set
@@ -329,7 +311,6 @@ class TestSingletonErrorScenarios:
             pass
 
         # Reset and try again with proper environment - should succeed
-        reset_secure_token_manager()
         with patch.dict(
             os.environ,
             {
@@ -345,7 +326,6 @@ class TestSingletonErrorScenarios:
         """Test various environment variable scenarios."""
         from shared_context_server.auth_secure import (
             get_secure_token_manager,
-            reset_secure_token_manager,
             set_test_mode,
         )
 
@@ -353,7 +333,6 @@ class TestSingletonErrorScenarios:
         set_test_mode(False)
 
         # Test with both - should succeed
-        reset_secure_token_manager()
         with patch.dict(
             os.environ,
             {

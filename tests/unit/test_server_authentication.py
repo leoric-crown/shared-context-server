@@ -20,11 +20,8 @@ class TestAuthenticateAgentTool:
     @pytest.fixture(autouse=True)
     async def setup_method(self):
         """Setup method to ensure clean singleton state for each test."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        reset_secure_token_manager()
         yield
-        reset_secure_token_manager()
 
     @property
     def test_env_vars(self):
@@ -48,10 +45,7 @@ class TestAuthenticateAgentTool:
 
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
         """Test successful agent authentication with valid API key header."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext(session_id="test_session", agent_id="test_agent")
         ctx.headers = {"X-API-Key": "valid_test_key"}  # Add API key header
@@ -59,8 +53,6 @@ class TestAuthenticateAgentTool:
         with patch.dict(
             os.environ, {"API_KEY": "valid_test_key", **self.test_env_vars}, clear=False
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -162,10 +154,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with different agent types."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -180,8 +169,6 @@ class TestAuthenticateAgentTool:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             for agent_type in agent_types:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -203,10 +190,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with different permission requests."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -229,8 +213,6 @@ class TestAuthenticateAgentTool:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             for permissions in permission_sets:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -248,10 +230,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that successful authentication is properly audit logged."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -265,8 +244,6 @@ class TestAuthenticateAgentTool:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -330,10 +307,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that token expiry timestamps are properly formatted."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -347,8 +321,6 @@ class TestAuthenticateAgentTool:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -378,7 +350,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with database error during audit logging."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -394,7 +365,6 @@ class TestAuthenticateAgentTool:
             clear=False,
         ):
             # Reset singleton AFTER environment is set to ensure clean state
-            reset_secure_token_manager()
 
             with patch(
                 "shared_context_server.server.audit_log_auth_event"
@@ -452,7 +422,6 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with edge case inputs."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -488,7 +457,6 @@ class TestAuthenticateAgentTool:
             clear=False,
         ):
             # Reset singleton AFTER environment is set to ensure clean state
-            reset_secure_token_manager()
             for case in edge_cases:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -511,7 +479,6 @@ class TestAuthenticateAgentTool:
         """Test multiple concurrent authentication requests."""
         import asyncio
 
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -527,7 +494,6 @@ class TestAuthenticateAgentTool:
             clear=False,
         ):
             # Reset singleton AFTER environment is set to ensure clean state
-            reset_secure_token_manager()
 
             async def authenticate_agent(agent_id: str) -> dict:
                 return await call_fastmcp_tool(
@@ -549,7 +515,6 @@ class TestAuthenticateAgentTool:
                 assert result["agent_id"] == f"concurrent_agent_{i}"
 
         # Clean up singleton after concurrent operations to prevent state pollution
-        reset_secure_token_manager()
 
         # Force garbage collection to reduce teardown time
         import gc
@@ -560,10 +525,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication when no permissions are explicitly requested."""
-        from shared_context_server.auth_secure import reset_secure_token_manager
 
-        # Reset singleton before test to ensure clean state
-        reset_secure_token_manager()
 
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
@@ -577,8 +539,6 @@ class TestAuthenticateAgentTool:
             },
             clear=False,
         ):
-            # Force singleton recreation with proper environment
-            reset_secure_token_manager()
             # Test with default permissions (should be ["read", "write"])
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,

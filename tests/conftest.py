@@ -770,19 +770,8 @@ async def reset_global_singletons():
     except ImportError:
         pass
 
-    # Reset authentication secure token manager to prevent singleton state pollution
-    try:
-        from shared_context_server.auth_secure import (
-            reset_secure_token_manager,
-            set_test_mode,
-        )
-
-        with suppress(Exception):
-            # Enable test mode for proper singleton lifecycle management
-            set_test_mode(True)
-            reset_secure_token_manager()
-    except ImportError:
-        pass
+    # Note: Authentication singleton reset no longer needed with ContextVar approach
+    # Each test automatically gets isolated token manager instances
 
     # Enhanced database manager cleanup for SQLAlchemy flakiness prevention
     try:
@@ -1213,10 +1202,6 @@ def singleton_isolation():
     from unittest.mock import patch
 
     from shared_context_server.auth_core import reset_auth_manager
-    from shared_context_server.auth_secure import (
-        reset_secure_token_manager,
-        set_test_mode,
-    )
 
     # Set required environment variables before resetting singletons
     # This ensures that when SecureTokenManager is recreated, it has proper config
@@ -1228,13 +1213,10 @@ def singleton_isolation():
         },
         clear=False,
     ):
-        # Enable test mode and reset all managers before test
-        set_test_mode(True)
-        reset_secure_token_manager()
+        # Reset auth manager (token manager is automatically isolated via ContextVar)
         reset_auth_manager()
 
         yield
 
-        # Reset all managers after test for cleanup
-        reset_secure_token_manager()
+        # Reset auth manager after test for cleanup
         reset_auth_manager()
