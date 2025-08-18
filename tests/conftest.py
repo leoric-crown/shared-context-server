@@ -64,8 +64,17 @@ def _track_task_creation(coro, **kwargs):
     if hasattr(coro, "cr_code"):
         task_name = f"{coro.cr_code.co_name}"
 
-    # Store debug info on the task
-    task._test_debug_info = {"name": task_name, "created_at": time.time()}
+    # Store debug info on the task, including event loop reference
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    task._test_debug_info = {
+        "name": task_name,
+        "created_at": time.time(),
+        "loop_id": id(current_loop) if current_loop else None,
+    }
 
     # Use weak reference callback to auto-remove completed tasks
     def cleanup_task_ref(task_ref):
@@ -115,15 +124,38 @@ def unregister_observer(observer):
 
 async def cleanup_async_tasks_with_timeout(timeout: float = 2.0) -> int:
     """Clean up asyncio tasks with proper timeout handling."""
-    tasks_to_cancel = list(_task_registry)
+    global _task_registry
+
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No loop running, can't clean up tasks
+        _task_registry.clear()
+        return 0
+
+    # Only cancel tasks that belong to the current event loop
+    tasks_to_cancel = []
     cancelled_count = 0
+
+    for task in list(_task_registry):
+        try:
+            # Check if task belongs to current loop
+            if hasattr(task, "_loop") and task._loop is current_loop:
+                tasks_to_cancel.append(task)
+            elif not hasattr(task, "_loop"):
+                # Legacy task, try to cancel anyway
+                tasks_to_cancel.append(task)
+        except Exception:
+            # Task might be corrupted, remove from registry
+            _task_registry.discard(task)
+            continue
 
     for task in tasks_to_cancel:
         if not task.done():
             task.cancel()
             cancelled_count += 1
 
-    # Wait for cancellation with timeout
+    # Wait for cancellation with timeout, only for current loop tasks
     if tasks_to_cancel:
         try:
             await asyncio.wait_for(
@@ -134,8 +166,22 @@ async def cleanup_async_tasks_with_timeout(timeout: float = 2.0) -> int:
             _quiet_print(
                 f"⚠️ {len([t for t in tasks_to_cancel if not t.done()])} tasks didn't cancel within {timeout}s"
             )
+        except ValueError as e:
+            if "different loop" in str(e):
+                _quiet_print(
+                    "⚠️ Skipping cross-loop task cleanup to avoid event loop conflicts"
+                )
+            else:
+                raise
 
-    _task_registry.clear()
+    # Clean up tasks from registry that belong to current loop
+    current_loop_tasks = {
+        task
+        for task in _task_registry
+        if hasattr(task, "_loop") and task._loop is current_loop
+    }
+    _task_registry -= current_loop_tasks
+
     return cancelled_count
 
 
@@ -834,6 +880,9 @@ def isolate_environment_variables():
 
     CRITICAL: Prevents USE_SQLALCHEMY and database path variables from leaking
     between tests running in parallel workers.
+
+    ENHANCED: Ensures authentication-critical environment variables are
+    always available to prevent "authentication_service temporarily unavailable" errors.
     """
     import os
 
@@ -842,21 +891,40 @@ def isolate_environment_variables():
         "USE_SQLALCHEMY",
         "DATABASE_URL",
         "DATABASE_PATH",
-        "JWT_ENCRYPTION_KEY",  # Token tests depend on this
         "API_KEY",  # Required for config loading
     ]
 
-    # Store original values
+    # Authentication variables that should NEVER be cleared (always ensure they exist)
+    auth_required_vars = {
+        "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+    }
+
+    # Store original values for critical vars only
     original_values = {var: os.environ.get(var) for var in critical_vars}
+    original_auth_values = {var: os.environ.get(var) for var in auth_required_vars}
+
+    # Ensure authentication variables are ALWAYS set
+    for var, default_value in auth_required_vars.items():
+        if not os.environ.get(var):
+            os.environ[var] = default_value
 
     yield  # Let the test run
 
-    # Restore original environment state
+    # Restore original environment state for critical vars
     for var, original_value in original_values.items():
         if original_value is None:
             os.environ.pop(var, None)
         else:
             os.environ[var] = original_value
+
+    # Restore authentication variables to original values (but ensure they exist)
+    for var, original_value in original_auth_values.items():
+        if original_value is not None:
+            os.environ[var] = original_value
+        elif var not in os.environ:
+            # If there was no original value and it's not set, set default
+            os.environ[var] = auth_required_vars[var]
 
 
 @pytest.fixture(autouse=True)
@@ -884,7 +952,7 @@ async def mock_websocket_notifications(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def cleanup_on_session_finish():
+def cleanup_on_session_finish():
     """
     Final cleanup when the entire test session finishes.
 
@@ -895,62 +963,24 @@ async def cleanup_on_session_finish():
 
     _quiet_print("🧹 Starting final cleanup...")
 
-    # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
-    import os
+    # Skip asyncio cleanup in session scope to avoid event loop conflicts
+    # Async cleanup is handled by per-test fixtures
 
-    if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-        _quiet_print("Skipping asyncio cleanup in CI environment")
-        _task_registry.clear()
-        return
+    # Just clear the registries since we can't do async operations in session scope
+    task_count = len(_task_registry)
+    thread_count = len(_thread_registry)
+    observer_count = len(_observer_registry)
 
-    # Cancel all remaining tasks aggressively
-    tasks_to_cancel = list(_task_registry)
-    if tasks_to_cancel:
-        _quiet_print(
-            f"Final cleanup: cancelling {len(tasks_to_cancel)} remaining background tasks"
-        )
-
-        for task in tasks_to_cancel:
-            if not task.done():
-                task.cancel()
-
-        # Wait for all tasks to finish with timeout
-        if tasks_to_cancel:
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*tasks_to_cancel, return_exceptions=True),
-                    timeout=2.0,
-                )
-            except asyncio.TimeoutError:
-                _quiet_print("Warning: Some background tasks did not shut down cleanly")
+    # Cancel tasks synchronously (without waiting)
+    for task in list(_task_registry):
+        if not task.done():
+            task.cancel()
 
     _task_registry.clear()
 
-    # Cancel any other running tasks in the event loop
-    try:
-        current_task = asyncio.current_task()
-        all_tasks = [
-            t for t in asyncio.all_tasks() if t != current_task and not t.done()
-        ]
-
-        if all_tasks:
-            _quiet_print(
-                f"Final cleanup: found {len(all_tasks)} additional running tasks"
-            )
-            for task in all_tasks:
-                task.cancel()
-
-            # Wait for them to finish
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*all_tasks, return_exceptions=True), timeout=1.0
-                )
-            except asyncio.TimeoutError:
-                _quiet_print("Warning: Some additional tasks did not shut down cleanly")
-
-    except RuntimeError:
-        # No event loop running
-        pass
+    # Clear thread and observer registries
+    _thread_registry.clear()
+    _observer_registry.clear()
 
     # Clean up any remaining coroutines before garbage collection
     import gc
@@ -968,7 +998,12 @@ async def cleanup_on_session_finish():
     # Restore original asyncio.create_task
     asyncio.create_task = _original_create_task
 
-    _quiet_print("🧹 Final cleanup completed")
+    if task_count > 0 or thread_count > 0 or observer_count > 0:
+        _quiet_print(
+            f"🧹 Final cleanup completed - cleared {task_count} tasks, {thread_count} threads, {observer_count} observers"
+        )
+    else:
+        _quiet_print("🧹 Final cleanup completed")
 
 
 # =============================================================================
