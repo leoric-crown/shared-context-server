@@ -115,10 +115,8 @@ async def audit_log(
 async def create_session(
     purpose: str = Field(description="Purpose or description of the session"),
     metadata: dict[str, Any] | None = Field(
-        default=None,
         description="Optional metadata for the session (JSON object or null)",
         examples=[{"test": True, "version": 1}, None],
-        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
     ctx: Context = None,
 ) -> dict[str, Any]:
@@ -276,18 +274,13 @@ async def add_message(
         description="Message visibility: public, private, agent_only, or admin_only",
     ),
     metadata: dict[str, Any] | None = Field(
-        default=None,
         description="Optional message metadata (JSON object or null)",
         examples=[{"message_type": "test", "priority": "high"}, None],
-        json_schema_extra={"anyOf": [{"type": "object"}, {"type": "null"}]},
     ),
-    parent_message_id: Union[int, None] = Field(
-        default=None,
+    parent_message_id: int | None = Field(
         description="ID of parent message for threading",
-        json_schema_extra={"anyOf": [{"type": "integer"}, {"type": "null"}]},
     ),
     auth_token: Union[str, None] = Field(
-        default=None,
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
     ),
     ctx: Context = None,
@@ -463,21 +456,12 @@ async def get_messages(
         default=50, description="Maximum messages to return", ge=1, le=1000
     ),
     offset: int = Field(default=0, description="Offset for pagination", ge=0),
-    visibility_filter: Union[str, None] = Field(
-        default=None,
+    visibility_filter: str | None = Field(
         description="Filter by visibility: public, private, agent_only",
-        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    auth_token: Union[str, None] = Field(
-        default=None,
+    auth_token: str | None = Field(
         description="Optional JWT token for elevated permissions (e.g., admin_only visibility)",
-        json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]},
     ),
-    _test_connection: TestConnectionType = Field(
-        default=None,
-        exclude=True,
-        json_schema_extra={"type": "null"},
-    ),  # Hidden test parameter
     ctx: Context = None,
 ) -> dict[str, Any]:
     """
@@ -511,105 +495,6 @@ async def get_messages(
             logger.debug(f"Cache hit for get_messages: {cache_key}")
             return cached_result  # type: ignore[no-any-return]
 
-        # Handle test connection injection
-        if _test_connection:
-            # Direct connection for tests
-            conn = _test_connection
-            conn.row_factory = aiosqlite.Row
-
-            # Execute the query logic with test connection
-            # First, verify session exists
-            cursor = await conn.execute(
-                "SELECT id FROM sessions WHERE id = ?", (session_id,)
-            )
-            if not await cursor.fetchone():
-                return ERROR_MESSAGE_PATTERNS["session_not_found"](session_id)  # type: ignore[no-any-return,operator]
-
-            # Build query with visibility controls
-            where_conditions = ["session_id = ?"]
-            test_params: list[Any] = [session_id]
-
-            # Agent-specific visibility filtering
-            has_admin_permission = "admin" in agent_context.get("permissions", [])
-
-            if visibility_filter:
-                # Apply specific visibility filter with agent access rules
-                if visibility_filter == "public":
-                    where_conditions.append("visibility = 'public'")
-                elif visibility_filter == "private":
-                    where_conditions.append("visibility = 'private' AND sender = ?")
-                    test_params.append(agent_id)
-                elif visibility_filter == "agent_only":
-                    where_conditions.append("visibility = 'agent_only' AND sender = ?")
-                    test_params.append(agent_id)
-                elif visibility_filter == "admin_only" and has_admin_permission:
-                    where_conditions.append("visibility = 'admin_only'")
-                else:
-                    # Invalid filter or no admin permission for admin_only
-                    return {
-                        "success": True,
-                        "messages": [],
-                        "count": 0,
-                        "total_count": 0,
-                        "has_more": False,
-                    }
-            else:
-                # Apply general visibility controls
-                if has_admin_permission:
-                    # ADMIN: See all messages including admin_only
-                    visibility_conditions = [
-                        "visibility = 'public'",
-                        "visibility = 'private'",
-                        "visibility = 'agent_only'",
-                        "visibility = 'admin_only'",
-                    ]
-                else:
-                    # Standard agent: See public + own private/agent_only
-                    visibility_conditions = [
-                        "visibility = 'public'",
-                        "(visibility = 'private' AND sender = ?)",
-                        "(visibility = 'agent_only' AND sender = ?)",
-                    ]
-                    test_params.extend([agent_id, agent_id])
-
-                visibility_clause = f"({' OR '.join(visibility_conditions)})"
-                where_conditions.append(visibility_clause)
-
-            # First, get total count for pagination
-            count_query = f"""
-                SELECT COUNT(*) FROM messages
-                WHERE {" AND ".join(where_conditions)}
-            """
-            cursor = await conn.execute(count_query, test_params)
-            count_row = await cursor.fetchone()
-            total_count = count_row[0] if count_row else 0
-
-            # Then get the actual messages
-            query = f"""
-                SELECT * FROM messages
-                WHERE {" AND ".join(where_conditions)}
-                ORDER BY timestamp ASC
-                LIMIT ? OFFSET ?
-            """
-            test_params.extend([limit, offset])
-
-            cursor = await conn.execute(query, test_params)
-            messages_rows = await cursor.fetchall()
-            messages = [dict(msg) for msg in messages_rows]
-
-            result = {
-                "success": True,
-                "messages": messages,
-                "count": len(messages),
-                "total_count": total_count,
-                "has_more": offset + limit < total_count,
-            }
-
-            # Phase 4: Cache the result for faster subsequent access (5-minute TTL)
-            await cache_manager.set(cache_key, result, ttl=300, context=cache_context)
-            logger.debug(f"Cached get_messages result: {cache_key}")
-
-            return result
         # Regular production connection
         async with get_db_connection() as conn:
             # Set row factory for dict-like access

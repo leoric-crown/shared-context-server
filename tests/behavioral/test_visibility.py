@@ -24,6 +24,7 @@ from shared_context_server.server import (
 def extract_field_defaults(fastmcp_tool):
     """Extract actual default values from FastMCP tool function."""
     from pydantic_core import PydanticUndefined
+
     defaults = {}
     sig = inspect.signature(fastmcp_tool.fn)
 
@@ -44,7 +45,7 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
     defaults = extract_field_defaults(fastmcp_tool)
     # kwargs should override defaults, not the other way around
     call_args = {**defaults, **kwargs}
-    
+
     # Pass ctx as keyword argument to avoid positional conflicts with exclude_args
     return await fastmcp_tool.fn(ctx=ctx, **call_args)
 

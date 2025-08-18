@@ -17,11 +17,10 @@ import logging
 import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
-
-from pydantic import Field
+from typing import Any
 
 from fastmcp import Context
+from pydantic import Field
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp

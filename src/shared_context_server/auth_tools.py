@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     import aiosqlite
 
 from fastmcp import Context
-
 from pydantic import Field
 
 from .auth import (
