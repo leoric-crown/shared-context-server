@@ -295,16 +295,9 @@ class TestDocumentationAccuracy:
         if claude_md_path.exists():
             claude_md_content = claude_md_path.read_text()
 
-            # The bug: CLAUDE.md incorrectly documents shared_context.db as default
-            # This test documents the current (incorrect) state and should be updated
-            # when the documentation is fixed
-
-            # Current incorrect state (this line should fail after docs are fixed):
-            assert "default: shared_context.db" in claude_md_content
-
-            # TODO: Update assertions when documentation is fixed
-            # Should assert "default: chat_history.db" in claude_md_content
-            # Should assert "default: shared_context.db" not in claude_md_content
+            # Documentation has been fixed - now verify correct default is documented
+            assert "default: chat_history.db" in claude_md_content
+            assert "default: shared_context.db" not in claude_md_content
 
 
 class TestRegressionPrevention:
