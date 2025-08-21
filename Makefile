@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick test-simplified test-backend test-all format lint type pre-commit quality clean docker
+.PHONY: help install dev test test-quick test-simplified test-backend test-all format lint type pre-commit quality clean docker codeql-setup codeql-scan
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -226,3 +226,25 @@ docker: ## Full Docker development lifecycle with hot reload
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.dev.yml up -d --build
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.dev.yml logs -f
+
+codeql-scan: ## Run CodeQL security analysis (requires: brew install codeql)
+	@echo "🔐 Running CodeQL security scan..."
+	@if ! command -v codeql >/dev/null 2>&1; then \
+		echo "❌ CodeQL not found. Install with: brew install codeql"; \
+		exit 1; \
+	fi
+	@echo "📊 Creating database..."
+	@codeql database create .codeql-db --language=python --source-root=. --overwrite --threads=0
+	@echo "🔍 Running analysis..."
+	@codeql database analyze .codeql-db --format=sarifv2.1.0 --output=codeql-results.sarif --threads=0 --download python-security-and-quality.qls
+	@echo "🧹 Cleaning up..."
+	@rm -rf .codeql-db
+	@if [ -f "codeql-results.sarif" ]; then \
+		RESULTS_COUNT=$$(grep -c '"level"' codeql-results.sarif 2>/dev/null || echo "0"); \
+		if [ "$$RESULTS_COUNT" -gt "0" ]; then \
+			echo "⚠️  Found $$RESULTS_COUNT potential security issues"; \
+			echo "📄 Results saved to: codeql-results.sarif"; \
+		else \
+			echo "✅ No security issues found!"; \
+		fi; \
+	fi

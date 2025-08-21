@@ -31,6 +31,27 @@ make quality      # Run all quality checks (format, lint, type, pip-audit)
 make docker       # Full Docker lifecycle: stop → build → up → logs
 ```
 
+### Security Scanning
+```bash
+# macOS:
+brew install codeql
+
+# Ubuntu/Debian:
+sudo apt update && sudo apt install codeql
+
+# Fedora/RHEL:
+sudo dnf install codeql
+
+# Arch Linux:
+sudo pacman -S codeql
+
+# Windows:
+winget install GitHub.CodeQL
+# or: choco install codeql
+
+make codeql-scan              # Run security analysis when needed
+```
+
 ## Architecture Overview
 
 ### Core Components
@@ -330,3 +351,37 @@ claude_token = await authenticate_agent(agent_id="dev_agent", agent_type="claude
 
 - use uv run python instead of python3
 - **CRITICAL**: All timestamps must use Unix format (`datetime.now(timezone.utc).timestamp()`) for consistent timezone display
+
+## Security Scanning
+
+### CodeQL (Optional)
+
+**Setup:**
+```bash
+# macOS:
+brew install codeql
+
+# Ubuntu/Debian:
+sudo apt update && sudo apt install codeql
+
+# Fedora/RHEL:
+sudo dnf install codeql
+
+# Arch Linux:
+sudo pacman -S codeql
+
+# Windows:
+winget install GitHub.CodeQL
+# or: choco install codeql
+```
+
+**Usage:**
+```bash
+make codeql-scan              # Run when needed (release preparation)
+```
+
+**Integration:**
+- GitHub security alerts enabled (automatic repository scanning)
+- CodeQL alerts are informational, not blocking CI
+- Address security issues when convenient
+- Focus on maintaining comprehensive test coverage (primary security benefit)

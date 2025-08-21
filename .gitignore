@@ -61,3 +61,7 @@ venv/
 # Development files
 *.tmp
 *.temp
+
+# CodeQL
+.codeql-db/
+codeql-results.sarif
