@@ -15,14 +15,17 @@ from unittest.mock import patch
 
 import pytest
 
+from shared_context_server.memory_tools import (
+    get_memory,
+    list_memory,
+    set_memory,
+)
+
 # Import tools directly for testing (access .fn for actual functions)
 from shared_context_server.server import (
     add_message,
     create_session,
-    get_memory,
-    list_memory,
     search_context,
-    set_memory,
 )
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -37,7 +40,15 @@ async def test_multi_agent_search_and_memory_workflow(test_db_manager):
     """Test complete workflow: agents collaborate using search and memory systems."""
 
     with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+        patch("shared_context_server.session_tools.get_db_connection") as mock_db_conn,
+        patch(
+            "shared_context_server.memory_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
@@ -151,7 +162,15 @@ async def test_search_performance_with_realistic_data(test_db_manager):
     """Test search performance with realistic multi-agent collaboration data."""
 
     with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+        patch("shared_context_server.session_tools.get_db_connection") as mock_db_conn,
+        patch(
+            "shared_context_server.memory_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
@@ -209,7 +228,14 @@ async def test_memory_ttl_workflow(test_db_manager):
     """Test memory TTL in realistic workflow scenarios."""
 
     with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+        patch("shared_context_server.session_tools.get_db_connection") as mock_db_conn,
+        patch(
+            "shared_context_server.memory_tools.get_db_connection"
+        ) as mock_memory_db_conn,
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
@@ -221,6 +247,9 @@ async def test_memory_ttl_workflow(test_db_manager):
                 yield conn
 
         mock_db_conn.side_effect = mock_get_db_connection
+        mock_memory_db_conn.side_effect = (
+            mock_get_db_connection  # Memory tools also use test DB
+        )
         mock_notify.return_value = None
 
         ctx = MockContext("ttl_session", "ttl_agent")
@@ -310,7 +339,13 @@ async def test_agent_memory_isolation(test_db_manager):
     """Test that agent memory is properly isolated between different agents."""
 
     with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+        patch("shared_context_server.session_tools.get_db_connection") as mock_db_conn,
+        patch(
+            "shared_context_server.memory_tools.get_db_connection"
+        ) as mock_memory_db_conn,
+        patch(
+            "shared_context_server.search_tools.get_db_connection"
+        ) as mock_search_db_conn,
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
@@ -322,6 +357,8 @@ async def test_agent_memory_isolation(test_db_manager):
                 yield conn
 
         mock_db_conn.side_effect = mock_get_db_connection
+        mock_memory_db_conn.side_effect = mock_get_db_connection
+        mock_search_db_conn.side_effect = mock_get_db_connection
         mock_notify.return_value = None
 
         # Create two different agents sharing the same session
@@ -398,7 +435,15 @@ async def test_search_visibility_controls(test_db_manager):
     """Test search respects message visibility in collaborative scenarios."""
 
     with (
-        patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+        patch("shared_context_server.session_tools.get_db_connection") as mock_db_conn,
+        patch(
+            "shared_context_server.memory_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            return_value=mock_db_conn.return_value,
+        ),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,

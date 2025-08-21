@@ -63,16 +63,16 @@ class TestDatabaseFileRegressionPrevention:
             patch.dict(os.environ, {}, clear=True),
             patch.dict(os.environ, {"API_KEY": "test-key"}),
         ):
-            from shared_context_server import config
+            from shared_context_server.config_context import reset_config_context
 
-            with patch.object(config, "_config", None):
-                db_url = get_database_url()
-                assert "chat_history" in db_url, (
-                    f"Database URL doesn't use chat_history: {db_url}"
-                )
-                assert "shared_context" not in db_url, (
-                    f"Database URL uses shared_context: {db_url}"
-                )
+            reset_config_context()
+            db_url = get_database_url()
+            assert "chat_history" in db_url, (
+                f"Database URL doesn't use chat_history: {db_url}"
+            )
+            assert "shared_context" not in db_url, (
+                f"Database URL uses shared_context: {db_url}"
+            )
 
     def test_sqlalchemy_backend_default_uses_chat_history(self):
         """Ensure SQLAlchemy backend defaults use chat_history pattern."""
@@ -204,14 +204,15 @@ class TestDatabaseFileRegressionPrevention:
             }
 
             # Clear any cached config and database manager
-            from shared_context_server import config, database
+            from shared_context_server.config_context import reset_config_context
+            from shared_context_server.database_connection import reset_database_context
 
             with (
                 patch.dict(os.environ, test_env),
                 patch("shared_context_server.config.dotenv.load_dotenv"),
-                patch.object(config, "_config", None),
-                patch.object(database, "_db_manager", None),
             ):
+                reset_config_context()
+                reset_database_context()
                 # Initialize database in isolated environment
                 try:
                     from shared_context_server.database import (
@@ -259,49 +260,54 @@ class TestDatabaseFileRegressionPrevention:
 
     def test_environment_variable_override_prevents_unwanted_files(self):
         """Test that proper environment variables prevent unwanted file creation."""
-        test_cases = [
-            {
-                "name": "Explicit DATABASE_URL",
-                "env": {"DATABASE_URL": "sqlite:///./test_explicit.db"},
-                "expected_pattern": "test_explicit",
-            },
-            {
-                "name": "Explicit DATABASE_PATH",
-                "env": {"DATABASE_PATH": "./test_path.db"},
-                "expected_pattern": "test_path",
-            },
-        ]
+        import tempfile
 
-        for case in test_cases:
-            # Clear all environment variables first, then set only what we want
-            from shared_context_server import config
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
 
-            with (
-                patch.dict(os.environ, {}, clear=True),
-                patch.dict(os.environ, {**case["env"], "API_KEY": "test"}),
-                patch.object(config, "_config", None),
-                patch("shared_context_server.config.dotenv.load_dotenv"),
-            ):
-                from shared_context_server.config import get_database_url
+            test_cases = [
+                {
+                    "name": "Explicit DATABASE_URL",
+                    "env": {"DATABASE_URL": f"sqlite:///{temp_path}/test_explicit.db"},
+                    "expected_pattern": "test_explicit",
+                },
+                {
+                    "name": "Explicit DATABASE_PATH",
+                    "env": {"DATABASE_PATH": str(temp_path / "test_path.db")},
+                    "expected_pattern": "test_path",
+                },
+            ]
 
-                db_url = get_database_url()
+            for case in test_cases:
+                # Clear all environment variables first, then set only what we want
+                from shared_context_server.config_context import reset_config_context
 
-            # For DATABASE_URL case, the URL should be used as-is
-            if "DATABASE_URL" in case["env"]:
-                expected_url = case["env"]["DATABASE_URL"]
-                assert db_url == expected_url, (
-                    f"Expected exact URL {expected_url}, got {db_url}"
+                with (
+                    patch.dict(os.environ, {}, clear=True),
+                    patch.dict(os.environ, {**case["env"], "API_KEY": "test"}),
+                    patch("shared_context_server.config.dotenv.load_dotenv"),
+                ):
+                    reset_config_context()
+                    from shared_context_server.config import get_database_url
+
+                    db_url = get_database_url()
+
+                # For DATABASE_URL case, the URL should be used as-is
+                if "DATABASE_URL" in case["env"]:
+                    expected_url = case["env"]["DATABASE_URL"]
+                    assert db_url == expected_url, (
+                        f"Expected exact URL {expected_url}, got {db_url}"
+                    )
+                else:
+                    # For DATABASE_PATH case, check the pattern is in the generated URL
+                    assert case["expected_pattern"] in db_url, (
+                        f"Expected pattern '{case['expected_pattern']}' not in URL: {db_url}"
+                    )
+
+                # Verify shared_context is not used
+                assert "shared_context" not in db_url, (
+                    f"Unwanted 'shared_context' in URL: {db_url}"
                 )
-            else:
-                # For DATABASE_PATH case, check the pattern is in the generated URL
-                assert case["expected_pattern"] in db_url, (
-                    f"Expected pattern '{case['expected_pattern']}' not in URL: {db_url}"
-                )
-
-            # Verify shared_context is not used
-            assert "shared_context" not in db_url, (
-                f"Unwanted 'shared_context' in URL: {db_url}"
-            )
 
 
 def get_database_url():

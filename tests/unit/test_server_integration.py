@@ -34,7 +34,14 @@ class TestMultiComponentIntegration:
         auth_ctx = MockContext(session_id="auth_session", agent_id="workflow_agent")
         auth_ctx.headers = {"X-API-Key": "workflow_test_key"}  # Add API key header
 
-        with patch.dict("os.environ", {"API_KEY": "workflow_test_key"}):
+        with patch.dict(
+            "os.environ",
+            {
+                "API_KEY": "workflow_test_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+        ):
             auth_result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 auth_ctx,
@@ -535,7 +542,9 @@ class TestMultiComponentIntegration:
         session_id = session_result["session_id"]
 
         # Test database error during message addition affects search
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             # First call succeeds (for session verification), second fails
             call_count = [0]
 

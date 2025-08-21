@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 from shared_context_server.auth import AuthInfo
 
@@ -63,8 +64,17 @@ def _track_task_creation(coro, **kwargs):
     if hasattr(coro, "cr_code"):
         task_name = f"{coro.cr_code.co_name}"
 
-    # Store debug info on the task
-    task._test_debug_info = {"name": task_name, "created_at": time.time()}
+    # Store debug info on the task, including event loop reference
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    task._test_debug_info = {
+        "name": task_name,
+        "created_at": time.time(),
+        "loop_id": id(current_loop) if current_loop else None,
+    }
 
     # Use weak reference callback to auto-remove completed tasks
     def cleanup_task_ref(task_ref):
@@ -112,28 +122,90 @@ def unregister_observer(observer):
 # =============================================================================
 
 
-async def cleanup_async_tasks_with_timeout(timeout: float = 2.0) -> int:
-    """Clean up asyncio tasks with proper timeout handling."""
-    tasks_to_cancel = list(_task_registry)
-    cancelled_count = 0
+async def cleanup_async_tasks_with_timeout(timeout: float = 0.5) -> int:
+    """
+    Clean up asyncio tasks with robust timeout handling.
 
+    Based on pytest-asyncio community best practices for preventing hanging tests.
+    """
+    global _task_registry
+
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No loop running, can't clean up tasks
+        _task_registry.clear()
+        return 0
+
+    # Get all tasks except current one (more robust approach)
+    try:
+        all_tasks = asyncio.all_tasks(current_loop)
+        current_task = asyncio.current_task(current_loop)
+        tasks_to_cancel = [
+            task for task in all_tasks if not task.done() and task != current_task
+        ]
+    except Exception:
+        # Fallback to registry-based approach
+        tasks_to_cancel = []
+        for task in list(_task_registry):
+            try:
+                if (
+                    hasattr(task, "_loop")
+                    and task._loop is current_loop
+                    and not task.done()
+                ):
+                    tasks_to_cancel.append(task)
+            except Exception:  # noqa: PERF203
+                _task_registry.discard(task)
+                continue
+
+    if not tasks_to_cancel:
+        _task_registry.clear()
+        return 0
+
+    # Cancel all tasks
+    cancelled_count = 0
     for task in tasks_to_cancel:
         if not task.done():
             task.cancel()
             cancelled_count += 1
 
-    # Wait for cancellation with timeout
+    # Wait for cancellation with proper timeout handling
     if tasks_to_cancel:
         try:
+            # Use asyncio.wait_for for more reliable timeout
             await asyncio.wait_for(
                 asyncio.gather(*tasks_to_cancel, return_exceptions=True),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
+            # Force cancel remaining tasks
+            remaining_tasks = [t for t in tasks_to_cancel if not t.done()]
             _quiet_print(
-                f"⚠️ {len([t for t in tasks_to_cancel if not t.done()])} tasks didn't cancel within {timeout}s"
+                f"⚠️ {len(remaining_tasks)} tasks didn't cancel within {timeout}s, force cancelling"
             )
+            for task in remaining_tasks:
+                if not task.done():
+                    task.cancel()
 
+            # Give a final brief moment for force cancellation
+            with suppress(asyncio.TimeoutError, Exception):
+                # Final fallback - tasks are stuck, just continue
+                await asyncio.wait_for(
+                    asyncio.gather(*remaining_tasks, return_exceptions=True),
+                    timeout=0.1,
+                )
+
+        except ValueError as e:
+            if "different loop" in str(e):
+                _quiet_print(
+                    "⚠️ Skipping cross-loop task cleanup to avoid event loop conflicts"
+                )
+            else:
+                # Log error but don't fail the test
+                _quiet_print(f"⚠️ Task cleanup error: {e}")
+
+    # Clean up task registry
     _task_registry.clear()
     return cancelled_count
 
@@ -296,7 +368,9 @@ def extract_field_defaults(fastmcp_tool) -> dict[str, Any]:
 
         if isinstance(param.default, FieldInfo):
             # Extract the actual default from FieldInfo
-            defaults[name] = param.default.default
+            # Skip parameters with PydanticUndefined (required parameters)
+            if param.default.default is not PydanticUndefined:
+                defaults[name] = param.default.default
         elif param.default is not inspect.Parameter.empty:
             defaults[name] = param.default
 
@@ -317,6 +391,9 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
 
     Returns:
         Result of the function call
+
+    Raises:
+        TypeError: If required parameters are missing
     """
     # Get the actual defaults
     defaults = extract_field_defaults(fastmcp_tool)
@@ -324,8 +401,25 @@ async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
     # Merge defaults with provided kwargs (kwargs override defaults)
     call_args = {**defaults, **kwargs}
 
-    # Call the function with context as first parameter
-    return await fastmcp_tool.fn(ctx, **call_args)
+    # Check for required parameters that are missing
+    sig = inspect.signature(fastmcp_tool.fn)
+    for name, param in sig.parameters.items():
+        if name == "ctx":  # Skip context parameter
+            continue
+
+        # Check if parameter is required (no default and not in call_args)
+        has_default = param.default is not inspect.Parameter.empty and (
+            not isinstance(param.default, FieldInfo)
+            or param.default.default is not PydanticUndefined
+        )
+
+        if not has_default and name not in call_args:
+            raise TypeError(
+                f"create_session() missing 1 required positional argument: '{name}'"
+            )
+
+    # Call the function with context as keyword parameter
+    return await fastmcp_tool.fn(ctx=ctx, **call_args)
 
 
 class MockContext:
@@ -559,15 +653,45 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
             "src.shared_context_server.database.get_db_connection",
             mock_get_db_connection,
         ),
-        # Server module imports (handles `from .database import get_db_connection`)
-        patch("shared_context_server.server.get_db_connection", mock_get_db_connection),
+        # Server module no longer has get_db_connection after modularization
+        # It imports tools from individual modules that have their own patches
+        # Tool module imports
         patch(
-            "src.shared_context_server.server.get_db_connection", mock_get_db_connection
+            "shared_context_server.session_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.memory_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.search_tools.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_guidance.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_lifecycle.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.admin_resources.get_db_connection",
+            mock_get_db_connection,
         ),
         # Auth module imports
         patch("shared_context_server.auth.get_db_connection", mock_get_db_connection),
         patch(
             "src.shared_context_server.auth.get_db_connection", mock_get_db_connection
+        ),
+        # Auth core module imports (where audit_log_auth_event is defined)
+        patch(
+            "shared_context_server.auth_core.get_db_connection", mock_get_db_connection
+        ),
+        patch(
+            "src.shared_context_server.auth_core.get_db_connection",
+            mock_get_db_connection,
         ),
         # WebSocket module imports
         patch(
@@ -617,7 +741,7 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
 
 
 @pytest.fixture(autouse=True)
-async def cleanup_background_tasks():
+async def cleanup_background_tasks(request):
     """
     Automatically clean up background tasks after each test.
 
@@ -630,12 +754,71 @@ async def cleanup_background_tasks():
     # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
     import os
 
+    # Performance tests get faster cleanup to reduce teardown time
+    def is_performance_test_robust(request):
+        """Reliable performance test detection across pytest-xdist and different execution modes."""
+        if not hasattr(request, "node"):
+            return False
+
+        # Method 1: Use get_closest_marker (more reliable than iter_markers)
+        try:
+            perf_marker = request.node.get_closest_marker("performance")
+            if perf_marker:
+                return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 2: Fallback to iter_markers for compatibility
+        try:
+            if hasattr(request.node, "iter_markers") and any(
+                marker.name == "performance" for marker in request.node.iter_markers()
+            ):
+                return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 3: Check test name patterns
+        try:
+            if hasattr(request.node, "name"):
+                test_name = request.node.name.lower()
+                if any(
+                    pattern in test_name
+                    for pattern in ["concurrent", "performance", "load", "stress"]
+                ):
+                    return True
+        except (AttributeError, TypeError):
+            pass
+
+        # Method 4: Check class name patterns for additional reliability
+        try:
+            if hasattr(request.node, "cls") and request.node.cls:
+                class_name = request.node.cls.__name__.lower()
+                if "performance" in class_name:
+                    return True
+        except (AttributeError, TypeError):
+            pass
+
+        return False
+
+    is_performance_test = is_performance_test_robust(request)
+
     if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
         cancelled_tasks = 0  # Skip asyncio cleanup in CI environments
+    elif is_performance_test:
+        cancelled_tasks = (
+            0  # Skip cleanup entirely for performance tests to avoid 5s+ teardown
+        )
+        print(
+            f"⚡ Skipped async cleanup for performance test: {getattr(request.node, 'name', 'unknown')}"
+        )
     else:
-        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=2.0)
+        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=0.5)
 
-    cleaned_threads = cleanup_threads_with_timeout(timeout=1.0)
+    # Skip thread cleanup for performance tests to avoid hanging
+    if is_performance_test:
+        cleaned_threads = 0  # Skip thread cleanup for performance tests
+    else:
+        cleaned_threads = cleanup_threads_with_timeout(timeout=0.5)
     cleaned_observers = cleanup_observers()
 
     # Log detailed information about cleanup
@@ -692,6 +875,9 @@ async def reset_global_singletons():
             notification_manager.client_last_seen.clear()
     except ImportError:
         pass
+
+    # Note: Authentication singleton reset no longer needed with ContextVar approach
+    # Each test automatically gets isolated token manager instances
 
     # Enhanced database manager cleanup for SQLAlchemy flakiness prevention
     try:
@@ -754,6 +940,9 @@ def isolate_environment_variables():
 
     CRITICAL: Prevents USE_SQLALCHEMY and database path variables from leaking
     between tests running in parallel workers.
+
+    ENHANCED: Ensures authentication-critical environment variables are
+    always available to prevent "authentication_service temporarily unavailable" errors.
     """
     import os
 
@@ -762,21 +951,40 @@ def isolate_environment_variables():
         "USE_SQLALCHEMY",
         "DATABASE_URL",
         "DATABASE_PATH",
-        "JWT_ENCRYPTION_KEY",  # Token tests depend on this
         "API_KEY",  # Required for config loading
     ]
 
-    # Store original values
+    # Authentication variables that should NEVER be cleared (always ensure they exist)
+    auth_required_vars = {
+        "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+    }
+
+    # Store original values for critical vars only
     original_values = {var: os.environ.get(var) for var in critical_vars}
+    original_auth_values = {var: os.environ.get(var) for var in auth_required_vars}
+
+    # Ensure authentication variables are ALWAYS set
+    for var, default_value in auth_required_vars.items():
+        if not os.environ.get(var):
+            os.environ[var] = default_value
 
     yield  # Let the test run
 
-    # Restore original environment state
+    # Restore original environment state for critical vars
     for var, original_value in original_values.items():
         if original_value is None:
             os.environ.pop(var, None)
         else:
             os.environ[var] = original_value
+
+    # Restore authentication variables to original values (but ensure they exist)
+    for var, original_value in original_auth_values.items():
+        if original_value is not None:
+            os.environ[var] = original_value
+        elif var not in os.environ:
+            # If there was no original value and it's not set, set default
+            os.environ[var] = auth_required_vars[var]
 
 
 @pytest.fixture(autouse=True)
@@ -804,7 +1012,7 @@ async def mock_websocket_notifications(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def cleanup_on_session_finish():
+def cleanup_on_session_finish():
     """
     Final cleanup when the entire test session finishes.
 
@@ -815,62 +1023,24 @@ async def cleanup_on_session_finish():
 
     _quiet_print("🧹 Starting final cleanup...")
 
-    # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
-    import os
+    # Skip asyncio cleanup in session scope to avoid event loop conflicts
+    # Async cleanup is handled by per-test fixtures
 
-    if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-        _quiet_print("Skipping asyncio cleanup in CI environment")
-        _task_registry.clear()
-        return
+    # Just clear the registries since we can't do async operations in session scope
+    task_count = len(_task_registry)
+    thread_count = len(_thread_registry)
+    observer_count = len(_observer_registry)
 
-    # Cancel all remaining tasks aggressively
-    tasks_to_cancel = list(_task_registry)
-    if tasks_to_cancel:
-        _quiet_print(
-            f"Final cleanup: cancelling {len(tasks_to_cancel)} remaining background tasks"
-        )
-
-        for task in tasks_to_cancel:
-            if not task.done():
-                task.cancel()
-
-        # Wait for all tasks to finish with timeout
-        if tasks_to_cancel:
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*tasks_to_cancel, return_exceptions=True),
-                    timeout=2.0,
-                )
-            except asyncio.TimeoutError:
-                _quiet_print("Warning: Some background tasks did not shut down cleanly")
+    # Cancel tasks synchronously (without waiting)
+    for task in list(_task_registry):
+        if not task.done():
+            task.cancel()
 
     _task_registry.clear()
 
-    # Cancel any other running tasks in the event loop
-    try:
-        current_task = asyncio.current_task()
-        all_tasks = [
-            t for t in asyncio.all_tasks() if t != current_task and not t.done()
-        ]
-
-        if all_tasks:
-            _quiet_print(
-                f"Final cleanup: found {len(all_tasks)} additional running tasks"
-            )
-            for task in all_tasks:
-                task.cancel()
-
-            # Wait for them to finish
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*all_tasks, return_exceptions=True), timeout=1.0
-                )
-            except asyncio.TimeoutError:
-                _quiet_print("Warning: Some additional tasks did not shut down cleanly")
-
-    except RuntimeError:
-        # No event loop running
-        pass
+    # Clear thread and observer registries
+    _thread_registry.clear()
+    _observer_registry.clear()
 
     # Clean up any remaining coroutines before garbage collection
     import gc
@@ -888,7 +1058,12 @@ async def cleanup_on_session_finish():
     # Restore original asyncio.create_task
     asyncio.create_task = _original_create_task
 
-    _quiet_print("🧹 Final cleanup completed")
+    if task_count > 0 or thread_count > 0 or observer_count > 0:
+        _quiet_print(
+            f"🧹 Final cleanup completed - cleared {task_count} tasks, {thread_count} threads, {observer_count} observers"
+        )
+    else:
+        _quiet_print("🧹 Final cleanup completed")
 
 
 # =============================================================================
@@ -1098,3 +1273,45 @@ async def search_test_session(server_with_db, test_db_manager):
         )
 
     yield session_id, ctx
+
+
+# =============================================================================
+# SINGLETON ISOLATION FOR TEST STABILITY
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def singleton_isolation():
+    """
+    Ensure clean singleton state for each test.
+
+    Prevents authentication service state pollution between tests by:
+    1. Setting required environment variables for SecureTokenManager
+    2. Enabling test mode for proper singleton lifecycle management
+    3. Resetting ALL singleton state (auth_manager and secure_token_manager)
+
+    This fixture resolves the "authentication_service temporarily unavailable"
+    errors caused by singleton state corruption across multiple managers.
+    """
+    import os
+    from unittest.mock import patch
+
+    from shared_context_server.auth_core import reset_auth_manager
+
+    # Set required environment variables before resetting singletons
+    # This ensures that when SecureTokenManager is recreated, it has proper config
+    with patch.dict(
+        os.environ,
+        {
+            "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+            "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        },
+        clear=False,
+    ):
+        # Reset auth manager (token manager is automatically isolated via ContextVar)
+        reset_auth_manager()
+
+        yield
+
+        # Reset auth manager after test for cleanup
+        reset_auth_manager()

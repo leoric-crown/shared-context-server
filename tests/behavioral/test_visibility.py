@@ -23,6 +23,8 @@ from shared_context_server.server import (
 
 def extract_field_defaults(fastmcp_tool):
     """Extract actual default values from FastMCP tool function."""
+    from pydantic_core import PydanticUndefined
+
     defaults = {}
     sig = inspect.signature(fastmcp_tool.fn)
 
@@ -30,7 +32,9 @@ def extract_field_defaults(fastmcp_tool):
         if param_name == "ctx":  # Skip context parameter
             continue
         if isinstance(param.default, FieldInfo):
-            defaults[param_name] = param.default.default
+            # Only include if it has a real default value (not required)
+            if param.default.default is not PydanticUndefined:
+                defaults[param_name] = param.default.default
         elif param.default != inspect.Parameter.empty:
             defaults[param_name] = param.default
     return defaults
@@ -39,8 +43,11 @@ def extract_field_defaults(fastmcp_tool):
 async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
     """Call FastMCP tool with proper default handling."""
     defaults = extract_field_defaults(fastmcp_tool)
+    # kwargs should override defaults, not the other way around
     call_args = {**defaults, **kwargs}
-    return await fastmcp_tool.fn(ctx, **call_args)
+
+    # Pass ctx as keyword argument to avoid positional conflicts with exclude_args
+    return await fastmcp_tool.fn(ctx=ctx, **call_args)
 
 
 class MockContext:
@@ -281,7 +288,9 @@ class TestVisibilityControls:
     ):
         """Test that public messages are visible to all agents."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )
@@ -341,7 +350,9 @@ class TestVisibilityControls:
     ):
         """Test that private messages are only visible to their sender."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )
@@ -410,7 +421,9 @@ class TestVisibilityControls:
     ):
         """Test agent_only message visibility (Phase 1 implementation)."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )
@@ -465,7 +478,9 @@ class TestVisibilityControls:
     ):
         """Test complex scenarios with multiple visibility levels."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )
@@ -597,7 +612,9 @@ class TestVisibilityControls:
     ):
         """Test the visibility_filter parameter in get_messages."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )
@@ -678,7 +695,9 @@ class TestVisibilityControls:
     ):
         """Test that agents cannot access messages from sessions they shouldn't see."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             mock_db_conn.return_value.__aenter__.return_value = (
                 mock_database_with_visibility
             )

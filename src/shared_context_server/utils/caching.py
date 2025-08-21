@@ -14,13 +14,18 @@ Built according to PRP-005: Phase 4 - Production Ready specification.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any
+
+from .security import (
+    sanitize_agent_id,
+    sanitize_cache_key,
+    secure_hash_short_for_cache_keys,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +74,9 @@ class SmartCacheManager:
         if context:
             # Sort context for consistent key generation
             context_str = json.dumps(context, sort_keys=True, ensure_ascii=False)
-            context_hash = hashlib.md5(context_str.encode()).hexdigest()[
-                :8
-            ]  # Short hash
+            context_hash = secure_hash_short_for_cache_keys(
+                context_str, length=8
+            )  # Secure hash for cache keys
             return f"{key}:{context_hash}"
 
         return key
@@ -93,7 +98,9 @@ class SmartCacheManager:
                     self.l1_cache.move_to_end(cache_key)
                     self.cache_stats["l1_hits"] += 1
 
-                    logger.debug(f"L1 cache hit for key: {cache_key}")
+                    # CodeQL: This logging statement uses sanitized data only
+                    sanitized_key = sanitize_cache_key(cache_key)
+                    logger.debug("L1 cache hit for key: %s", sanitized_key)
                     return entry["value"]
                 # Entry expired, remove it
                 del self.l1_cache[cache_key]
@@ -112,14 +119,20 @@ class SmartCacheManager:
                     # Promote to L1 cache for faster future access
                     await self._promote_to_l1(cache_key, entry["value"], entry["ttl"])
 
-                    logger.debug(f"L2 cache hit for key: {cache_key} (promoted to L1)")
+                    # CodeQL: This logging statement uses sanitized data only
+                    sanitized_key = sanitize_cache_key(cache_key)
+                    logger.debug(
+                        "L2 cache hit for key: %s (promoted to L1)", sanitized_key
+                    )
                     return entry["value"]
                 # Entry expired, remove it
                 del self.l2_cache[cache_key]
 
         # Cache miss
         self.cache_stats["misses"] += 1
-        logger.debug(f"Cache miss for key: {cache_key}")
+        # CodeQL: This logging statement uses sanitized data only
+        sanitized_key = sanitize_cache_key(cache_key)
+        logger.debug("Cache miss for key: %s", sanitized_key)
         return None
 
     async def set(
@@ -159,7 +172,11 @@ class SmartCacheManager:
             await self._set_l2(cache_key, cache_entry)
 
         self.cache_stats["sets"] += 1
-        logger.debug(f"Cached value for key: {cache_key} (TTL: {ttl}s, Level: {level})")
+        # CodeQL: This logging statement uses sanitized data only
+        sanitized_key = sanitize_cache_key(cache_key)
+        logger.debug(
+            "Cached value for key: %s (TTL: %ds, Level: %s)", sanitized_key, ttl, level
+        )
 
     async def _set_l1(self, cache_key: str, cache_entry: dict[str, Any]) -> None:
         """Set value in L1 cache with LRU eviction."""
@@ -171,7 +188,9 @@ class SmartCacheManager:
                     last=False
                 )  # Remove least recently used
                 self.cache_stats["evictions"] += 1
-                logger.debug(f"Evicted LRU item from L1: {lru_key}")
+                # CodeQL: This logging statement uses sanitized data only
+                sanitized_lru_key = sanitize_cache_key(lru_key)
+                logger.debug("Evicted LRU item from L1: %s", sanitized_lru_key)
 
             self.l1_cache[cache_key] = cache_entry
 
@@ -185,7 +204,9 @@ class SmartCacheManager:
                     last=False
                 )  # Remove least recently used
                 self.cache_stats["evictions"] += 1
-                logger.debug(f"Evicted LRU item from L2: {lru_key}")
+                # CodeQL: This logging statement uses sanitized data only
+                sanitized_lru_key = sanitize_cache_key(lru_key)
+                logger.debug("Evicted LRU item from L2: %s", sanitized_lru_key)
 
             self.l2_cache[cache_key] = cache_entry
 
@@ -214,14 +235,18 @@ class SmartCacheManager:
             if cache_key in self.l1_cache:
                 del self.l1_cache[cache_key]
                 self.cache_stats["invalidations"] += 1
-                logger.debug(f"Invalidated L1 cache entry: {cache_key}")
+                # CodeQL: This logging statement uses sanitized data only
+                sanitized_cache_key = sanitize_cache_key(cache_key)
+                logger.debug("Invalidated L1 cache entry: %s", sanitized_cache_key)
 
         # Remove from L2 cache
         async with self.l2_lock:
             if cache_key in self.l2_cache:
                 del self.l2_cache[cache_key]
                 self.cache_stats["invalidations"] += 1
-                logger.debug(f"Invalidated L2 cache entry: {cache_key}")
+                # CodeQL: This logging statement uses sanitized data only
+                sanitized_cache_key = sanitize_cache_key(cache_key)
+                logger.debug("Invalidated L2 cache entry: %s", sanitized_cache_key)
 
     async def invalidate_pattern(self, pattern: str) -> int:
         """Invalidate all cache entries matching a pattern."""
@@ -296,7 +321,8 @@ class SmartCacheManager:
 
         if expired_count > 0:
             self.cache_stats["cleanup_runs"] += 1
-            logger.debug(f"Cleaned up {expired_count} expired cache entries")
+            # CodeQL: This logging statement uses non-sensitive data only
+            logger.debug("Cleaned up %d expired cache entries", expired_count)
 
         return expired_count
 
@@ -423,7 +449,7 @@ def generate_search_cache_key(
 ) -> str:
     """Generate cache key for search results."""
     # Hash query for consistent key generation
-    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+    query_hash = secure_hash_short_for_cache_keys(query, length=8)
     return f"search:{session_id}:query:{query_hash}:threshold:{fuzzy_threshold}:scope:{search_scope}"
 
 
@@ -465,8 +491,12 @@ async def invalidate_agent_memory_cache(
     pattern = f"memory:{agent_id}"
     invalidated_count = await cache_manager.invalidate_pattern(pattern)
 
+    # CodeQL: This logging statement uses sanitized data only
+    sanitized_agent = sanitize_agent_id(agent_id)
     logger.debug(
-        f"Invalidated {invalidated_count} memory cache entries for agent {agent_id}"
+        "Invalidated %d memory cache entries for agent %s",
+        invalidated_count,
+        sanitized_agent,
     )
 
 

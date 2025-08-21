@@ -301,7 +301,7 @@ class TestMemoryOperationsEdgeCases:
         ctx = MockContext(agent_id="error_agent")
 
         # Mock database connection to raise error
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch("shared_context_server.memory_tools.get_db_connection") as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             # Test set_memory error handling

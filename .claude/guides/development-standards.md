@@ -29,6 +29,13 @@ For complex components this looks like:
 
 ## Testing & Reliability
 
+### Test Architecture Requirements
+
+- **CRITICAL**: Follow testing architecture patterns in `.claude/guides/testing-architecture-stability.md`
+- **NEW CODE**: Use dependency injection patterns (no global singletons)
+- **EXISTING CODE**: Apply Enhanced Singleton Pattern with proper test isolation
+- **Test Reliability Target**: >95% pass rate with predictable execution
+
 ### Test Coverage Requirements
 
 - **Always create unit tests for new features** (functions, classes, components, etc)

@@ -313,9 +313,37 @@ def patch_database_for_test(db_manager: DatabaseTestManager):
         )
     )
 
-    # Server module patches
-    patches.append(
-        patch("shared_context_server.server.get_db_connection", mock_get_db_connection)
+    # Server module no longer has get_db_connection after modularization
+    # Tool modules have their own patches
+
+    # Tool module patches
+    patches.extend(
+        [
+            patch(
+                "shared_context_server.session_tools.get_db_connection",
+                mock_get_db_connection,
+            ),
+            patch(
+                "shared_context_server.memory_tools.get_db_connection",
+                mock_get_db_connection,
+            ),
+            patch(
+                "shared_context_server.search_tools.get_db_connection",
+                mock_get_db_connection,
+            ),
+            patch(
+                "shared_context_server.admin_guidance.get_db_connection",
+                mock_get_db_connection,
+            ),
+            patch(
+                "shared_context_server.admin_lifecycle.get_db_connection",
+                mock_get_db_connection,
+            ),
+            patch(
+                "shared_context_server.admin_resources.get_db_connection",
+                mock_get_db_connection,
+            ),
+        ]
     )
 
     # Auth module patches

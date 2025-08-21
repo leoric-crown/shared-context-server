@@ -209,20 +209,22 @@ class TestRuntimeFileCreation:
                         os.environ,
                         {"DATABASE_URL": invalid_config, "API_KEY": "test-key"},
                     ):
-                        # Force config reload
-                        from shared_context_server import config
+                        # Force config reload using ContextVar approach
+                        from shared_context_server.config_context import (
+                            reset_config_context,
+                        )
 
-                        with patch.object(config, "_config", None):
-                            # Try to get database connection
-                            try:
-                                from shared_context_server.database import (
-                                    get_db_connection,
-                                )
+                        reset_config_context()
+                        # Try to get database connection
+                        try:
+                            from shared_context_server.database import (
+                                get_db_connection,
+                            )
 
-                                async with get_db_connection() as conn:
-                                    await conn.execute("SELECT 1")
-                            except Exception as e:
-                                print(f"Expected failure: {e}")
+                            async with get_db_connection() as conn:
+                                await conn.execute("SELECT 1")
+                        except Exception as e:
+                            print(f"Expected failure: {e}")
 
                 except Exception as e:
                     print(f"Configuration error: {e}")

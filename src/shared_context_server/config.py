@@ -642,7 +642,8 @@ class SharedContextServerConfig(BaseSettings):
         return issues
 
 
-# Global configuration instance
+# LEGACY: Global configuration singleton anti-pattern (DEPRECATED)
+# Maintained for backward compatibility only
 _config: SharedContextServerConfig | None = None
 
 
@@ -653,17 +654,18 @@ def _raise_production_config_error(issues: list[str]) -> None:
 
 def get_config() -> SharedContextServerConfig:
     """
-    Get global configuration instance.
+    DEPRECATED: Get configuration (redirects to ContextVar implementation).
+
+    This function is maintained for backward compatibility.
+    New code should use get_context_config() from config_context.py
+    which provides proper thread-safe ContextVar-based management.
 
     Returns:
-        SharedContextServerConfig: Global configuration
+        SharedContextServerConfig: Thread-local configuration
     """
-    global _config
+    from .config_context import get_context_config
 
-    if _config is None:
-        _config = load_config()
-
-    return _config
+    return get_context_config()
 
 
 def load_config(env_file: str | None = None) -> SharedContextServerConfig:
@@ -709,14 +711,18 @@ def load_config(env_file: str | None = None) -> SharedContextServerConfig:
 
 def reload_config() -> SharedContextServerConfig:
     """
-    Reload global configuration from environment.
+    DEPRECATED: Reload configuration (redirects to ContextVar implementation).
+
+    This function is maintained for backward compatibility.
+    New code should use reload_config_in_context() from config_context.py
+    which provides proper thread-safe ContextVar-based management.
 
     Returns:
-        SharedContextServerConfig: Reloaded configuration
+        SharedContextServerConfig: Reloaded thread-local configuration
     """
-    global _config
-    _config = None
-    return get_config()
+    from .config_context import reload_config_in_context
+
+    return reload_config_in_context()
 
 
 # Convenience functions for accessing configuration sections

@@ -27,11 +27,12 @@ class TestBackgroundTaskSystem:
         with patch_database_connection(test_db_manager, backend="aiosqlite"):
             yield server
 
+    @pytest.mark.performance
     async def test_cleanup_expired_memory_task_functionality(
         self, server_with_db, test_db_manager
     ):
         """Test memory cleanup task functionality."""
-        from shared_context_server.server import _perform_memory_cleanup
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
 
         MockContext(agent_id="cleanup_test_agent")
 
@@ -53,7 +54,7 @@ class TestBackgroundTaskSystem:
                     '{"data": "expired"}',
                     "{}",
                     current_time - 100,
-                    current_time - 1,  # Expired 1 second ago
+                    current_time - 10,  # Expired 10 seconds ago
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -104,6 +105,9 @@ class TestBackgroundTaskSystem:
             count_before = (await cursor.fetchone())[0]
             assert count_before == 3
 
+        # Small delay to ensure timing precision
+        await asyncio.sleep(0.1)
+
         # Perform memory cleanup
         await _perform_memory_cleanup()
 
@@ -124,10 +128,8 @@ class TestBackgroundTaskSystem:
         self, server_with_db, test_db_manager
     ):
         """Test subscription cleanup task functionality."""
-        from shared_context_server.server import (
-            _perform_subscription_cleanup,
-            notification_manager,
-        )
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
+        from shared_context_server.server import notification_manager
 
         # Add fresh and stale subscriptions
         await notification_manager.subscribe("fresh_client", "session://test1")
@@ -158,13 +160,13 @@ class TestBackgroundTaskSystem:
 
     async def test_cleanup_tasks_error_handling(self, server_with_db, test_db_manager):
         """Test that cleanup tasks handle errors gracefully."""
-        from shared_context_server.server import (
-            _perform_memory_cleanup,
-            _perform_subscription_cleanup,
-        )
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
 
         # Test memory cleanup with database error
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             # Should not raise exception
@@ -242,13 +244,15 @@ class TestBackgroundTaskSystem:
 
     async def test_server_lifespan_management(self, server_with_db, test_db_manager):
         """Test server lifespan context manager basic functionality."""
-        from shared_context_server.server import lifespan
+        from shared_context_server.admin_lifecycle import lifespan
 
         # Track database initialization calls
         init_calls = []
 
         # Mock database initialization to avoid actual database operations
-        with patch("shared_context_server.server.initialize_database") as mock_init:
+        with patch(
+            "shared_context_server.admin_lifecycle.initialize_database"
+        ) as mock_init:
             mock_init.side_effect = lambda: init_calls.append("init")
 
             # Mock background tasks to avoid actually starting them
@@ -329,7 +333,7 @@ class TestBackgroundTaskSystem:
 
     async def test_memory_cleanup_with_real_data(self, server_with_db, test_db_manager):
         """Test memory cleanup with realistic memory operations."""
-        from shared_context_server.server import _perform_memory_cleanup
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
 
         ctx = MockContext(agent_id="real_cleanup_agent")
 
@@ -389,10 +393,8 @@ class TestBackgroundTaskSystem:
         self, server_with_db, test_db_manager
     ):
         """Test subscription cleanup integration with real subscription operations."""
-        from shared_context_server.server import (
-            _perform_subscription_cleanup,
-            notification_manager,
-        )
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
+        from shared_context_server.server import notification_manager
 
         # Create realistic subscriptions
         clients_and_resources = [
@@ -435,10 +437,8 @@ class TestBackgroundTaskSystem:
 
     async def test_concurrent_background_tasks(self, server_with_db, test_db_manager):
         """Test that background tasks can run concurrently without interference."""
-        from shared_context_server.server import (
-            _perform_memory_cleanup,
-            _perform_subscription_cleanup,
-        )
+        from shared_context_server.admin_lifecycle import _perform_memory_cleanup
+        from shared_context_server.admin_resources import _perform_subscription_cleanup
 
         # Set up test data for both cleanup types
         ctx = MockContext(agent_id="concurrent_agent")
@@ -486,7 +486,7 @@ class TestBackgroundTaskSystem:
 
         # Mock one cleanup to fail
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db:
+        with patch("shared_context_server.session_tools.get_db_connection") as mock_db:
             mock_db.side_effect = Exception("Memory cleanup database error")
 
             # Mock subscription cleanup to track if it runs
@@ -502,8 +502,10 @@ class TestBackgroundTaskSystem:
 
             try:
                 # Run both tasks - memory cleanup should fail, subscription should succeed
-                from shared_context_server.server import (
+                from shared_context_server.admin_lifecycle import (
                     _perform_memory_cleanup,
+                )
+                from shared_context_server.admin_resources import (
                     _perform_subscription_cleanup,
                 )
 
@@ -525,7 +527,7 @@ class TestBackgroundTaskSystem:
         from shared_context_server.server import lifespan
 
         # Mock database initialization to fail
-        with patch("shared_context_server.server.initialize_database") as mock_init:
+        with patch("shared_context_server.database.initialize_database") as mock_init:
             mock_init.side_effect = Exception("Database initialization failed")
 
             # Lifespan should handle the error gracefully

@@ -315,20 +315,25 @@ class TestJWTManagerInitialization:
 
             with pytest.raises(
                 ValueError,
-                match="JWT_SECRET_KEY environment variable must be set for production",
+                match="JWT_SECRET_KEY environment variable must be set",
             ):
                 JWTAuthenticationManager()
 
-    def test_initialization_development_fallback(self):
-        """Test development fallback when no secret key provided."""
+    def test_initialization_development_no_fallback(self):
+        """Test that development also requires JWT secret key (security hardened)."""
         env_vars = {"ENVIRONMENT": "development"}
         # Explicitly remove JWT_SECRET_KEY
         if "JWT_SECRET_KEY" in os.environ:
             env_vars["JWT_SECRET_KEY"] = ""
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            manager = JWTAuthenticationManager()
-            assert manager.secret_key == "dev-secret-key-not-for-production-use"
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(
+                ValueError,
+                match="JWT_SECRET_KEY environment variable must be set",
+            ),
+        ):
+            JWTAuthenticationManager()
 
     def test_initialization_custom_token_expiry(self):
         """Test initialization with custom token expiry."""

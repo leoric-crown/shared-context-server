@@ -6,7 +6,6 @@ and monitoring capabilities across different authentication scenarios.
 """
 
 import json
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -26,7 +25,7 @@ class TestAuditLogAuthEvent:
         mock_context_manager.__aexit__ = AsyncMock(return_value=None)
 
         with patch(
-            "shared_context_server.auth.get_db_connection",
+            "shared_context_server.auth_core.get_db_connection",
             return_value=mock_context_manager,
         ):
             yield mock_conn
@@ -51,7 +50,7 @@ class TestAuditLogAuthEvent:
         # Verify SQL query
         sql_query = call_args[0]
         assert "INSERT INTO audit_log" in sql_query
-        assert "(event_type, agent_id, session_id, metadata, timestamp)" in sql_query
+        assert "(event_type, agent_id, session_id, metadata)" in sql_query
 
         # Verify parameters
         params = call_args[1]
@@ -65,12 +64,6 @@ class TestAuditLogAuthEvent:
         assert metadata["agent_type"] == "claude"
         assert metadata["permissions"] == ["read", "write"]
         assert metadata["token_id"] == "jwt_token_789"
-
-        # Verify timestamp format
-        timestamp = params[4]
-        assert isinstance(timestamp, str)
-        # Should be valid ISO format
-        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
         # Verify commit was called
         mock_db_connection.commit.assert_called_once()
@@ -207,25 +200,27 @@ class TestAuditLogAuthEvent:
         assert metadata["risk_score"] == 0.1
 
     async def test_audit_log_utc_timestamp(self, mock_db_connection):
-        """Test that audit log uses UTC timestamps consistently."""
-        before_call = datetime.now(timezone.utc)
-
+        """Test that audit log function executes without timestamp parameter (database auto-generates)."""
         await audit_log_auth_event(
             "timestamp_test", "agent_123", "session_456", {"test": "timestamp"}
         )
-
-        after_call = datetime.now(timezone.utc)
 
         mock_db_connection.execute.assert_called_once()
         call_args = mock_db_connection.execute.call_args[0]
         params = call_args[1]
 
-        timestamp_str = params[4]
-        logged_timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        # Verify only 4 parameters are passed (no timestamp - database auto-generates)
+        assert len(params) == 4
+        assert params[0] == "timestamp_test"
+        assert params[1] == "agent_123"
+        assert params[2] == "session_456"
 
-        # Verify timestamp is within expected range and in UTC
-        assert before_call <= logged_timestamp <= after_call
-        assert logged_timestamp.tzinfo == timezone.utc
+        # Verify metadata
+        metadata = json.loads(params[3])
+        assert metadata["test"] == "timestamp"
+
+        # Verify commit was called
+        mock_db_connection.commit.assert_called_once()
 
     async def test_audit_log_database_exception_handling(self, mock_db_connection):
         """Test graceful handling of database exceptions during audit logging."""
@@ -258,9 +253,9 @@ class TestAuditLogAuthEvent:
 
     async def test_audit_log_json_serialization_error(self, mock_db_connection):
         """Test handling of JSON serialization errors in metadata."""
-        # Mock json.dumps to raise an error in the auth module
+        # Mock json.dumps to raise an error in the auth_core module
         with patch(
-            "shared_context_server.auth.json.dumps",
+            "shared_context_server.auth_core.json.dumps",
             side_effect=TypeError("Object is not JSON serializable"),
         ):
             metadata_with_error = {"test": "data"}

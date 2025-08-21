@@ -181,33 +181,38 @@ class UnifiedTestDatabase:
             raise RuntimeError(f"Backend not initialized: {self.backend}")
 
 
-# Global test database instance for shared usage
+# LEGACY: Global test database singleton anti-pattern (DEPRECATED)
+# Maintained for backward compatibility only
 _test_db_instance: UnifiedTestDatabase | None = None
 
 
 def get_test_database(backend: str = "aiosqlite") -> UnifiedTestDatabase:
     """
-    Get global test database instance.
+    DEPRECATED: Get test database (redirects to ContextVar implementation).
+
+    This function is maintained for backward compatibility.
+    New code should use get_context_test_database() from test_database_context.py
+    which provides proper thread-safe ContextVar-based management.
 
     Args:
         backend: Database backend to use
 
     Returns:
-        UnifiedTestDatabase: Global test database instance
+        UnifiedTestDatabase: Thread-local test database instance
     """
-    global _test_db_instance
+    from .test_database_context import get_context_test_database
 
-    # Always create a new instance to ensure clean isolation between tests
-    # Memory databases are cheap to create and provide perfect isolation
-    _test_db_instance = UnifiedTestDatabase(backend)
-
-    return _test_db_instance
+    return get_context_test_database(backend)
 
 
 def reset_test_database() -> None:
-    """Reset global test database instance."""
-    global _test_db_instance
-    _test_db_instance = None
+    """
+    DEPRECATED: No-op for backward compatibility.
+
+    ContextVar provides automatic isolation, making manual resets unnecessary.
+    This function is retained for backward compatibility but does nothing.
+    """
+    pass  # No-op - ContextVar provides automatic isolation
 
 
 @asynccontextmanager
@@ -215,9 +220,11 @@ async def get_test_db_connection(
     backend: str = "aiosqlite",
 ) -> AsyncGenerator[Any, None]:
     """
-    Get test database connection with specified backend.
+    DEPRECATED: Get test database connection (redirects to ContextVar implementation).
 
-    This is the main function to use for database testing.
+    This function is maintained for backward compatibility.
+    New code should use get_context_test_db_connection() from test_database_context.py
+    which provides proper thread-safe ContextVar-based management.
 
     Args:
         backend: Database backend to use ("aiosqlite" or "sqlalchemy")
@@ -225,12 +232,7 @@ async def get_test_db_connection(
     Yields:
         Database connection (aiosqlite.Connection or SQLAlchemy wrapper)
     """
-    db = get_test_database(backend)
+    from .test_database_context import get_context_test_db_connection
 
-    if not (db._aiosqlite_manager and db._aiosqlite_manager.is_initialized) and not (
-        db._sqlalchemy_manager and db._sqlalchemy_manager.is_initialized
-    ):
-        await db.initialize()
-
-    async with db.get_connection() as conn:
+    async with get_context_test_db_connection(backend) as conn:
         yield conn

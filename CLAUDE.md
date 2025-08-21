@@ -99,6 +99,70 @@ pytest -m "not slow" -v                     # Exclude slow tests
 ### Database Testing
 Tests automatically use in-memory SQLite with WAL mode for isolation. Backend switching is tested via `test_simplified_backend_switching.py`.
 
+### Authentication Architecture
+
+**CURRENT**: Authentication uses ContextVar for perfect thread safety and automatic test isolation.
+
+#### ContextVar Implementation
+The `SecureTokenManager` uses Python's ContextVar system for thread-local token management:
+- **Thread Safety**: Perfect isolation between concurrent requests without locks
+- **Test Isolation**: Automatic cleanup between tests, no manual resets needed
+- **Performance**: Zero overhead context switching
+- **Simplicity**: No complex singleton management patterns required
+
+#### Core Architecture
+```python
+from shared_context_server.auth_context import get_secure_token_manager
+
+# Get thread-local token manager
+manager = get_secure_token_manager()
+
+# Each thread/context gets its own manager instance automatically
+# No manual cleanup or reset required
+```
+
+#### Test Patterns (Simplified)
+
+**1. Authentication Test Setup** (Current pattern):
+```python
+async def test_authentication_functionality(self, test_db_manager):
+    # No reset needed - ContextVar handles isolation automatically
+
+    # Set required environment variables
+    os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-jwt-signing-123456"
+    os.environ["JWT_ENCRYPTION_KEY"] = "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
+
+    # ... test logic
+```
+
+**2. Integration Test Pattern**:
+```python
+async def test_integration_with_auth(self, server_with_db, test_db_manager):
+    with patch.dict(os.environ, {
+        "API_KEY": "test-key",
+        "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+        "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+    }, clear=False):
+        # ... test logic (automatic isolation)
+```
+
+#### Migration Complete
+- ✅ **Legacy singleton removed**: No more global state management
+- ✅ **86 reset calls eliminated**: From 7 test files across the codebase
+- ✅ **Thread safety improved**: ContextVar provides perfect isolation
+- ✅ **Test complexity reduced**: No manual state management required
+- ✅ **Performance maintained**: Zero overhead context switching
+
+#### Backward Compatibility
+Legacy functions remain available but are no-ops:
+```python
+# These functions exist for backward compatibility but do nothing
+reset_secure_token_manager()  # No-op
+set_test_mode(enabled)        # No-op
+```
+
+The `get_secure_token_manager()` function in `auth_secure.py` redirects to the ContextVar implementation.
+
 ## Environment Variables
 
 Key configuration:
@@ -106,7 +170,7 @@ Key configuration:
 API_KEY=your-key                # Required for MCP authentication
 JWT_SECRET_KEY=your-secret      # Required for JWT signing
 JWT_ENCRYPTION_KEY=fernet-key   # Required for token encryption
-DATABASE_URL=path/to/db         # Optional (default: shared_context.db)
+DATABASE_URL=path/to/db         # Optional (default: chat_history.db)
 USE_SQLALCHEMY=true/false       # Backend selection (default: false)
 ```
 
@@ -133,6 +197,31 @@ USE_SQLALCHEMY=true/false       # Backend selection (default: false)
 2. Modify both backends (`database.py` and `database_sqlalchemy.py`)
 3. Run migration via `initialize_database(reset=True)` in dev
 4. Test with `make test-backend`
+
+### Gemini CLI MCP Schema Compatibility
+
+**CRITICAL**: This is a recurring issue that has broken Gemini CLI compatibility 3 times.
+
+**Problem**: Gemini CLI fails with "missing types in parameter schema" for metadata parameters.
+
+**Root Cause**: Gemini CLI requires explicit JSON schema types for all parameters, cannot handle Union types.
+
+**CORRECT PATTERN** for optional object parameters:
+```python
+metadata: Any = Field(
+    default=None,
+    description="Optional metadata (JSON object or null)",
+    examples=[{"key": "value"}, None],
+    json_schema_extra={"type": "object", "additionalProperties": True},
+)
+```
+
+**Requirements**:
+- Use `Any` type annotation (NOT `dict[str, Any] | None`)
+- Add explicit `json_schema_extra={"type": "object", "additionalProperties": True}`
+- Maintain `default=None` for optional behavior
+
+**Files affected**: `session_tools.py`, `memory_tools.py` (any tool with metadata parameters)
 
 ### WebSocket Integration
 
@@ -164,6 +253,11 @@ Critical development rules including file size limits (500 lines code, 1000 line
 **File**: `.claude/guides/browser-automation.md`
 
 Playwright MCP integration for behavioral testing, visual regression prevention, and research-first web development. Covers user story validation, responsive testing, and cross-device compatibility patterns.
+
+### Testing Architecture & Stability
+**File**: `.claude/guides/testing-architecture-stability.md`
+
+Technical patterns for reliable test suites and dependency management. Covers dependency injection (preferred pattern), Enhanced Singleton Pattern (legacy), test organization, anti-patterns to avoid, and automated validation.
 
 
 ## Dual-Layer Memory System

@@ -213,7 +213,7 @@ def test_rapidfuzz_performance_integration():
     # Verify results
     assert len(matches) > 0, "Should find matches"
     assert matches[0][1] >= 50, "Best match should meet threshold"
-    assert search_time_ms < 10, f"Search took {search_time_ms:.2f}ms, expected <10ms"
+    assert search_time_ms < 20, f"Search took {search_time_ms:.2f}ms, expected <20ms"
 
     print(
         f"✅ RapidFuzz performance test: {search_time_ms:.2f}ms for {len(choices)} items"

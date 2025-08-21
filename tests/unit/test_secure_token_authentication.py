@@ -24,13 +24,21 @@ from shared_context_server.database import (
 @pytest.fixture(scope="function")
 async def temp_database():
     """Create temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+    # Create unique temp file with process ID and thread ID for parallel safety
+    import threading
+
+    pid = os.getpid()
+    tid = threading.get_ident()
+
+    with tempfile.NamedTemporaryFile(
+        suffix=f"_test_{pid}_{tid}.db", delete=False, prefix="scs_test_"
+    ) as f:
         temp_path = f.name
 
     # Initialize the database and reset global managers
     with patch.dict(os.environ, {"DATABASE_PATH": temp_path}):
         # Clear both global database managers to force reinitialization
-        import shared_context_server.database as db_module
+        import shared_context_server.database_connection as db_module
 
         db_module._db_manager = None
         # Reset SQLAlchemy manager for USE_SQLALCHEMY=true tests
@@ -39,27 +47,43 @@ async def temp_database():
                 await db_module._sqlalchemy_manager.close()
             db_module._sqlalchemy_manager = None
 
-        # Use the same backend initialization logic as get_db_connection()
-        from shared_context_server.database import initialize_database
+        try:
+            # Use the same backend initialization logic as get_db_connection()
+            from shared_context_server.database import initialize_database
 
-        await initialize_database()
+            await initialize_database()
 
-        yield temp_path
+            yield temp_path
+        finally:
+            # Cleanup - close SQLAlchemy manager if it exists
+            if (
+                hasattr(db_module, "_sqlalchemy_manager")
+                and db_module._sqlalchemy_manager
+            ):
+                with contextlib.suppress(Exception):
+                    await db_module._sqlalchemy_manager.close()
 
-    # Cleanup - close SQLAlchemy manager if it exists
-    import shared_context_server.database as db_module
+            # Close aiosqlite manager if it exists
+            if hasattr(db_module, "_db_manager") and db_module._db_manager:
+                # The manager doesn't have a close method, but connections auto-close
+                pass
 
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with contextlib.suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
+            # Reset both global managers after test
+            db_module._db_manager = None
+            db_module._sqlalchemy_manager = None
 
-    # Cleanup temp file
-    with contextlib.suppress(FileNotFoundError):
-        Path(temp_path).unlink()
+    # Cleanup temp file with retry logic for Windows
+    import time
 
-    # Reset both global managers after test
-    db_module._db_manager = None
-    db_module._sqlalchemy_manager = None
+    for attempt in range(3):
+        try:
+            Path(temp_path).unlink()
+            break
+        except (FileNotFoundError, PermissionError):
+            if attempt < 2:
+                time.sleep(0.1)  # Brief pause before retry
+            else:
+                pass  # Give up after 3 attempts
 
 
 @pytest.fixture
@@ -77,8 +101,24 @@ async def token_manager(temp_database, encryption_key):
         os.environ,
         {"JWT_ENCRYPTION_KEY": encryption_key, "DATABASE_PATH": temp_database},
     ):
+        # Reset global singletons to prevent test isolation issues
+        import shared_context_server.auth_secure as auth_secure_module
+        from shared_context_server.auth_core import reset_auth_manager
+
+        # Reset both auth manager and secure token manager
+        reset_auth_manager()
+        auth_secure_module.secure_token_manager = None
+
         manager = SecureTokenManager()
+
+        # Set the global singleton to our test instance
+        auth_secure_module.secure_token_manager = manager
+
         yield manager
+
+        # Clean up: reset both global singletons after test
+        reset_auth_manager()
+        auth_secure_module.secure_token_manager = None
 
 
 @pytest.fixture
@@ -262,7 +302,13 @@ class TestSecureTokenIntegration:
         )
 
         with (
-            patch.dict(os.environ, {"JWT_ENCRYPTION_KEY": encryption_key}),
+            patch.dict(
+                os.environ,
+                {
+                    "JWT_ENCRYPTION_KEY": encryption_key,
+                    "JWT_SECRET_KEY": "test-secret-key-for-auth-manager",
+                },
+            ),
             patch.object(auth_manager, "validate_token") as mock_validate,
         ):
             mock_validate.return_value = {
@@ -297,30 +343,41 @@ class TestSecureTokenIntegration:
         self, sample_jwt
     ):
         """Test backward compatibility with raw JWT tokens."""
-        from shared_context_server.auth import (
-            auth_manager,
-            validate_jwt_token_parameter,
-        )
+        import os
+        from unittest.mock import patch
 
-        # Mock JWT validation to return valid result
-        with patch.object(auth_manager, "validate_token") as mock_validate:
-            mock_validate.return_value = {
-                "valid": True,
-                "agent_id": "test_agent",
-                "agent_type": "claude",
-                "permissions": ["read", "write"],
-                "token_id": "test_token_id",
-            }
+        with patch.dict(
+            os.environ,
+            {
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
+            from shared_context_server.auth import (
+                auth_manager,
+                validate_jwt_token_parameter,
+            )
 
-            # Validate raw JWT token
-            result = await validate_jwt_token_parameter(sample_jwt)
+            # Mock JWT validation to return valid result
+            with patch.object(auth_manager, "validate_token") as mock_validate:
+                mock_validate.return_value = {
+                    "valid": True,
+                    "agent_id": "test_agent",
+                    "agent_type": "claude",
+                    "permissions": ["read", "write"],
+                    "token_id": "test_token_id",
+                }
 
-            # Verify successful validation
-            assert result is not None
-            assert result["agent_id"] == "test_agent"
-            assert result["agent_type"] == "claude"
-            assert result["auth_method"] == "jwt"
-            assert "protected_token" not in result
+                # Validate raw JWT token
+                result = await validate_jwt_token_parameter(sample_jwt)
+
+                # Verify successful validation
+                assert result is not None
+                assert result["agent_id"] == "test_agent"
+                assert result["agent_type"] == "claude"
+                assert result["auth_method"] == "jwt"
+                assert "protected_token" not in result
 
             # Verify JWT validation was called with original token
             mock_validate.assert_called_once_with(sample_jwt)

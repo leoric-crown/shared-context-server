@@ -56,17 +56,21 @@ class TestImprovedDatabasePatterns:
     async def test_global_functions_with_patching(self, patched_db_connection):
         """Test global database functions with proper patching."""
         # Test global functions work with isolated database
+        import uuid
+
+        session_id = f"global_test_{uuid.uuid4().hex[:8]}"
         session_data = await execute_insert(
             """
             INSERT INTO sessions (id, purpose, created_by)
-            VALUES ('global_test', 'Global function test', 'test_agent')
-            """
+            VALUES (?, 'Global function test', 'test_agent')
+            """,
+            (session_id,),
         )
         assert session_data is not None
 
         # Query the data back
         results = await execute_query(
-            "SELECT purpose FROM sessions WHERE id = 'global_test'"
+            "SELECT purpose FROM sessions WHERE id = ?", (session_id,)
         )
         assert len(results) == 1
         assert results[0]["purpose"] == "Global function test"

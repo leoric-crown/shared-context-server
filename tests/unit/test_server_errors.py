@@ -31,7 +31,9 @@ class TestServerErrorHandling:
         ctx = MockContext(agent_id="error_agent")
 
         # Test database connection failure
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database connection failed")
 
             result = await call_fastmcp_tool(
@@ -128,7 +130,9 @@ class TestServerErrorHandling:
         session_id = session_result["session_id"]
 
         # Mock database error during get_messages
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             mock_conn.side_effect = Exception("Database query failed")
 
             result = await call_fastmcp_tool(
@@ -151,7 +155,7 @@ class TestServerErrorHandling:
         session_id = session_result["session_id"]
 
         # Mock database error during search
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch("shared_context_server.search_tools.get_db_connection") as mock_conn:
             mock_conn.side_effect = Exception("Search query failed")
 
             result = await call_fastmcp_tool(
@@ -285,7 +289,9 @@ class TestServerErrorHandling:
 
         # Mock database connection that fails after being created
 
-        with patch("shared_context_server.server.get_db_connection") as mock_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_conn:
             # Create a mock connection that raises an error during operations
             mock_connection = AsyncMock()
             mock_connection.execute.side_effect = Exception("Operation failed")

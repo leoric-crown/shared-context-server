@@ -77,12 +77,12 @@ class TestDatabaseFileCreationBehavior:
                 "DATABASE_PATH": "./custom_from_path.db",
             },
         ):
-            # Force config reload
-            from shared_context_server import config
+            # Force config reload using ContextVar approach
+            from shared_context_server.config_context import reset_config_context
 
-            with patch.object(config, "_config", None):
-                result = get_database_url()
-                assert result == "sqlite:///./custom_from_url.db"
+            reset_config_context()
+            result = get_database_url()
+            assert result == "sqlite:///./custom_from_url.db"
 
     def test_database_url_fallback_to_database_path(self):
         """Test that DATABASE_PATH is used when DATABASE_URL is not set."""
@@ -93,15 +93,15 @@ class TestDatabaseFileCreationBehavior:
                 {"DATABASE_PATH": "./fallback_path.db", "API_KEY": "test-key"},
             ),
         ):
-            # Force config reload
-            from shared_context_server import config
+            # Force config reload using ContextVar approach
+            from shared_context_server.config_context import reset_config_context
 
-            with patch.object(config, "_config", None):
-                result = get_database_url()
-                # The config system resolves relative paths to absolute paths
-                expected_absolute_path = str(Path("./fallback_path.db").resolve())
-                expected_url = f"sqlite:///{expected_absolute_path}"
-                assert result == expected_url
+            reset_config_context()
+            result = get_database_url()
+            # The config system resolves relative paths to absolute paths
+            expected_absolute_path = str(Path("./fallback_path.db").resolve())
+            expected_url = f"sqlite:///{expected_absolute_path}"
+            assert result == expected_url
 
     def test_no_shared_context_db_reference_in_code(self):
         """Test that 'shared_context.db' is never used as a filename in source code."""
@@ -218,11 +218,11 @@ class TestEnvironmentVariableValidation:
             with patch.dict(
                 os.environ, {"DATABASE_URL": url_format, "API_KEY": "test"}
             ):
-                from shared_context_server import config
+                from shared_context_server.config_context import reset_config_context
 
-                with patch.object(config, "_config", None):
-                    result = get_database_url()
-                    assert result == url_format
+                reset_config_context()
+                result = get_database_url()
+                assert result == url_format
 
     def test_database_path_relative_vs_absolute(self, tmp_path):
         """Test handling of relative vs absolute database paths."""
@@ -236,12 +236,10 @@ class TestEnvironmentVariableValidation:
                 patch.dict(os.environ, {}, clear=True),
                 patch.dict(os.environ, {"DATABASE_PATH": path, "API_KEY": "test"}),
             ):
-                from shared_context_server import config
+                from shared_context_server.config_context import reset_config_context
 
-                with (
-                    patch.object(config, "_config", None),
-                    patch("shared_context_server.config.dotenv.load_dotenv"),
-                ):
+                with patch("shared_context_server.config.dotenv.load_dotenv"):
+                    reset_config_context()
                     result = get_database_url()
                     # The config system resolves all paths to absolute paths
                     expected_absolute_path = str(Path(path).resolve())
@@ -258,14 +256,14 @@ class TestConfigurationErrorScenarios:
             patch.dict(os.environ, {}, clear=True),
             patch.dict(os.environ, {"API_KEY": "test-key"}),
         ):
-            from shared_context_server import config
+            from shared_context_server.config_context import reset_config_context
 
-            with patch.object(config, "_config", None):
-                # Should fall back to default path
-                result = get_database_url()
-                # Should use default database path pattern
-                assert "chat_history.db" in result
-                assert "shared_context.db" not in result
+            reset_config_context()
+            # Should fall back to default path
+            result = get_database_url()
+            # Should use default database path pattern
+            assert "chat_history.db" in result
+            assert "shared_context.db" not in result
 
     def test_invalid_database_url_fallback_behavior(self, caplog):
         """Test behavior when DATABASE_URL is malformed."""
@@ -279,12 +277,12 @@ class TestConfigurationErrorScenarios:
             with patch.dict(
                 os.environ, {"DATABASE_URL": invalid_url, "API_KEY": "test-key"}
             ):
-                from shared_context_server import config
+                from shared_context_server.config_context import reset_config_context
 
-                with patch.object(config, "_config", None):
-                    # Configuration should still load (validation may be permissive)
-                    result = get_database_url()
-                    assert result == invalid_url  # Returns as-is, validation elsewhere
+                reset_config_context()
+                # Configuration should still load (validation may be permissive)
+                result = get_database_url()
+                assert result == invalid_url  # Returns as-is, validation elsewhere
 
 
 class TestDocumentationAccuracy:
@@ -297,16 +295,9 @@ class TestDocumentationAccuracy:
         if claude_md_path.exists():
             claude_md_content = claude_md_path.read_text()
 
-            # The bug: CLAUDE.md incorrectly documents shared_context.db as default
-            # This test documents the current (incorrect) state and should be updated
-            # when the documentation is fixed
-
-            # Current incorrect state (this line should fail after docs are fixed):
-            assert "default: shared_context.db" in claude_md_content
-
-            # TODO: Update assertions when documentation is fixed
-            # Should assert "default: chat_history.db" in claude_md_content
-            # Should assert "default: shared_context.db" not in claude_md_content
+            # Documentation has been fixed - now verify correct default is documented
+            assert "default: chat_history.db" in claude_md_content
+            assert "default: shared_context.db" not in claude_md_content
 
 
 class TestRegressionPrevention:
@@ -400,12 +391,10 @@ class TestProductionScenarioValidation:
             patch.dict(os.environ, {}, clear=True),
             patch.dict(os.environ, production_vars),
         ):
-            from shared_context_server import config
+            from shared_context_server.config_context import reset_config_context
 
-            with (
-                patch.object(config, "_config", None),
-                patch("shared_context_server.config.dotenv.load_dotenv"),
-            ):
+            with patch("shared_context_server.config.dotenv.load_dotenv"):
+                reset_config_context()
                 result = get_database_url()
                 assert result == "postgresql://user:pass@db:5432/prod_database"
                 # Ensure no fallback to sqlite with wrong filename

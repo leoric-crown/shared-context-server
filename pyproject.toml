@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 dependencies = [
-    "fastmcp>=2.0.0",
+    "fastmcp>=2.11.3",
     "aiosqlite>=0.19.0",
     "rapidfuzz>=3.0.0",
     "pydantic>=2.0.0",
@@ -249,6 +249,7 @@ addopts = [
 ]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -261,6 +262,20 @@ markers = [
     "memory: marks tests related to memory operations",
     "sqlalchemy: marks tests that require SQLAlchemy backend (USE_SQLALCHEMY=true)",
     "aiosqlite: marks tests specific to aiosqlite backend (USE_SQLALCHEMY=false)",
+    # Test Architecture & Lifecycle
+    "singleton: marks tests that validate singleton patterns and lifecycle",
+    "auth: marks tests related to authentication and authorization",
+    "security: marks tests that validate security controls",
+    "isolation: marks tests that validate test isolation patterns",
+    # Feature Organization
+    "core: marks tests for core server functionality",
+    "tools: marks tests for MCP tools implementation",
+    "websocket: marks tests for WebSocket functionality",
+    "search: marks tests for search and context functionality",
+    # Quality Assurance
+    "smoke: marks basic smoke tests for quick validation",
+    "regression: marks tests that prevent known regressions",
+    "edge_case: marks tests that cover edge cases and error conditions",
 ]
 norecursedirs = [".git", ".tox", "dist", "build", "south_migrations"]
 
@@ -306,6 +321,7 @@ dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
+    "pytest-timeout>=2.3.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.12.8",
     "types-requests>=2.32.4.20250809",
@@ -314,6 +330,7 @@ test = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
+    "pytest-timeout>=2.3.1",
     "pytest-xdist>=3.8.0",
     "httpx>=0.25.0",
 ]

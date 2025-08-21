@@ -8,14 +8,14 @@ and WebSocket functionality.
 import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
 
-from shared_context_server.server import add_message, create_session, mcp
+from shared_context_server.server import mcp
 
 sys.path.append(str(Path(__file__).parent))
-from conftest import MockContext, call_fastmcp_tool
 
 
 @pytest.fixture
@@ -141,34 +141,77 @@ async def test_web_ui_navigation_structure(test_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_session_view_structure(test_client: httpx.AsyncClient):
+async def test_session_view_structure(test_client: httpx.AsyncClient, isolated_db):
     """Test session view HTML structure by creating a test session."""
-    # Create a test session
-    ctx = MockContext(session_id="webui_test", agent_id="test_agent")
-    session_result = await call_fastmcp_tool(
-        create_session, ctx, purpose="Web UI integration test session"
-    )
-    session_id = session_result["session_id"]
+    from contextlib import asynccontextmanager
 
-    # Add a test message to make the session visible
-    await call_fastmcp_tool(
-        add_message, ctx, session_id=session_id, content="Test message for UI"
-    )
+    # Create async mock for database connection
+    @asynccontextmanager
+    async def mock_get_db_connection():
+        async with isolated_db.get_connection() as conn:
+            yield conn
 
-    # Test the session view
-    response = await test_client.get(f"/ui/sessions/{session_id}")
+    # Create session directly in the test database
+    session_id = "webui_test_session_123456789ab"
 
-    assert response.status_code == 200
-    content = response.text
+    # Patch web_endpoints database access to use isolated database
+    with (
+        patch(
+            "shared_context_server.web_endpoints.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.server.trigger_resource_notifications"
+        ) as mock_notify,
+    ):
+        mock_notify.return_value = None
 
-    # Check session view structure
-    assert "session-view" in content
-    assert "breadcrumb" in content
-    assert "session-info" in content
-    assert "tab-container" in content  # Updated for tabbed interface
-    assert "messages-pane" in content  # New tabbed structure
-    assert "memory-tab" in content  # Memory tab feature
-    assert "Session:" in content
+        async with isolated_db.get_connection() as conn:
+            # Use Unix timestamp format as per CLAUDE.md requirement
+            test_timestamp = 1692000000.0
+
+            # Insert test session
+            await conn.execute(
+                "INSERT INTO sessions (id, purpose, created_by, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    "Test session",
+                    "test_agent",
+                    "{}",
+                    test_timestamp,
+                    test_timestamp,
+                ),
+            )
+
+            # Insert test message (omit id to let AUTOINCREMENT work)
+            await conn.execute(
+                "INSERT INTO messages (session_id, sender, content, metadata, timestamp, visibility) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    "test_agent",
+                    "Test message for UI",
+                    "{}",
+                    test_timestamp,
+                    "public",
+                ),
+            )
+
+            await conn.commit()
+
+        # Test the session view
+        response = await test_client.get(f"/ui/sessions/{session_id}")
+
+        assert response.status_code == 200
+        content = response.text
+
+        # Check session view structure
+        assert "session-view" in content
+        assert "breadcrumb" in content
+        assert "session-info" in content
+        assert "tab-container" in content  # Updated for tabbed interface
+        assert "messages-pane" in content  # New tabbed structure
+        assert "memory-tab" in content  # Memory tab feature
+        assert "Session:" in content
 
 
 @pytest.mark.asyncio
@@ -204,35 +247,61 @@ async def test_memory_dashboard_endpoint(test_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_memory_dashboard_with_entries(test_client: httpx.AsyncClient):
+async def test_memory_dashboard_with_entries(
+    test_client: httpx.AsyncClient, isolated_db
+):
     """Test memory dashboard displays memory entries correctly."""
-    # Create a test session and add some memory entries via set_memory tool
-    ctx = MockContext(session_id="memory_test", agent_id="test_agent")
+    from contextlib import asynccontextmanager
 
-    # Create a global memory entry (session_id=None)
-    from shared_context_server.server import set_memory
+    # Create async mock for database connection
+    @asynccontextmanager
+    async def mock_get_db_connection():
+        async with isolated_db.get_connection() as conn:
+            yield conn
 
-    await call_fastmcp_tool(
-        set_memory,
-        ctx,
-        key="test_global_key",
-        value="test_global_value",
-        session_id=None,  # Global memory
-    )
+    # Patch web_endpoints database access to use isolated database
+    with (
+        patch(
+            "shared_context_server.web_endpoints.get_db_connection",
+            mock_get_db_connection,
+        ),
+        patch(
+            "shared_context_server.server.trigger_resource_notifications"
+        ) as mock_notify,
+    ):
+        mock_notify.return_value = None
 
-    # Test the memory dashboard
-    response = await test_client.get("/ui/memory")
+        # Create memory entry directly in the test database
+        async with isolated_db.get_connection() as conn:
+            # Insert test memory entry
+            await conn.execute(
+                "INSERT INTO agent_memory (agent_id, session_id, key, value, metadata, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "test_agent",
+                    None,
+                    "test_global_key",
+                    '"test_global_value"',
+                    "{}",
+                    1692000000.0,
+                    1692000000.0,
+                    None,
+                ),
+            )
+            await conn.commit()
 
-    assert response.status_code == 200
-    content = response.text
+        # Test the memory dashboard
+        response = await test_client.get("/ui/memory")
 
-    # Check for memory table structure
-    assert "memory-table" in content
-    assert "memory-row" in content
-    assert "test_global_key" in content
-    assert (
-        "test_global_value" in content or "test_global_val..." in content
-    )  # May be truncated
+        assert response.status_code == 200
+        content = response.text
+
+        # Check for memory table structure
+        assert "memory-table" in content
+        assert "memory-row" in content
+        assert "test_global_key" in content
+        assert (
+            "test_global_value" in content or "test_global_val..." in content
+        )  # May be truncated
 
 
 @pytest.mark.asyncio

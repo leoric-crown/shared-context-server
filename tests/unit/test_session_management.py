@@ -16,7 +16,7 @@ import pytest
 sys.path.append(str(Path(__file__).parent.parent))
 from conftest import MockContext, call_fastmcp_tool
 
-from shared_context_server.server import create_session, get_session
+from shared_context_server.session_tools import create_session, get_session
 
 
 class TestCreateSession:
@@ -31,7 +31,9 @@ class TestCreateSession:
     async def test_create_session_success(self, mock_context):
         """Test successful session creation."""
 
-        with patch("shared_context_server.server.get_db_connection") as mock_db_conn:
+        with patch(
+            "shared_context_server.session_tools.get_db_connection"
+        ) as mock_db_conn:
             # Setup mocks
             mock_conn = AsyncMock()
             mock_cursor = AsyncMock()
@@ -89,7 +91,9 @@ class TestCreateSession:
         """Test session creation with database error."""
 
         with (
-            patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+            patch(
+                "shared_context_server.session_tools.get_db_connection"
+            ) as mock_db_conn,
         ):
             # No mcp context patches needed
             mock_db_conn.side_effect = Exception("Database connection failed")
@@ -160,7 +164,9 @@ class TestGetSession:
         """Test successful session retrieval."""
 
         with (
-            patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+            patch(
+                "shared_context_server.session_tools.get_db_connection"
+            ) as mock_db_conn,
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
@@ -191,7 +197,9 @@ class TestGetSession:
         """Test session retrieval when session doesn't exist."""
 
         with (
-            patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+            patch(
+                "shared_context_server.session_tools.get_db_connection"
+            ) as mock_db_conn,
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()
@@ -248,7 +256,9 @@ class TestGetSession:
         ]
 
         with (
-            patch("shared_context_server.server.get_db_connection") as mock_db_conn,
+            patch(
+                "shared_context_server.session_tools.get_db_connection"
+            ) as mock_db_conn,
         ):
             # No mcp context patches needed
             mock_conn = AsyncMock()

@@ -14,23 +14,45 @@ import pytest
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
 
 
+@pytest.mark.performance
 class TestAuthenticateAgentTool:
     """Test the authenticate_agent tool with comprehensive scenarios."""
+
+    @pytest.fixture(autouse=True)
+    async def setup_method(self):
+        """Setup method to ensure clean singleton state for each test."""
+
+        yield
+
+    @property
+    def test_env_vars(self):
+        """Standard environment variables for authentication tests."""
+        return {
+            "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+            "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        }
 
     @pytest.fixture
     async def server_with_db(self, test_db_manager):
         """Create server instance with test database."""
         from shared_context_server import server
+        from tests.fixtures.database import is_sqlalchemy_backend
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        # Use the correct backend based on environment variable
+        backend = "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
+
+        with patch_database_connection(test_db_manager, backend=backend):
             yield server
 
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
         """Test successful agent authentication with valid API key header."""
+
         ctx = MockContext(session_id="test_session", agent_id="test_agent")
         ctx.headers = {"X-API-Key": "valid_test_key"}  # Add API key header
 
-        with patch.dict(os.environ, {"API_KEY": "valid_test_key"}):
+        with patch.dict(
+            os.environ, {"API_KEY": "valid_test_key", **self.test_env_vars}, clear=False
+        ):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -64,7 +86,7 @@ class TestAuthenticateAgentTool:
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "invalid_key"}  # Invalid API key header
 
-        with patch.dict(os.environ, {"API_KEY": "correct_key"}):
+        with patch.dict(os.environ, {"API_KEY": "correct_key", **self.test_env_vars}):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -86,7 +108,14 @@ class TestAuthenticateAgentTool:
         ctx = MockContext()
         # No API key header provided (empty case)
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+        ):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -125,11 +154,20 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with different agent types."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
         agent_types = ["claude", "gemini", "custom", "test", "system"]
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
             for agent_type in agent_types:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -139,7 +177,11 @@ class TestAuthenticateAgentTool:
                     requested_permissions=["read", "write"],
                 )
 
-                assert result["success"] is True
+                if not result.get("success"):
+                    print(f"Authentication failed for {agent_type}: {result}")
+                assert result["success"] is True, (
+                    f"Authentication failed for {agent_type}: {result}"
+                )
                 assert result["agent_type"] == agent_type
                 assert "permissions" in result
 
@@ -147,6 +189,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with different permission requests."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
         permission_sets = [
@@ -159,7 +202,15 @@ class TestAuthenticateAgentTool:
             ["read", "invalid", "write"],  # Mix of valid and invalid
         ]
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
             for permissions in permission_sets:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -177,10 +228,19 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that successful authentication is properly audit logged."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -210,7 +270,14 @@ class TestAuthenticateAgentTool:
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "invalid_key"}  # Invalid API key to trigger failure
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+        ):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -237,10 +304,19 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test that token expiry timestamps are properly formatted."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
                 ctx,
@@ -270,14 +346,24 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with database error during audit logging."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
         # Mock audit_log_auth_event to raise exception
         with (
-            patch.dict(os.environ, {"API_KEY": "valid_key"}),
+            patch.dict(
+                os.environ,
+                {
+                    "API_KEY": "valid_key",
+                    "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                    "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+                },
+                clear=False,
+            ),
             patch("shared_context_server.server.audit_log_auth_event") as mock_audit,
         ):
+            # Reset singleton AFTER environment is set to ensure clean state
             mock_audit.side_effect = Exception("Database error during audit")
 
             result = await call_fastmcp_tool(
@@ -288,11 +374,11 @@ class TestAuthenticateAgentTool:
                 requested_permissions=["read"],
             )
 
-        # Authentication should succeed even if audit logging fails
-        assert result["success"] is True
-        assert "token" in result
-        assert result["agent_id"] == "db_error_test"
-        assert result["agent_type"] == "claude"
+            # Authentication should succeed even if audit logging fails
+            assert result["success"] is True
+            assert "token" in result
+            assert result["agent_id"] == "db_error_test"
+            assert result["agent_type"] == "claude"
 
     async def test_authenticate_agent_auth_manager_error(
         self, server_with_db, test_db_manager
@@ -304,7 +390,7 @@ class TestAuthenticateAgentTool:
         with (
             patch.dict(os.environ, {"API_KEY": "valid_key"}),
             patch(
-                "shared_context_server.auth.generate_agent_jwt_token"
+                "shared_context_server.auth_tools.generate_agent_jwt_token"
             ) as mock_generate_token,
         ):
             mock_generate_token.side_effect = Exception("Token generation failed")
@@ -331,6 +417,7 @@ class TestAuthenticateAgentTool:
         self, server_with_db, test_db_manager
     ):
         """Test authentication with edge case inputs."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
@@ -355,7 +442,16 @@ class TestAuthenticateAgentTool:
             },
         ]
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
+            # Reset singleton AFTER environment is set to ensure clean state
             for case in edge_cases:
                 result = await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
@@ -371,6 +467,7 @@ class TestAuthenticateAgentTool:
                 assert result["agent_id"] == case["agent_id"]
                 assert result["agent_type"] == case["agent_type"]
 
+    @pytest.mark.performance
     async def test_authenticate_agent_concurrent_requests(
         self, server_with_db, test_db_manager
     ):
@@ -380,8 +477,19 @@ class TestAuthenticateAgentTool:
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
-        async def authenticate_agent(agent_id: str) -> dict:
-            with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        # Set environment once for all concurrent requests
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
+            # Reset singleton AFTER environment is set to ensure clean state
+
+            async def authenticate_agent(agent_id: str) -> dict:
                 return await call_fastmcp_tool(
                     server_with_db.authenticate_agent,
                     ctx,
@@ -390,24 +498,40 @@ class TestAuthenticateAgentTool:
                     requested_permissions=["read", "write"],
                 )
 
-        # Run multiple authentications concurrently
-        tasks = [authenticate_agent(f"concurrent_agent_{i}") for i in range(5)]
+            # Run multiple authentications concurrently
+            tasks = [authenticate_agent(f"concurrent_agent_{i}") for i in range(5)]
 
-        results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks)
 
-        # All should succeed
-        for i, result in enumerate(results):
-            assert result["success"] is True
-            assert result["agent_id"] == f"concurrent_agent_{i}"
+            # All should succeed
+            for i, result in enumerate(results):
+                assert result["success"] is True
+                assert result["agent_id"] == f"concurrent_agent_{i}"
+
+        # Clean up singleton after concurrent operations to prevent state pollution
+
+        # Force garbage collection to reduce teardown time
+        import gc
+
+        gc.collect()
 
     async def test_authenticate_agent_default_permission_handling(
         self, server_with_db, test_db_manager
     ):
         """Test authentication when no permissions are explicitly requested."""
+
         ctx = MockContext()
         ctx.headers = {"X-API-Key": "valid_key"}  # Valid API key header
 
-        with patch.dict(os.environ, {"API_KEY": "valid_key"}):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "valid_key",
+                "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+            },
+            clear=False,
+        ):
             # Test with default permissions (should be ["read", "write"])
             result = await call_fastmcp_tool(
                 server_with_db.authenticate_agent,
