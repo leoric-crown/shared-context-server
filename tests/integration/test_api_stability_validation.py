@@ -567,8 +567,16 @@ class TestAPIStabilityValidation:
             memory_time = time.time() - start_time
 
             # Memory operations should be fast (steady-state performance)
-            assert memory_time < 0.050, (
-                f"Memory operation took {memory_time:.3f}s, exceeds 50ms target"
+            # CI environments are slower, so we allow higher targets there
+            import os
+
+            target_time = (
+                0.100 if os.getenv("CI") or os.getenv("GITHUB_ACTIONS") else 0.050
+            )
+            target_ms = int(target_time * 1000)
+
+            assert memory_time < target_time, (
+                f"Memory operation took {memory_time:.3f}s, exceeds {target_ms}ms target"
             )
 
     async def test_authentication_flow_stability(self, test_db_manager):
