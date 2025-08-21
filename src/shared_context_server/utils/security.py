@@ -38,7 +38,12 @@ def sanitize_cache_key(cache_key: str) -> str:
 
     This function combines multiple sanitization patterns to handle various
     cache key formats used throughout the application.
+
+    Note: This function is designed to prevent sensitive data exposure in logs.
     """
+    if not cache_key:
+        return "[empty]"
+
     # Pattern for session IDs (session:uuid format)
     session_pattern = r"session:[^:]+"
     # Pattern for agent IDs (agent:id format)
@@ -48,26 +53,16 @@ def sanitize_cache_key(cache_key: str) -> str:
     # Pattern for UUIDs
     uuid_pattern = r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
 
-    return re.sub(
-        token_pattern,
-        "[token-redacted]",
-        re.sub(
-            uuid_pattern,
-            "[uuid-redacted]",
-            re.sub(
-                agent_pattern,
-                "agent:[redacted]",
-                re.sub(
-                    session_pattern,
-                    "session:[redacted]",
-                    cache_key,
-                    flags=re.IGNORECASE,
-                ),
-                flags=re.IGNORECASE,
-            ),
-            flags=re.IGNORECASE,
-        ),
+    # Apply multiple sanitization passes
+    sanitized = cache_key
+    sanitized = re.sub(
+        session_pattern, "session:[redacted]", sanitized, flags=re.IGNORECASE
     )
+    sanitized = re.sub(
+        agent_pattern, "agent:[redacted]", sanitized, flags=re.IGNORECASE
+    )
+    sanitized = re.sub(uuid_pattern, "[uuid-redacted]", sanitized, flags=re.IGNORECASE)
+    return re.sub(token_pattern, "[token-redacted]", sanitized)
 
 
 def sanitize_token(token: str) -> str:
@@ -83,33 +78,50 @@ def sanitize_token(token: str) -> str:
     return f"{token[:8]}...({len(token)} chars)"
 
 
-def secure_hash(data: str, algorithm: str = "sha256") -> str:
+def sanitize_resource_uri(uri: str) -> str:
     """
-    Generate secure hash using SHA-256 or other secure algorithms.
+    Sanitize resource URI for safe logging by removing sensitive identifiers.
+
+    This prevents exposure of session IDs, agent IDs, and other sensitive data
+    that may be embedded in resource URIs.
+    """
+    if not uri:
+        return "[empty]"
+
+    # Apply same patterns as cache key sanitization
+    return sanitize_cache_key(uri)
+
+
+def secure_hash_for_cache_keys(data: str) -> str:
+    """
+    Generate secure hash for cache key generation (NOT for passwords).
+
+    Uses SHA-256 which is appropriate for cache key generation, content
+    addressing, and data integrity - but NOT for password hashing.
+
+    For password hashing, use bcrypt, scrypt, or Argon2 instead.
 
     Args:
-        data: String data to hash
-        algorithm: Hash algorithm to use (default: sha256)
+        data: String data to hash (cache keys, content, etc.)
 
     Returns:
-        Hex digest of the hash
+        SHA-256 hex digest
     """
-    if algorithm == "sha256":
-        return hashlib.sha256(data.encode()).hexdigest()
-    if algorithm == "sha1":
-        return hashlib.sha1(data.encode()).hexdigest()
-    raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+    # SHA-256 is appropriate for cache keys and non-password uses
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
-def secure_hash_short(data: str, length: int = 8) -> str:
+def secure_hash_short_for_cache_keys(data: str, length: int = 8) -> str:
     """
-    Generate short secure hash for cache keys and similar uses.
+    Generate short secure hash for cache keys and similar non-password uses.
+
+    Uses SHA-256 which is appropriate for cache key generation - NOT for passwords.
 
     Args:
-        data: String data to hash
+        data: String data to hash (cache keys, identifiers, etc.)
         length: Length of returned hash (default: 8)
 
     Returns:
         Truncated hex digest of SHA-256 hash
     """
-    return secure_hash(data)[:length]
+    return secure_hash_for_cache_keys(data)[:length]

@@ -21,7 +21,11 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any
 
-from .security import sanitize_agent_id, sanitize_cache_key, secure_hash_short
+from .security import (
+    sanitize_agent_id,
+    sanitize_cache_key,
+    secure_hash_short_for_cache_keys,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,9 @@ class SmartCacheManager:
         if context:
             # Sort context for consistent key generation
             context_str = json.dumps(context, sort_keys=True, ensure_ascii=False)
-            context_hash = secure_hash_short(context_str, length=8)  # Secure hash
+            context_hash = secure_hash_short_for_cache_keys(
+                context_str, length=8
+            )  # Secure hash for cache keys
             return f"{key}:{context_hash}"
 
         return key
@@ -432,7 +438,7 @@ def generate_search_cache_key(
 ) -> str:
     """Generate cache key for search results."""
     # Hash query for consistent key generation
-    query_hash = secure_hash_short(query, length=8)
+    query_hash = secure_hash_short_for_cache_keys(query, length=8)
     return f"search:{session_id}:query:{query_hash}:threshold:{fuzzy_threshold}:scope:{search_scope}"
 
 
