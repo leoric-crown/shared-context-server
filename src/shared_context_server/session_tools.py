@@ -89,6 +89,15 @@ def get_websocket_imports() -> dict:
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_cache_key_for_logging(cache_key: str) -> str:
+    """Sanitize cache key for safe logging by masking sensitive parts."""
+    # Replace session and agent IDs with placeholders
+    import re
+
+    sanitized = re.sub(r"session:[^:]+", "session:[redacted]", cache_key)
+    return re.sub(r"agent:[^:]+", "agent:[redacted]", sanitized)
+
+
 # Audit logging utility
 async def audit_log(
     _conn: aiosqlite.Connection,
@@ -500,7 +509,9 @@ async def get_messages(
         # Check cache for this specific query (5-minute TTL for message lists)
         cached_result = await cache_manager.get(cache_key, cache_context)
         if cached_result is not None:
-            logger.debug(f"Cache hit for get_messages: {cache_key}")
+            logger.debug(
+                f"Cache hit for get_messages: {_sanitize_cache_key_for_logging(cache_key)}"
+            )
             return cached_result  # type: ignore[no-any-return]
 
         # Regular production connection
@@ -588,7 +599,9 @@ async def get_messages(
 
             # Phase 4: Cache the result for faster subsequent access (5-minute TTL)
             await cache_manager.set(cache_key, result, ttl=300, context=cache_context)
-            logger.debug(f"Cached get_messages result: {cache_key}")
+            logger.debug(
+                f"Cached get_messages result: {_sanitize_cache_key_for_logging(cache_key)}"
+            )
 
             return result
 

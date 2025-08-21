@@ -32,6 +32,15 @@ from .database import get_db_connection
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_token_for_logging(token: str) -> str:
+    """Sanitize token for safe logging by showing only prefix and length."""
+    if not token:
+        return "[empty]"
+    if len(token) <= 8:
+        return "[redacted]"
+    return f"{token[:8]}...({len(token)} chars)"
+
+
 async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any] | None:
     """
     Validate JWT token passed as tool parameter for dynamic agent authentication.
@@ -49,9 +58,13 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
         from .auth_core import _is_valid_token_format
 
         if not _is_valid_token_format(auth_token):
-            logger.warning(f"Malformed token format rejected: {auth_token}")
+            logger.warning(
+                f"Malformed token format rejected: {_sanitize_token_for_logging(auth_token)}"
+            )
             # Return a special error marker instead of None to prevent fallback
-            return {"validation_error": f"Malformed token format: {auth_token}"}
+            return {
+                "validation_error": f"Malformed token format: {_sanitize_token_for_logging(auth_token)}"
+            }
 
         # Check if this is a protected token (sct_*)
         if auth_token.startswith("sct_"):
@@ -62,10 +75,12 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
             jwt_token = await token_manager.resolve_protected_token(auth_token)
 
             if not jwt_token:
-                logger.warning(f"Invalid or expired protected token: {auth_token}")
+                logger.warning(
+                    f"Invalid or expired protected token: {_sanitize_token_for_logging(auth_token)}"
+                )
                 # Return authentication error marker instead of None to prevent fallback
                 return {
-                    "authentication_error": f"Protected token invalid or expired: {auth_token[:12]}..."
+                    "authentication_error": f"Protected token invalid or expired: {_sanitize_token_for_logging(auth_token)}"
                 }
 
             # Validate the resolved JWT
@@ -540,7 +555,9 @@ class SecureTokenManager:
             try:
                 return self.fernet.decrypt(row[0]).decode()
             except Exception:
-                logger.warning(f"Failed to decrypt protected token {token_id}")
+                logger.warning(
+                    f"Failed to decrypt protected token {_sanitize_token_for_logging(token_id)}"
+                )
                 return None
 
     async def extract_agent_info_for_recovery(
@@ -572,7 +589,9 @@ class SecureTokenManager:
 
             row = await cursor.fetchone()
             if not row:
-                logger.warning(f"Protected token not found for recovery: {token_id}")
+                logger.warning(
+                    f"Protected token not found for recovery: {_sanitize_token_for_logging(token_id)}"
+                )
                 return None
 
             # Try to decrypt and parse JWT even if expired
