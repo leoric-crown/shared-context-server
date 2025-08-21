@@ -112,12 +112,14 @@ class TestDatabaseContext:
     def test_thread_isolation(self):
         """Test that different threads get different database instances."""
         results = {}
+        db_objects = {}  # Keep references to prevent garbage collection
 
         def create_db_in_thread(thread_id: int):
             """Create database in separate thread."""
             reset_test_database_context()
             db = get_context_test_database()
             results[thread_id] = id(db)  # Store object ID
+            db_objects[thread_id] = db  # Keep reference to prevent GC
 
         # Create databases in separate threads
         threads = []
@@ -134,16 +136,24 @@ class TestDatabaseContext:
         db_ids = list(results.values())
         assert len(set(db_ids)) == 3  # All different IDs
 
+        # Verify the objects are actually different instances
+        db_list = list(db_objects.values())
+        assert db_list[0] is not db_list[1]
+        assert db_list[1] is not db_list[2]
+        assert db_list[0] is not db_list[2]
+
     @pytest.mark.asyncio
     async def test_async_task_isolation(self):
         """Test that different async tasks get different database instances."""
         results = {}
+        db_objects = {}  # Keep references to prevent garbage collection
 
         async def create_db_in_task(task_id: int):
             """Create database in separate async task."""
             reset_test_database_context()
             db = get_context_test_database()
             results[task_id] = id(db)  # Store object ID
+            db_objects[task_id] = db  # Keep reference to prevent GC
 
         # Create databases in separate async tasks
         tasks = []
@@ -157,6 +167,12 @@ class TestDatabaseContext:
         # Each task should have gotten a different database instance
         db_ids = list(results.values())
         assert len(set(db_ids)) == 3  # All different IDs
+
+        # Verify the objects are actually different instances
+        db_list = list(db_objects.values())
+        assert db_list[0] is not db_list[1]
+        assert db_list[1] is not db_list[2]
+        assert db_list[0] is not db_list[2]
 
     def test_perfect_isolation_between_calls(self):
         """Test that each call gets isolated database instance."""
