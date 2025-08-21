@@ -31,6 +31,7 @@ make quality      # Run all quality checks (format, lint, type, pip-audit)
 make docker       # Full Docker lifecycle: stop → build → up → logs
 ```
 
+
 ## Architecture Overview
 
 ### Core Components

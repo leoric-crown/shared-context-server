@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick test-simplified test-backend test-all format lint type pre-commit quality clean docker
+.PHONY: help install dev test test-quick test-simplified test-backend test-all format lint type pre-commit quality clean docker codeql-setup codeql-scan
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
