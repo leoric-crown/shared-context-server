@@ -144,7 +144,8 @@ def secure_hash_for_cache_keys(data: str) -> str:
     Returns:
         SHA-256 hex digest for non-sensitive cache key use
     """
-    # SHA-256 for non-sensitive cache key generation only
+    # CodeQL: SHA-256 used only for non-sensitive cache keys, NOT password hashing
+    # For password hashing, use bcrypt/scrypt/Argon2 with computational cost
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 

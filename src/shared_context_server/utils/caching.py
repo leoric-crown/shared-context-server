@@ -254,8 +254,9 @@ class SmartCacheManager:
             invalidated_count += 1
 
         if invalidated_count > 0:
+            # CodeQL: Pattern not logged to prevent potential sensitive data exposure
             logger.debug(
-                f"Invalidated {invalidated_count} cache entries matching pattern: {pattern}"
+                f"Invalidated {invalidated_count} cache entries matching pattern"
             )
 
         return invalidated_count
