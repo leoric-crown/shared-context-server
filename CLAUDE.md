@@ -170,7 +170,7 @@ Key configuration:
 API_KEY=your-key                # Required for MCP authentication
 JWT_SECRET_KEY=your-secret      # Required for JWT signing
 JWT_ENCRYPTION_KEY=fernet-key   # Required for token encryption
-DATABASE_URL=path/to/db         # Optional (default: shared_context.db)
+DATABASE_URL=path/to/db         # Optional (default: chat_history.db)
 USE_SQLALCHEMY=true/false       # Backend selection (default: false)
 ```
 
