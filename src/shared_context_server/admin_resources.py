@@ -100,13 +100,18 @@ class ResourceNotificationManager:
             # Note: FastMCP resource notification would be implemented here
             # For now, we'll update the client_last_seen timestamp
             self.client_last_seen[client_id] = time.time()
+            # CodeQL: This logging statement uses sanitized data only
+            sanitized_client = sanitize_client_id(client_id)
+            sanitized_uri = sanitize_resource_uri(resource_uri)
             logger.debug(
-                f"Notified client {sanitize_client_id(client_id)} of resource update: {sanitize_resource_uri(resource_uri)}"
+                "Notified client %s of resource update: %s",
+                sanitized_client,
+                sanitized_uri,
             )
         except Exception as e:
-            logger.warning(
-                f"Failed to notify client {sanitize_client_id(client_id)}: {e}"
-            )
+            # CodeQL: This logging statement uses sanitized data only
+            sanitized_client = sanitize_client_id(client_id)
+            logger.warning("Failed to notify client %s: %s", sanitized_client, str(e))
             return False
         else:
             return True

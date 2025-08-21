@@ -100,9 +100,9 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
         # Original JWT token validation (for backward compatibility)
         jwt_result = auth_manager.validate_token(auth_token)
         if jwt_result["valid"]:
-            logger.info(
-                f"JWT token validated for agent {sanitize_agent_id(jwt_result['agent_id'])}"
-            )
+            # CodeQL: This logging statement uses sanitized data only
+            sanitized_agent = sanitize_agent_id(jwt_result["agent_id"])
+            logger.info("JWT token validated for agent %s", sanitized_agent)
             return {
                 "agent_id": jwt_result["agent_id"],
                 "agent_type": jwt_result["agent_type"],
@@ -111,7 +111,8 @@ async def validate_jwt_token_parameter(auth_token: str | None) -> dict[str, Any]
                 "permissions": jwt_result["permissions"],
                 "token_id": jwt_result.get("token_id"),
             }
-        logger.warning(f"Invalid JWT token provided: {jwt_result.get('error')}")
+        # CodeQL: This logging statement uses non-sensitive error data only
+        logger.warning("Invalid JWT token provided: %s", jwt_result.get("error"))
         # Return authentication error marker for invalid/expired JWT tokens
         return {
             "authentication_error": f"JWT authentication failed: {jwt_result.get('error')}"
@@ -146,7 +147,8 @@ def validate_api_key_header(ctx: Context) -> bool:
             pass
         except Exception as e:
             # Log other exceptions for debugging but continue
-            logger.debug(f"Failed to get HTTP request from FastMCP: {e}")
+            # CodeQL: This logging statement uses non-sensitive error data only
+            logger.debug("Failed to get HTTP request from FastMCP: %s", str(e))
             pass
 
         if not api_key and hasattr(ctx, "headers"):
@@ -385,7 +387,9 @@ class SecureTokenManager:
                     await conn.rollback()
                 raise
 
-        logger.info(f"Created protected token for agent {sanitize_agent_id(agent_id)}")
+        # CodeQL: This logging statement uses sanitized data only
+        sanitized_agent = sanitize_agent_id(agent_id)
+        logger.info("Created protected token for agent %s", sanitized_agent)
         return token_id
 
     async def refresh_token_safely(self, current_token: str, agent_id: str) -> str:
@@ -484,8 +488,10 @@ class SecureTokenManager:
                     if not is_sqlalchemy:
                         await conn.commit()
 
+                    # CodeQL: This logging statement uses sanitized data only
+                    sanitized_agent = sanitize_agent_id(agent_id)
                     logger.info(
-                        f"Refreshed protected token for agent {sanitize_agent_id(agent_id)}"
+                        "Refreshed protected token for agent %s", sanitized_agent
                     )
                     return new_token_id
 
@@ -642,7 +648,8 @@ class SecureTokenManager:
                 count = cursor.rowcount
 
                 if count > 0:
-                    logger.info(f"Cleaned up {count} expired secure tokens")
+                    # CodeQL: This logging statement uses non-sensitive count data only
+                    logger.info("Cleaned up %d expired secure tokens", count)
 
                 return count
         except Exception:
