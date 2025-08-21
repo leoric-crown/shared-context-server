@@ -124,20 +124,27 @@ def sanitize_resource_uri(uri: str) -> str:
 
 def secure_hash_for_cache_keys(data: str) -> str:
     """
-    Generate secure hash for cache key generation (NOT for passwords).
+    Generate hash for NON-SENSITIVE cache key generation only.
 
-    Uses SHA-256 which is appropriate for cache key generation, content
-    addressing, and data integrity - but NOT for password hashing.
+    IMPORTANT: This function is used ONLY for non-sensitive data like:
+    - Cache key generation from non-sensitive parameters
+    - Content addressing for non-sensitive data
+    - Data deduplication for non-sensitive content
 
-    For password hashing, use bcrypt, scrypt, or Argon2 instead.
+    SHA-256 is computationally fast and appropriate for these use cases.
+
+    NEVER use this function for:
+    - Password hashing (use bcrypt, scrypt, or Argon2)
+    - Sensitive data hashing
+    - Security-critical operations
 
     Args:
-        data: String data to hash (cache keys, content, etc.)
+        data: NON-SENSITIVE string data for cache key generation only
 
     Returns:
-        SHA-256 hex digest
+        SHA-256 hex digest for non-sensitive cache key use
     """
-    # SHA-256 is appropriate for cache keys and non-password uses
+    # SHA-256 for non-sensitive cache key generation only
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
