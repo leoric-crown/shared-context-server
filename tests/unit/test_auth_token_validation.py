@@ -90,8 +90,8 @@ class TestTokenFormatValidation:
         assert result is not None
         assert "validation_error" in result
         assert "Malformed token format" in result["validation_error"]
-        # Token should be sanitized in error message for security
-        assert "sct_inva...(18 chars)" in result["validation_error"]
+        # Token should NOT be included in error message for security
+        assert "sct_invalid-format" not in result["validation_error"]
 
     async def test_validate_jwt_token_parameter_malformed_jwt(self):
         """Test validate_jwt_token_parameter with malformed JWT."""
@@ -121,8 +121,11 @@ class TestTokenFormatValidation:
         assert result is not None
         assert "authentication_error" in result
         assert "Protected token invalid or expired" in result["authentication_error"]
-        # Token should be sanitized in error message for security
-        assert "sct_1234...(40 chars)" in result["authentication_error"]
+        # Token should NOT be included in error message for security
+        assert (
+            "sct_12345678-90ab-cdef-1234-567890abcdef"
+            not in result["authentication_error"]
+        )
 
         # Verify token manager was called
         mock_manager.resolve_protected_token.assert_called_once_with(valid_sct_token)

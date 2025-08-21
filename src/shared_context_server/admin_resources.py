@@ -26,7 +26,8 @@ from pydantic import AnyUrl
 
 from .core_server import mcp
 from .database import get_db_connection
-from .utils.security import sanitize_client_id, sanitize_resource_uri
+
+# Removed sanitization imports - using generic logging instead
 
 logger = logging.getLogger(__name__)
 
@@ -100,18 +101,11 @@ class ResourceNotificationManager:
             # Note: FastMCP resource notification would be implemented here
             # For now, we'll update the client_last_seen timestamp
             self.client_last_seen[client_id] = time.time()
-            # CodeQL: This logging statement uses sanitized data only
-            sanitized_client = sanitize_client_id(client_id)
-            sanitized_uri = sanitize_resource_uri(resource_uri)
-            logger.debug(
-                "Notified client %s of resource update: %s",
-                sanitized_client,
-                sanitized_uri,
-            )
+            # Log success without sensitive client ID
+            logger.debug("Successfully notified client of resource update")
         except Exception as e:
-            # CodeQL: This logging statement uses sanitized data only
-            sanitized_client = sanitize_client_id(client_id)
-            logger.warning("Failed to notify client %s: %s", sanitized_client, str(e))
+            # Log failure without sensitive client ID
+            logger.warning("Failed to notify client of resource update: %s", str(e))
             return False
         else:
             return True

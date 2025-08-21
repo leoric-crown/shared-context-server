@@ -39,7 +39,8 @@ from .utils.llm_errors import (
     create_llm_error_response,
     create_system_error,
 )
-from .utils.security import sanitize_cache_key
+
+# Removed sanitization imports - using generic logging instead
 
 # PERFORMANCE OPTIMIZATION: Cache expensive WebSocket imports
 _websocket_imports = None
@@ -501,9 +502,8 @@ async def get_messages(
         # Check cache for this specific query (5-minute TTL for message lists)
         cached_result = await cache_manager.get(cache_key, cache_context)
         if cached_result is not None:
-            # CodeQL: This logging statement uses sanitized data only
-            sanitized_key = sanitize_cache_key(cache_key)
-            logger.debug("Cache hit for get_messages: %s", sanitized_key)
+            # Log cache hit without sensitive cache key
+            logger.debug("Cache hit for get_messages operation")
             return cached_result  # type: ignore[no-any-return]
 
         # Regular production connection
@@ -591,9 +591,8 @@ async def get_messages(
 
             # Phase 4: Cache the result for faster subsequent access (5-minute TTL)
             await cache_manager.set(cache_key, result, ttl=300, context=cache_context)
-            # CodeQL: This logging statement uses sanitized data only
-            sanitized_key = sanitize_cache_key(cache_key)
-            logger.debug("Cached get_messages result: %s", sanitized_key)
+            # Log cache set without sensitive cache key
+            logger.debug("Cached get_messages result successfully")
 
             return result
 
