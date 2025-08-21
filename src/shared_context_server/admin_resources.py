@@ -26,6 +26,7 @@ from pydantic import AnyUrl
 
 from .core_server import mcp
 from .database import get_db_connection
+from .utils.security import sanitize_client_id
 
 logger = logging.getLogger(__name__)
 
@@ -100,10 +101,12 @@ class ResourceNotificationManager:
             # For now, we'll update the client_last_seen timestamp
             self.client_last_seen[client_id] = time.time()
             logger.debug(
-                f"Notified client {client_id} of resource update: {resource_uri}"
+                f"Notified client {sanitize_client_id(client_id)} of resource update: {resource_uri}"
             )
         except Exception as e:
-            logger.warning(f"Failed to notify client {client_id}: {e}")
+            logger.warning(
+                f"Failed to notify client {sanitize_client_id(client_id)}: {e}"
+            )
             return False
         else:
             return True
