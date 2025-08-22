@@ -149,15 +149,7 @@ async def health_check() -> dict[str, Any]:
         except Exception:
             use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
 
-        # Initialize the appropriate database backend
-        if use_sqlalchemy:
-            sqlalchemy_manager = _get_sqlalchemy_manager()
-            if not sqlalchemy_manager.is_initialized:
-                await sqlalchemy_manager.initialize()
-        else:
-            db_manager = get_database_manager()
-            if not db_manager.is_initialized:
-                await db_manager.initialize()
+        # Database backend is initialized at startup - no per-request initialization needed
 
         # Test basic connectivity
         async with get_db_connection() as conn:

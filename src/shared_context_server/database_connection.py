@@ -668,17 +668,11 @@ async def get_db_connection() -> AsyncGenerator[aiosqlite.Connection, None]:
         # Use SQLAlchemy backend
         sqlalchemy_manager = _get_sqlalchemy_manager()
 
-        if not sqlalchemy_manager.is_initialized:
-            await sqlalchemy_manager.initialize()
-
         async with sqlalchemy_manager.get_connection() as conn:
             yield conn
     else:
         # Use aiosqlite backend (current default)
         db_manager = get_database_manager()
-
-        if not db_manager.is_initialized:
-            await db_manager.initialize()
 
         async with db_manager.get_connection() as conn:
             yield conn
