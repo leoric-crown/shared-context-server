@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
+from tests.conftest import MockContext, call_fastmcp_tool
 
 
 @pytest.mark.performance
@@ -32,17 +32,6 @@ class TestAuthenticateAgentTool:
             "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
         }
 
-    @pytest.fixture
-    async def server_with_db(self, test_db_manager):
-        """Create server instance with test database."""
-        from shared_context_server import server
-        from tests.fixtures.database import is_sqlalchemy_backend
-
-        # Use the correct backend based on environment variable
-        backend = "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
-
-        with patch_database_connection(test_db_manager, backend=backend):
-            yield server
 
     async def test_authenticate_agent_success(self, server_with_db, test_db_manager):
         """Test successful agent authentication with valid API key header."""

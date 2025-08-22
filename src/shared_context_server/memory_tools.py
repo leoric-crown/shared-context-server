@@ -324,30 +324,57 @@ async def set_memory(
                 if await cursor.fetchone():
                     return ERROR_MESSAGE_PATTERNS["memory_key_exists"](key)  # type: ignore[no-any-return,operator]
 
-            # Insert or update memory entry
-            await conn.execute(
+            # Insert or update memory entry using manual upsert
+            # Check if entry already exists
+            cursor = await conn.execute(
                 """
-                INSERT INTO agent_memory
-                (agent_id, session_id, key, value, metadata, created_at, expires_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(agent_id, session_id, key)
-                DO UPDATE SET
-                    value = excluded.value,
-                    metadata = excluded.metadata,
-                    updated_at = excluded.updated_at,
-                    expires_at = excluded.expires_at
+                SELECT id FROM agent_memory
+                WHERE agent_id = ? AND key = ?
+                AND (session_id = ? OR (? IS NULL AND session_id IS NULL))
             """,
-                (
-                    agent_id,
-                    session_id,
-                    key,
-                    serialized_value,
-                    json.dumps(metadata or {}),
-                    created_at_timestamp,  # Explicit created_at to ensure constraint works
-                    expires_at,
-                    now_timestamp.isoformat(),
-                ),
+                (agent_id, key, session_id, session_id),
             )
+            existing_row = await cursor.fetchone()
+
+            if existing_row:
+                # Update existing entry
+                await conn.execute(
+                    """
+                    UPDATE agent_memory
+                    SET value = ?, metadata = ?, updated_at = ?, expires_at = ?
+                    WHERE agent_id = ? AND key = ?
+                    AND (session_id = ? OR (? IS NULL AND session_id IS NULL))
+                """,
+                    (
+                        serialized_value,
+                        json.dumps(metadata or {}),
+                        now_timestamp.isoformat(),
+                        expires_at,
+                        agent_id,
+                        key,
+                        session_id,
+                        session_id,
+                    ),
+                )
+            else:
+                # Insert new entry
+                await conn.execute(
+                    """
+                    INSERT INTO agent_memory
+                    (agent_id, session_id, key, value, metadata, created_at, expires_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        agent_id,
+                        session_id,
+                        key,
+                        serialized_value,
+                        json.dumps(metadata or {}),
+                        created_at_timestamp,  # Explicit created_at to ensure constraint works
+                        expires_at,
+                        now_timestamp.isoformat(),
+                    ),
+                )
             await conn.commit()
 
             # Audit log

@@ -3,6 +3,8 @@ Integration tests for Agent Memory System.
 
 Tests TTL functionality, scope management, and integration with
 existing Phase 1 systems according to Phase 2 specification.
+
+Modernized to use isolated_db fixture instead of legacy mock patterns.
 """
 
 import asyncio
@@ -11,9 +13,10 @@ import os
 # Import testing helpers from conftest.py
 import sys
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -27,177 +30,25 @@ from shared_context_server.server import (
 
 sys.path.append(str(Path(__file__).parent.parent))
 from conftest import MockContext, call_fastmcp_tool
+from tests.fixtures.database import (
+    DatabaseTestManager,
+    patch_database_for_test,
+)
 
 
-@pytest.fixture
-def mock_database():
-    """Mock database with memory storage."""
-    sessions = {}
-    agent_memory = {}
-    audit_log = []
-
-    async def mock_execute(query, params=()):
-        nonlocal sessions, agent_memory, audit_log
-
-        if "INSERT INTO sessions" in query:
-            if len(params) == 6:
-                # Handle 6-parameter session creation (with timestamps)
-                session_id, purpose, created_by, metadata, created_at, updated_at = (
-                    params
-                )
-                print(
-                    f"\nDebug: Creating session (6-param) - id={session_id}, purpose={purpose}"
-                )
-                sessions[session_id] = {
-                    "id": session_id,
-                    "purpose": purpose,
-                    "created_by": created_by,
-                    "metadata": metadata,
-                    "created_at": created_at,
-                    "updated_at": updated_at,
-                    "is_active": True,
-                }
-            elif len(params) == 4:
-                # Handle 4-parameter session creation from create_session tool
-                session_id, purpose, created_by, metadata = params
-                print(
-                    f"\nDebug: Creating session (4-param) - id={session_id}, purpose={purpose}"
-                )
-                sessions[session_id] = {
-                    "id": session_id,
-                    "purpose": purpose,
-                    "created_by": created_by,
-                    "metadata": metadata,
-                    "created_at": 1692000000.0,
-                    "updated_at": 1692000000.0,
-                    "is_active": True,
-                }
-            print(f"Session stored. Total sessions: {list(sessions.keys())}")
-            return AsyncMock(lastrowid=None)
-
-        if "SELECT id FROM sessions WHERE id = ?" in query:
-            session_id = params[0]
-            session = sessions.get(session_id)
-            print(
-                f"\nDebug: Session validation check for {session_id} - exists: {session is not None}"
-            )
-            print(f"Available sessions: {list(sessions.keys())}")
-            return AsyncMock(
-                fetchone=AsyncMock(return_value={"id": session_id} if session else None)
-            )
-
-        if "INSERT INTO agent_memory" in query:
-            (
-                agent_id,
-                session_id,
-                key,
-                value,
-                metadata,
-                created_at,
-                expires_at,
-                updated_at,
-            ) = params
-            memory_key = f"{agent_id}:{session_id or 'global'}:{key}"
-            print(
-                f"\nDebug: Storing memory entry - key={key}, session_id={session_id}, agent_id={agent_id}"
-            )
-            agent_memory[memory_key] = {
-                "agent_id": agent_id,
-                "session_id": session_id,
-                "key": key,
-                "value": value,  # Store as JSON string (already serialized by server)
-                "metadata": metadata,  # Store as JSON string (already serialized by server)
-                "expires_at": expires_at,
-                "created_at": created_at,  # Use explicit created_at
-                "updated_at": updated_at,
-            }
-            print(f"Stored as memory_key: {memory_key}")
-            return AsyncMock()
-
-        if "SELECT key FROM agent_memory" in query and "expires_at" in query:
-            # Check for existing key without expiry check
-            agent_id, key, session_id_param1, session_id_param2, _ = params[:5]
-            memory_key = f"{agent_id}:{session_id_param1 or 'global'}:{key}"
-            entry = agent_memory.get(memory_key)
-            return AsyncMock(fetchone=AsyncMock(return_value=entry))
-
-        if "SELECT key, value, metadata, created_at, updated_at, expires_at" in query:
-            # Get memory entry - matches get_memory query exactly
-            agent_id, key, session_id, session_id_null_check, current_timestamp = params
-            memory_key = f"{agent_id}:{session_id or 'global'}:{key}"
-            entry = agent_memory.get(memory_key)
-
-            # Check if entry exists and is not expired
-            if entry and (
-                not entry["expires_at"]
-                or float(entry["expires_at"]) > float(current_timestamp)
-            ):
-                return AsyncMock(fetchone=AsyncMock(return_value=entry))
-            return AsyncMock(fetchone=AsyncMock(return_value=None))
-
-        if "SELECT key, session_id, created_at, updated_at, expires_at" in query:
-            # List memory entries
-            agent_id = params[0] if params else None
-            print(f"\nDebug mock: List query for agent_id={agent_id}")
-            print(f"All entries in agent_memory: {list(agent_memory.keys())}")
-            matching_entries = [
-                entry
-                for entry in agent_memory.values()
-                if agent_id and entry["agent_id"] == agent_id
-            ]
-            print(f"Matching entries: {len(matching_entries)}")
-            for entry in matching_entries:
-                print(f"  - {entry['key']} (session: {entry['session_id']})")
-
-            results = [
-                {
-                    "key": entry["key"],
-                    "session_id": entry["session_id"],
-                    "created_at": entry["created_at"],
-                    "updated_at": entry["updated_at"],
-                    "expires_at": entry["expires_at"],
-                    "value_size": len(entry["value"]) if entry["value"] else 0,
-                }
-                for entry in agent_memory.values()
-                if agent_id and entry["agent_id"] == agent_id
-            ]
-            return AsyncMock(fetchall=AsyncMock(return_value=results))
-
-        if "DELETE FROM agent_memory" in query and "expires_at" in query:
-            # Cleanup expired entries
-            current_time = params[0] if params else time.time()
-            to_remove = []
-            for key, entry in agent_memory.items():
-                if entry["expires_at"] and float(entry["expires_at"]) < current_time:
-                    to_remove.append(key)
-            for key in to_remove:
-                del agent_memory[key]
-            return AsyncMock(rowcount=len(to_remove))
-
-        if "INSERT INTO audit_log" in query:
-            audit_log.append(params)
-            return AsyncMock()
-
-        return AsyncMock()
-
-    mock_conn = AsyncMock()
-    mock_conn.execute = mock_execute
-    mock_conn.commit = AsyncMock()
-    return mock_conn
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_set_get_basic_functionality(mock_database):
+async def test_memory_set_get_basic_functionality(isolated_db: DatabaseTestManager):
     """Test basic memory set and get operations."""
 
     with (
-        patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_session_memory_123")
@@ -236,22 +87,15 @@ async def test_memory_set_get_basic_functionality(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_session_scoping(mock_database):
+async def test_memory_session_scoping(isolated_db: DatabaseTestManager):
     """Test session-scoped vs global memory isolation."""
 
     with (
-        patch(
-            "shared_context_server.memory_tools.get_db_connection"
-        ) as mock_memory_db_conn,
-        patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_session_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_memory_db_conn.return_value.__aenter__.return_value = mock_database
-        mock_session_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_session_scoping")
@@ -307,16 +151,15 @@ async def test_memory_session_scoping(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_ttl_expiration(mock_database):
+async def test_memory_ttl_expiration(isolated_db: DatabaseTestManager):
     """Test TTL expiration system with automatic cleanup."""
 
     with (
-        patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_ttl_session")
@@ -354,64 +197,77 @@ async def test_memory_ttl_expiration(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_overwrite_behavior(mock_database):
-    """Test memory overwrite and key collision handling."""
+async def test_memory_overwrite_behavior(isolated_db: DatabaseTestManager):
+    """Test memory overwrite and key collision handling using memory tools."""
 
     with (
-        patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
-        ctx = MockContext("test_overwrite_session")
+        ctx = MockContext("test_memory_overwrite")
 
-        # Set initial value
-        initial_set = await call_fastmcp_tool(
-            set_memory, ctx, key="overwrite_test", value="initial value"
-        )
-
-        assert initial_set["success"] is True
-
-        # Overwrite with new value (default behavior)
-        overwrite_set = await call_fastmcp_tool(
-            set_memory, ctx, key="overwrite_test", value="new value", overwrite=True
-        )
-
-        assert overwrite_set["success"] is True
-
-        # Verify new value
-        get_result = await call_fastmcp_tool(get_memory, ctx, key="overwrite_test")
-
-        assert get_result["success"] is True
-        assert get_result["value"] == "new value"
-
-        # Try to set without overwrite - should fail
-        no_overwrite = await call_fastmcp_tool(
+        # 1. Set initial memory value
+        set_result = await call_fastmcp_tool(
             set_memory,
             ctx,
             key="overwrite_test",
-            value="should not work",
+            value="initial value",
+            metadata={"test": "initial"},
+        )
+
+        assert set_result["success"] is True
+        assert set_result["key"] == "overwrite_test"
+        assert set_result["scope"] == "global"
+
+        # 2. Verify initial value
+        get_result = await call_fastmcp_tool(get_memory, ctx, key="overwrite_test")
+
+        assert get_result["success"] is True
+        assert get_result["value"] == "initial value"
+        assert get_result["metadata"]["test"] == "initial"
+
+        # 3. Test overwrite (should update existing value)
+        overwrite_result = await call_fastmcp_tool(
+            set_memory,
+            ctx,
+            key="overwrite_test",
+            value="new value",
+            metadata={"test": "updated"},
+            overwrite=True,
+        )
+
+        assert overwrite_result["success"] is True
+        assert overwrite_result["key"] == "overwrite_test"
+
+        # 4. Verify updated value
+        final_result = await call_fastmcp_tool(get_memory, ctx, key="overwrite_test")
+
+        assert final_result["success"] is True
+        assert final_result["value"] == "new value"
+        assert final_result["metadata"]["test"] == "updated"
+
+        # 5. Test key collision detection (overwrite=False should fail)
+        collision_result = await call_fastmcp_tool(
+            set_memory,
+            ctx,
+            key="overwrite_test",
+            value="collision value",
             overwrite=False,
         )
 
-        assert no_overwrite["success"] is False
-        assert no_overwrite["code"] == "KEY_EXISTS"
+        assert collision_result["success"] is False
+        assert collision_result["code"] == "KEY_EXISTS"
 
-        # Value should remain unchanged
-        final_get = await call_fastmcp_tool(get_memory, ctx, key="overwrite_test")
-
-        assert final_get["success"] is True
-        assert final_get["value"] == "new value"
-
-        print("✅ Memory overwrite behavior test completed")
+        print("✅ Memory overwrite behavior test completed using memory tools")
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_performance_requirements(mock_database):
+async def test_memory_performance_requirements(isolated_db: DatabaseTestManager):
     """Test memory operations meet <10ms performance requirements."""
 
     # Adjust performance threshold when coverage is enabled
@@ -432,12 +288,11 @@ async def test_memory_performance_requirements(mock_database):
     threshold = 50 if coverage_active else 25
 
     with (
-        patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_perf_session")
@@ -508,16 +363,15 @@ async def test_memory_performance_requirements(mock_database):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.performance
-async def test_memory_json_serialization(mock_database):
+async def test_memory_json_serialization(isolated_db: DatabaseTestManager):
     """Test JSON serialization of complex data types."""
 
     with (
-        patch("shared_context_server.memory_tools.get_db_connection") as mock_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_json_session")
@@ -564,22 +418,15 @@ async def test_memory_json_serialization(mock_database):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_memory_list_functionality(mock_database):
+async def test_memory_list_functionality(isolated_db: DatabaseTestManager):
     """Test memory listing with various filters."""
 
     with (
-        patch(
-            "shared_context_server.memory_tools.get_db_connection"
-        ) as mock_memory_db_conn,
-        patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_session_db_conn,
+        patch_database_for_test(isolated_db),
         patch(
             "shared_context_server.server.trigger_resource_notifications"
         ) as mock_notify,
     ):
-        mock_memory_db_conn.return_value.__aenter__.return_value = mock_database
-        mock_session_db_conn.return_value.__aenter__.return_value = mock_database
         mock_notify.return_value = None
 
         ctx = MockContext("test_list_session")
@@ -626,7 +473,7 @@ async def test_memory_list_functionality(mock_database):
         global_list = await call_fastmcp_tool(list_memory, ctx)
 
         assert global_list["success"] is True
-        # Note: Mock implementation will return all entries for simplicity
+        # Modern implementation will return actual filtered entries
 
         # List session-scoped memory
         session_list = await call_fastmcp_tool(list_memory, ctx, session_id=session_id)

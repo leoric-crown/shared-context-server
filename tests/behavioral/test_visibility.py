@@ -3,81 +3,30 @@ Behavioral tests for message visibility controls.
 
 Tests visibility enforcement and agent isolation according to Phase 1 specification.
 Ensures proper security boundaries between agents and sessions.
+
+Modernized to use isolated_db fixture and real database operations instead of legacy mock patterns.
 """
 
-# FastMCP testing helpers (inlined for simplicity)
-import inspect
-from unittest.mock import AsyncMock, patch
+# Import testing helpers from conftest.py
+import sys
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from pydantic.fields import FieldInfo
 
-from shared_context_server.auth import AuthInfo
+sys.path.append(str(Path(__file__).parent.parent))
+from conftest import call_fastmcp_tool, MockContext
+from tests.fixtures.database import (
+    DatabaseTestManager,
+    patch_database_for_test,
+)
+
 from shared_context_server.server import (
     add_message,
     create_session,
     get_messages,
     get_session,
 )
-
-
-def extract_field_defaults(fastmcp_tool):
-    """Extract actual default values from FastMCP tool function."""
-    from pydantic_core import PydanticUndefined
-
-    defaults = {}
-    sig = inspect.signature(fastmcp_tool.fn)
-
-    for param_name, param in sig.parameters.items():
-        if param_name == "ctx":  # Skip context parameter
-            continue
-        if isinstance(param.default, FieldInfo):
-            # Only include if it has a real default value (not required)
-            if param.default.default is not PydanticUndefined:
-                defaults[param_name] = param.default.default
-        elif param.default != inspect.Parameter.empty:
-            defaults[param_name] = param.default
-    return defaults
-
-
-async def call_fastmcp_tool(fastmcp_tool, ctx, **kwargs):
-    """Call FastMCP tool with proper default handling."""
-    defaults = extract_field_defaults(fastmcp_tool)
-    # kwargs should override defaults, not the other way around
-    call_args = {**defaults, **kwargs}
-
-    # Pass ctx as keyword argument to avoid positional conflicts with exclude_args
-    return await fastmcp_tool.fn(ctx=ctx, **call_args)
-
-
-class MockContext:
-    """Mock context for FastMCP testing."""
-
-    def __init__(self, session_id="test_session", agent_id="test_agent"):
-        self.session_id = session_id
-        # Set up authentication using AuthInfo pattern
-        self._auth_info = AuthInfo(
-            jwt_validated=False,
-            agent_id=agent_id,
-            agent_type="test",
-            permissions=["read", "write"],
-            authenticated=True,
-            auth_method="api_key",
-            token_id=None,
-        )
-
-    # Backward compatibility properties for old attribute access
-    @property
-    def agent_id(self) -> str:
-        return self._auth_info.agent_id
-
-    @agent_id.setter
-    def agent_id(self, value: str) -> None:
-        self._auth_info.agent_id = value
-
-    @property
-    def agent_type(self) -> str:
-        return self._auth_info.agent_type
 
 
 class TestVisibilityControls:
@@ -99,202 +48,28 @@ class TestVisibilityControls:
         return MockContext("charlie_session", "charlie")
 
     @pytest.fixture
-    def mock_database_with_visibility(self):
-        """Mock database that properly handles visibility filtering."""
-
-        sessions = {}
-        messages = {}
-        message_id_counter = [1]
-
-        async def mock_execute(query, params=()):
-            nonlocal sessions, messages, message_id_counter
-
-            if "INSERT INTO sessions" in query:
-                session_id, purpose, created_by, metadata, created_at, updated_at = (
-                    params
-                )
-                sessions[session_id] = {
-                    "id": session_id,
-                    "purpose": purpose,
-                    "created_by": created_by,
-                    "metadata": metadata,
-                    "created_at": created_at,
-                    "updated_at": updated_at,
-                    "is_active": True,
-                }
-                return AsyncMock(lastrowid=None)
-
-            if "SELECT * FROM sessions WHERE id = ?" in query:
-                session_id = params[0]
-                session = sessions.get(session_id)
-                return AsyncMock(fetchone=AsyncMock(return_value=session))
-
-            if "INSERT INTO messages" in query:
-                (
-                    session_id,
-                    sender,
-                    sender_type,
-                    content,
-                    visibility,
-                    metadata,
-                    parent_id,
-                    timestamp,
-                ) = params
-                message_id = message_id_counter[0]
-                message_id_counter[0] += 1
-
-                messages[message_id] = {
-                    "id": message_id,
-                    "session_id": session_id,
-                    "sender": sender,
-                    "sender_type": sender_type,
-                    "content": content,
-                    "visibility": visibility,
-                    "metadata": metadata,
-                    "timestamp": timestamp,
-                    "parent_message_id": parent_id,
-                }
-                return AsyncMock(lastrowid=message_id)
-
-            if "SELECT id FROM sessions WHERE id = ?" in query:
-                session_id = params[0]
-                session = sessions.get(session_id)
-                return AsyncMock(
-                    fetchone=AsyncMock(
-                        return_value={"id": session_id} if session else None
-                    )
-                )
-
-            if "SELECT * FROM messages" in query:
-                session_id = params[0]
-
-                # New parameter format analysis
-                # For visibility_filter queries:
-                #   - public: (session_id, limit, offset)
-                #   - private/agent_only: (session_id, agent_id, limit, offset)
-                # For normal queries: (session_id, agent_id, agent_id, limit, offset)
-
-                agent_id = None
-                visibility_filter = None
-
-                # Determine query type by analyzing the SQL and parameters
-                if "visibility = 'public'" in query and len(params) == 3:
-                    # Public visibility filter: no agent_id needed
-                    visibility_filter = "public"
-                elif (
-                    "visibility = 'private'" in query
-                    or "visibility = 'agent_only'" in query
-                ) and len(params) == 4:
-                    # Private or agent_only filter
-                    agent_id = params[1]
-                    if "private" in query:
-                        visibility_filter = "private"
-                    elif "agent_only" in query:
-                        visibility_filter = "agent_only"
-                elif len(params) == 5:
-                    # Normal query without visibility filter: (session_id, agent_id, agent_id, limit, offset)
-                    agent_id = params[1]  # Use first agent_id
-                elif len(params) >= 2:
-                    # Fallback case
-                    agent_id = params[1]
-
-                # Filter messages based on visibility rules
-                filtered_messages = []
-                for msg in messages.values():
-                    if msg["session_id"] == session_id:
-                        should_include = False
-
-                        # First apply normal visibility rules
-                        if msg["visibility"] == "public" or (
-                            msg["visibility"] == "private" and msg["sender"] == agent_id
-                        ):
-                            should_include = True
-                        elif msg["visibility"] == "agent_only":
-                            # For Phase 1, agent_only behaves like private
-                            # In Phase 2+, this would check agent_type
-                            should_include = msg["sender"] == agent_id
-
-                        # Then apply visibility_filter if provided
-                        if should_include and visibility_filter:
-                            should_include = msg["visibility"] == visibility_filter
-
-                        if should_include:
-                            filtered_messages.append(msg)
-
-                # Sort by timestamp
-                filtered_messages.sort(key=lambda x: x["timestamp"])
-                return AsyncMock(fetchall=AsyncMock(return_value=filtered_messages))
-
-            if "SELECT COUNT(*)" in query:
-                # Handle count queries for pagination
-                session_id = params[0]
-
-                # Apply same filtering logic as SELECT * query to get accurate count
-                agent_id = None
-                visibility_filter = None
-
-                # Determine query type by analyzing the SQL and parameters
-                if "visibility = 'public'" in query and len(params) == 3:
-                    visibility_filter = "public"
-                elif (
-                    "visibility = 'private'" in query
-                    or "visibility = 'agent_only'" in query
-                ) and len(params) == 4:
-                    agent_id = params[1]
-                    if "private" in query:
-                        visibility_filter = "private"
-                    elif "agent_only" in query:
-                        visibility_filter = "agent_only"
-                elif len(params) >= 2:
-                    agent_id = params[1]
-
-                # Count messages matching the criteria
-                count = 0
-                for msg in messages.values():
-                    if msg["session_id"] == session_id:
-                        should_include = False
-
-                        # Apply normal visibility rules
-                        if msg["visibility"] == "public" or (
-                            msg["visibility"] == "private" and msg["sender"] == agent_id
-                        ):
-                            should_include = True
-                        elif msg["visibility"] == "agent_only":
-                            should_include = msg["sender"] == agent_id
-
-                        # Apply visibility_filter if provided
-                        if should_include and visibility_filter:
-                            should_include = msg["visibility"] == visibility_filter
-
-                        if should_include:
-                            count += 1
-
-                return AsyncMock(fetchone=AsyncMock(return_value=[count]))
-
-            if "INSERT INTO audit_log" in query:
-                return AsyncMock()
-
-            return AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = mock_execute
-        mock_conn.commit = AsyncMock()
-
-        return mock_conn
+    async def visibility_test_session(self, isolated_db: DatabaseTestManager):
+        """Create a test session for visibility testing with real database operations."""
+        
+        with patch_database_for_test(isolated_db):
+            # Create test session
+            ctx = MockContext("visibility_test_agent")
+            session_result = await call_fastmcp_tool(
+                create_session, ctx, purpose="Visibility testing session"
+            )
+            session_id = session_result["session_id"]
+            
+            return session_id, isolated_db
 
     @pytest.mark.asyncio
     async def test_public_message_visibility(
-        self, alice_context, bob_context, mock_database_with_visibility
+        self, alice_context, bob_context, visibility_test_session
     ):
         """Test that public messages are visible to all agents."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
 
+        with patch_database_for_test(db_manager):
             # Alice creates session and adds public message
             session_result = await call_fastmcp_tool(
                 create_session,
@@ -302,29 +77,22 @@ class TestVisibilityControls:
                 purpose="Public message test",
                 metadata={"test": "visibility"},
             )
-            session_id = session_result["session_id"]
+            alice_session_id = session_result["session_id"]
 
             message_result = await call_fastmcp_tool(
                 add_message,
                 alice_context,
-                session_id=session_id,
+                session_id=alice_session_id,
                 content="This is a public announcement",
                 visibility="public",
                 metadata={"importance": "high"},
             )
-            # Debug output to understand what's failing
-            if message_result.get("success") is not True:
-                print(f"Message creation failed: {message_result}")
             assert message_result["success"] is True
 
             # Bob should be able to see the public message
             bob_messages = await call_fastmcp_tool(
-                get_messages, bob_context, session_id=session_id
+                get_messages, bob_context, session_id=alice_session_id
             )
-
-            # Debug output to understand what's failing
-            if bob_messages.get("success") is not True:
-                print(f"Bob get_messages failed: {bob_messages}")
 
             assert bob_messages["success"] is True
             assert len(bob_messages["messages"]) == 1
@@ -339,23 +107,20 @@ class TestVisibilityControls:
 
             # Bob can also see the session details
             session_view = await call_fastmcp_tool(
-                get_session, bob_context, session_id=session_id
+                get_session, bob_context, session_id=alice_session_id
             )
             assert session_view["success"] is True
             assert len(session_view["messages"]) == 1
 
     @pytest.mark.asyncio
     async def test_private_message_isolation(
-        self, alice_context, bob_context, mock_database_with_visibility
+        self, alice_context, bob_context, visibility_test_session
     ):
         """Test that private messages are only visible to their sender."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
+
+        with patch_database_for_test(db_manager):
 
             # Alice creates session
             session_result = await call_fastmcp_tool(
@@ -417,16 +182,13 @@ class TestVisibilityControls:
 
     @pytest.mark.asyncio
     async def test_agent_only_message_behavior(
-        self, alice_context, bob_context, charlie_context, mock_database_with_visibility
+        self, alice_context, bob_context, charlie_context, visibility_test_session
     ):
         """Test agent_only message visibility (Phase 1 implementation)."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
+
+        with patch_database_for_test(db_manager):
 
             # Alice creates session
             session_result = await call_fastmcp_tool(
@@ -474,16 +236,13 @@ class TestVisibilityControls:
 
     @pytest.mark.asyncio
     async def test_mixed_visibility_scenarios(
-        self, alice_context, bob_context, mock_database_with_visibility
+        self, alice_context, bob_context, visibility_test_session
     ):
         """Test complex scenarios with multiple visibility levels."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
+
+        with patch_database_for_test(db_manager):
 
             # Alice creates session
             session_result = await call_fastmcp_tool(
@@ -608,16 +367,13 @@ class TestVisibilityControls:
 
     @pytest.mark.asyncio
     async def test_visibility_filter_parameter(
-        self, alice_context, bob_context, mock_database_with_visibility
+        self, alice_context, bob_context, visibility_test_session
     ):
         """Test the visibility_filter parameter in get_messages."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
+
+        with patch_database_for_test(db_manager):
 
             # Alice creates session and adds mixed messages
             session_result = await call_fastmcp_tool(
@@ -691,16 +447,13 @@ class TestVisibilityControls:
 
     @pytest.mark.asyncio
     async def test_session_isolation_security(
-        self, alice_context, bob_context, mock_database_with_visibility
+        self, alice_context, bob_context, visibility_test_session
     ):
         """Test that agents cannot access messages from sessions they shouldn't see."""
 
-        with patch(
-            "shared_context_server.session_tools.get_db_connection"
-        ) as mock_db_conn:
-            mock_db_conn.return_value.__aenter__.return_value = (
-                mock_database_with_visibility
-            )
+        session_id, db_manager = visibility_test_session
+
+        with patch_database_for_test(db_manager):
 
             # Alice creates a private session
             alice_session = await call_fastmcp_tool(

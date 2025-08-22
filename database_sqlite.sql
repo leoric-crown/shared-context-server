@@ -82,7 +82,6 @@ CREATE TABLE IF NOT EXISTS agent_memory (
     CONSTRAINT agent_memory_value_not_empty CHECK (length(trim(value)) > 0),
     CONSTRAINT agent_memory_expires_at_future CHECK (expires_at IS NULL OR expires_at > created_at),
 
-    UNIQUE(agent_id, session_id, key),
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
@@ -142,6 +141,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_lookup ON agent_memory(agent_id, ses
 CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_global ON agent_memory(agent_id) WHERE session_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_memory_expiry ON agent_memory(expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id) WHERE session_id IS NOT NULL;
+
+-- Agent memory uniqueness constraints (SQLite partial index approach)
+-- Global memory: enforce unique (agent_id, key) when session_id IS NULL
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_unique_global ON agent_memory(agent_id, key) WHERE session_id IS NULL;
+-- Session memory: enforce unique (agent_id, session_id, key) when session_id IS NOT NULL  
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_unique_session ON agent_memory(agent_id, session_id, key) WHERE session_id IS NOT NULL;
 
 -- Audit log access patterns
 CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
