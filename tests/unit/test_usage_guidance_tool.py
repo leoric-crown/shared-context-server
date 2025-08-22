@@ -162,10 +162,12 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_guidance.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error",
+                new=AsyncMock()
             ) as mock_validate,
             patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
+            # Use AsyncMock for async function validate_agent_context_or_error  
             mock_validate.return_value = {
                 "authenticated": True,
                 "agent_id": "admin_user",
@@ -203,7 +205,8 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_guidance.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error",
+                new=AsyncMock()
             ) as mock_validate,
             patch("shared_context_server.database.get_db_connection") as mock_db,
         ):
@@ -235,7 +238,8 @@ class TestUsageGuidanceOperations:
 
         with (
             patch(
-                "shared_context_server.admin_guidance.validate_agent_context_or_error"
+                "shared_context_server.admin_guidance.validate_agent_context_or_error",
+                new=AsyncMock()
             ) as mock_validate,
             patch("shared_context_server.database.get_db_connection") as mock_db,
         ):

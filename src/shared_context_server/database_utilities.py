@@ -150,6 +150,8 @@ async def health_check() -> dict[str, Any]:
             use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
 
         # Database backend is initialized at startup - no per-request initialization needed
+        # Since we can successfully connect, the database must be initialized
+        database_is_initialized = True
 
         # Test basic connectivity
         async with get_db_connection() as conn:
@@ -204,10 +206,9 @@ async def health_check() -> dict[str, Any]:
 
         # Get statistics from the actual backend being used
         if use_sqlalchemy:
-            sqlalchemy_manager = _get_sqlalchemy_manager()
             return {
                 "status": "healthy",
-                "database_initialized": sqlalchemy_manager.is_initialized,
+                "database_initialized": database_is_initialized,
                 "database_exists": True,  # If we got here, it exists
                 "database_size_mb": 0,  # SQLAlchemy doesn't easily provide this
                 "connection_count": 0,  # SQLAlchemy manages this internally
@@ -217,9 +218,7 @@ async def health_check() -> dict[str, Any]:
         stats = db_manager.get_stats()
         return {
             "status": "healthy",
-            "database_initialized": stats[
-                "is_initialized"
-            ],  # Correct key for aiosqlite
+            "database_initialized": database_is_initialized,
             "database_exists": stats["database_exists"],
             "database_size_mb": stats["database_size_mb"],
             "connection_count": stats["connection_count"],

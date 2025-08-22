@@ -162,7 +162,9 @@ class TestWebUIPerformanceBehavior:
 
         tasks = []
         for i, endpoint in enumerate(endpoints):
-            tasks.extend([concurrent_request_test(endpoint, i * 5 + j) for j in range(5)])
+            tasks.extend(
+                [concurrent_request_test(endpoint, i * 5 + j) for j in range(5)]
+            )
 
         response_times = await asyncio.gather(*tasks)
         total_time = time.time() - start_time

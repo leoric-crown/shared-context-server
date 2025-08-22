@@ -461,7 +461,7 @@ class TestGlobalManagerFunctions:
                 mock_manager.get_connection.assert_called_once()
 
     async def test_get_db_connection_sqlalchemy_not_initialized(self):
-        """Test get_db_connection with uninitialized SQLAlchemy manager."""
+        """Test get_db_connection with SQLAlchemy manager (no per-request initialization)."""
         with patch(
             "src.shared_context_server.config.get_database_config"
         ) as mock_config:
@@ -475,7 +475,6 @@ class TestGlobalManagerFunctions:
             ):
                 mock_manager = Mock()
                 mock_manager.is_initialized = False
-                mock_manager.initialize = AsyncMock()
                 # Create a proper async context manager mock
                 mock_context_manager = Mock()
                 mock_context_manager.__aenter__ = AsyncMock(return_value=Mock())
@@ -486,7 +485,8 @@ class TestGlobalManagerFunctions:
                 async with get_db_connection():
                     pass
 
-                mock_manager.initialize.assert_called_once()
+                # After recent commits, per-request initialization was removed for performance
+                # The connection should work directly without calling initialize()
                 mock_manager.get_connection.assert_called_once()
 
 

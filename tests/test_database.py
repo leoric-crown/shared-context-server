@@ -157,24 +157,13 @@ class TestErrorEnvelopeValidation:
         assert "timestamp" in health_result
         assert health_result["status"] == "healthy"
 
-        # Test unhealthy case by mocking database initialization failure
-        # Use minimal mocking - just enough to simulate failure
-        use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
-
-        if use_sqlalchemy:
-            patch_target = (
-                "src.shared_context_server.database_utilities._get_sqlalchemy_manager"
-            )
-        else:
-            patch_target = (
-                "src.shared_context_server.database_utilities.get_database_manager"
-            )
-
-        with patch(patch_target) as mock_get_db:
-            mock_manager = mock_get_db.return_value
-            mock_manager.is_initialized = False
-            mock_manager.initialize.side_effect = Exception(
-                "Simulated database failure"
+        # Test unhealthy case by mocking database connection failure
+        # Mock get_db_connection to simulate connection failure
+        with patch(
+            "src.shared_context_server.database_utilities.get_db_connection"
+        ) as mock_get_db_connection:
+            mock_get_db_connection.side_effect = Exception(
+                "Simulated database connection failure"
             )
 
             unhealthy_result = await health_check()
@@ -184,7 +173,7 @@ class TestErrorEnvelopeValidation:
             assert "error" in unhealthy_result
             assert "timestamp" in unhealthy_result
             assert unhealthy_result["status"] == "unhealthy"
-            assert "Simulated database failure" in str(unhealthy_result["error"])
+            assert "Simulated database connection failure" in str(unhealthy_result["error"])
 
 
 class TestUtcTimestampValidation:
