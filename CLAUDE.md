@@ -100,6 +100,15 @@ pytest -m "not slow" -v                     # Exclude slow tests
 ### Database Testing
 Tests automatically use in-memory SQLite with WAL mode for isolation. Backend switching is tested via `test_simplified_backend_switching.py`.
 
+### Parallel Test Execution
+Tests use pytest-xdist with automatic worker distribution (`-n auto`) for reliable parallel execution:
+- **Configuration**: Uses pytest-xdist default behavior (worksteal distribution)
+- **Compatibility**: Works reliably with ContextVar-based database and auth management  
+- **Performance**: Faster than sequential execution with proper worker isolation
+- **Known Issue**: `--dist=loadscope` distribution causes test failures due to ContextVar state conflicts
+
+**Note**: The codebase uses ContextVar for thread-safe database and authentication management. The default worksteal distribution strategy provides proper isolation between pytest workers, while loadscope distribution can cause state conflicts when multiple test classes run on the same worker.
+
 ### Authentication Architecture
 
 **CURRENT**: Authentication uses ContextVar for perfect thread safety and automatic test isolation.
