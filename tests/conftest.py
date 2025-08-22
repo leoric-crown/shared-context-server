@@ -879,21 +879,13 @@ async def reset_global_singletons():
     # Note: Authentication singleton reset no longer needed with ContextVar approach
     # Each test automatically gets isolated token manager instances
 
-    # Enhanced database manager cleanup for SQLAlchemy flakiness prevention
+    # Enhanced database manager cleanup for SQLAlchemy teardown performance fix
     try:
-        import shared_context_server.database as db_module
+        from shared_context_server.database_connection import dispose_all_sqlalchemy_managers
 
         with suppress(Exception):
-            # Critical: Close SQLAlchemy manager properly before reset
-            if (
-                hasattr(db_module, "_sqlalchemy_manager")
-                and db_module._sqlalchemy_manager
-            ):
-                await db_module._sqlalchemy_manager.close()
-
-            # Reset global database managers to ensure clean state
-            db_module._db_manager = None
-            db_module._sqlalchemy_manager = None
+            # Critical: Dispose ALL SQLAlchemy managers across contexts to fix 31s teardowns
+            await dispose_all_sqlalchemy_managers()
     except ImportError:
         pass
 
@@ -901,36 +893,23 @@ async def reset_global_singletons():
 @pytest.fixture(autouse=True)
 async def isolate_database_globals():
     """
-    Comprehensive database global state isolation for SQLAlchemy flakiness prevention.
+    ContextVar-based database isolation for SQLAlchemy teardown performance fix.
 
-    CRITICAL: This fixture addresses the root cause of SQLAlchemy test flakiness by ensuring
-    complete isolation of global database managers between tests.
+    CRITICAL: This fixture properly disposes SQLAlchemy engines to prevent 31+ second teardowns
+    by using the ContextVar-aware disposal function.
     """
-    import shared_context_server.database as db_module
+    from shared_context_server.database_connection import dispose_all_sqlalchemy_managers, reset_database_context
 
-    # Store original state
-    original_db_manager = getattr(db_module, "_db_manager", None)
-    original_sqlalchemy_manager = getattr(db_module, "_sqlalchemy_manager", None)
+    # Pre-test cleanup: Ensure clean ContextVar state
+    with suppress(Exception):
+        await dispose_all_sqlalchemy_managers()
+        reset_database_context()
 
-    # Critical: Properly close SQLAlchemy manager BEFORE resetting globals
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
+    yield  # Let the test run with clean context
 
-    # Reset to None for complete test isolation
-    db_module._db_manager = None
-    db_module._sqlalchemy_manager = None
-
-    yield  # Let the test run with clean globals
-
-    # Post-test cleanup: Close any managers created during test
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
-
-    # Restore original state (usually None anyway, but ensures consistency)
-    db_module._db_manager = original_db_manager
-    db_module._sqlalchemy_manager = original_sqlalchemy_manager
+    # Post-test cleanup: Dispose any managers created during test
+    with suppress(Exception):
+        await dispose_all_sqlalchemy_managers()
 
 
 @pytest.fixture(autouse=True)

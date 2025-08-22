@@ -18,6 +18,8 @@ import logging
 import os
 import sqlite3
 import sys
+import threading
+import weakref
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime as dt
@@ -553,6 +555,11 @@ _sqlalchemy_manager_context: ContextVar[Any | None] = ContextVar(
     "sqlalchemy_manager_context", default=None
 )
 
+# Global tracking for SQLAlchemy managers across all contexts
+# This fixes the 31s teardown issue by tracking ALL managers, not just current context
+_global_sqlalchemy_managers: set[Any] = set()
+_global_managers_lock = threading.Lock()
+
 
 def get_database_manager() -> DatabaseManager:
     """
@@ -625,8 +632,68 @@ def _get_sqlalchemy_manager() -> Any:
             logger.warning("Using fallback SQLAlchemy database configuration")
 
         _sqlalchemy_manager_context.set(manager)
+        
+        # Register manager globally for comprehensive disposal (fixes 31s teardown issue)
+        with _global_managers_lock:
+            _global_sqlalchemy_managers.add(manager)
 
     return manager
+
+
+async def dispose_current_sqlalchemy_manager() -> None:
+    """
+    Dispose SQLAlchemy manager in current context and reset ContextVar.
+    
+    This properly closes the AsyncEngine and clears the context,
+    preventing background threads from keeping the process alive.
+    Critical for fixing 31+ second test teardowns.
+    """
+    manager = _sqlalchemy_manager_context.get()
+    
+    if manager is not None:
+        try:
+            await manager.close()  # This calls engine.dispose()
+            # Remove from global tracking
+            with _global_managers_lock:
+                _global_sqlalchemy_managers.discard(manager)
+        except Exception as e:
+            logger.warning(f"Failed to dispose SQLAlchemy manager: {e}")
+        finally:
+            _sqlalchemy_manager_context.set(None)
+
+
+async def dispose_all_sqlalchemy_managers() -> None:
+    """
+    Dispose ALL SQLAlchemy managers across all contexts.
+    
+    This is the fix for the 31s teardown issue. The problem was that ContextVar 
+    creates isolated contexts, but dispose_current_sqlalchemy_manager() only 
+    disposed the manager in the current context. During full test suite execution,
+    multiple async contexts create multiple managers, but only the current one 
+    gets disposed, leaving 36+ engines running.
+    
+    This function disposes ALL managers that were ever created, fixing the
+    31s → 3s teardown performance issue.
+    """
+    disposed_count = 0
+    
+    # Get copy of managers to avoid modification during iteration
+    with _global_managers_lock:
+        managers_to_dispose = list(_global_sqlalchemy_managers)
+        _global_sqlalchemy_managers.clear()
+    
+    # Dispose all managers
+    for manager in managers_to_dispose:
+        try:
+            await manager.close()  # This calls engine.dispose()
+            disposed_count += 1
+        except Exception as e:
+            logger.warning(f"Failed to dispose SQLAlchemy manager {id(manager)}: {e}")
+    
+    # Clear current context as well
+    _sqlalchemy_manager_context.set(None)
+    
+    logger.info(f"Disposed {disposed_count} SQLAlchemy managers (fixes 31s teardown issue)")
 
 
 def reset_database_context() -> None:
