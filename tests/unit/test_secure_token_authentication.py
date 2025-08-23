@@ -37,11 +37,10 @@ async def temp_database():
 
     # Initialize the database and reset global managers
     with patch.dict(os.environ, {"DATABASE_PATH": temp_path}):
-        # Clear both global database managers to force reinitialization
-        import shared_context_server.database_connection as db_module
+        # Clear global database managers to force reinitialization
+        import src.shared_context_server.database as db_module
 
-        db_module._db_manager = None
-        # Reset SQLAlchemy manager for USE_SQLALCHEMY=true tests
+        # Reset SQLAlchemy manager (aiosqlite backend removed)
         if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
             with contextlib.suppress(Exception):
                 await db_module._sqlalchemy_manager.close()
@@ -63,13 +62,7 @@ async def temp_database():
                 with contextlib.suppress(Exception):
                     await db_module._sqlalchemy_manager.close()
 
-            # Close aiosqlite manager if it exists
-            if hasattr(db_module, "_db_manager") and db_module._db_manager:
-                # The manager doesn't have a close method, but connections auto-close
-                pass
-
-            # Reset both global managers after test
-            db_module._db_manager = None
+            # Reset SQLAlchemy manager after test
             db_module._sqlalchemy_manager = None
 
     # Cleanup temp file with retry logic for Windows

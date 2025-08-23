@@ -340,3 +340,5 @@ claude_token = await authenticate_agent(agent_id="dev_agent", agent_type="claude
 
 - use uv run python instead of python3
 - **CRITICAL**: All timestamps must use Unix format (`datetime.now(timezone.utc).timestamp()`) for consistent timezone display
+
+- Always use main branch server for collaboration (shared-context-server) not scs-dev, scs-dev should only be used for testing changes and verifying functionality

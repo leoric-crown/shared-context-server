@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 # Set up logging
 import logging
 
-import aiosqlite
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from .config import get_config
@@ -46,7 +45,9 @@ async def dashboard(request: Request) -> HTMLResponse:
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
-                conn.row_factory = aiosqlite.Row
+                # Row factory handled by SQLAlchemy connection wrapper
+                pass
+                pass
 
             # Get active sessions with message counts and memory counts
             cursor = await conn.execute("""
@@ -82,11 +83,10 @@ async def dashboard(request: Request) -> HTMLResponse:
 
         # Get database configuration info for debugging
         database_url = os.getenv("DATABASE_URL", "not_set")
-        use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "not_set")
         ci_env = bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
 
         logger.info(
-            f"Environment: DATABASE_URL={database_url}, USE_SQLALCHEMY={use_sqlalchemy}, CI={ci_env}"
+            f"Environment: DATABASE_URL={database_url}, CI={ci_env}"
         )
 
         return HTMLResponse(
@@ -110,7 +110,8 @@ async def session_view(request: Request) -> HTMLResponse:
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
-                conn.row_factory = aiosqlite.Row
+                # Row factory handled by SQLAlchemy connection wrapper
+                pass
 
             # Get session information
             cursor = await conn.execute(
@@ -189,7 +190,8 @@ async def memory_dashboard(request: Request) -> HTMLResponse:
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
             if hasattr(conn, "row_factory"):
-                conn.row_factory = aiosqlite.Row
+                # Row factory handled by SQLAlchemy connection wrapper
+                pass
 
             # Build query based on scope parameter
             if scope == "global":

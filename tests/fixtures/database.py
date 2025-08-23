@@ -25,12 +25,12 @@ class DatabaseTestManager:
     """
     Manages database testing with proper isolation and cleanup.
 
-    This class provides a unified interface for testing both aiosqlite
-    and SQLAlchemy backends with proper state management.
+    This class provides a unified interface for SQLAlchemy-based testing
+    with proper state management and test isolation.
     """
 
-    def __init__(self, backend: str = "auto"):
-        self.backend = backend
+    def __init__(self):
+        self.backend = "sqlalchemy"  # Always SQLAlchemy (aiosqlite backend removed)
         self.temp_db_path: str | None = None
         self.db_manager: DatabaseManager | None = None
         self._original_managers: dict[str, Any] = {}
@@ -47,24 +47,13 @@ class DatabaseTestManager:
         self.temp_db_path = temp_full_path
         self._full_temp_path = temp_full_path
 
-        # Determine backend
-        if self.backend == "auto":
-            use_sqlalchemy = os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
-            self.backend = "sqlalchemy" if use_sqlalchemy else "aiosqlite"
+        # Always use SQLAlchemy (aiosqlite backend removed)
 
-        # Create appropriate database manager
-        if self.backend == "sqlalchemy":
-            # Import SQLAlchemy manager for SQLAlchemy mode
-            from src.shared_context_server.database_sqlalchemy import (
-                SimpleSQLAlchemyManager,
-            )
+        # Create SQLAlchemy database manager (aiosqlite backend removed)
+        from src.shared_context_server.database_manager import SimpleSQLAlchemyManager
 
-            database_url = f"sqlite+aiosqlite:///{self.temp_db_path}"
-            self.db_manager = SimpleSQLAlchemyManager(database_url)
-        else:
-            # Use regular DatabaseManager for aiosqlite mode
-            database_url = f"sqlite:///{self.temp_db_path}"
-            self.db_manager = DatabaseManager(database_url)
+        database_url = f"sqlite+aiosqlite:///{self.temp_db_path}"
+        self.db_manager = SimpleSQLAlchemyManager(database_url)
 
         await self.db_manager.initialize()
 
@@ -80,7 +69,6 @@ class DatabaseTestManager:
             import src.shared_context_server.database as db_module
 
             self._original_managers = {
-                "db_manager": getattr(db_module, "_db_manager", None),
                 "sqlalchemy_manager": getattr(db_module, "_sqlalchemy_manager", None),
             }
         except ImportError:
@@ -90,15 +78,9 @@ class DatabaseTestManager:
         """Patch global managers to use test database."""
         try:
             import src.shared_context_server.database as db_module
-
-            if self.backend == "sqlalchemy":
-                # For SQLAlchemy mode
-                db_module._sqlalchemy_manager = self.db_manager
-                db_module._db_manager = None
-            else:
-                # For aiosqlite mode
-                db_module._db_manager = self.db_manager
-                db_module._sqlalchemy_manager = None
+            
+            # Set SQLAlchemy manager (aiosqlite backend removed)
+            db_module._sqlalchemy_manager = self.db_manager
 
         except ImportError:
             pass
@@ -108,7 +90,6 @@ class DatabaseTestManager:
         try:
             import src.shared_context_server.database as db_module
 
-            db_module._db_manager = self._original_managers.get("db_manager")
             db_module._sqlalchemy_manager = self._original_managers.get(
                 "sqlalchemy_manager"
             )
@@ -125,7 +106,7 @@ class DatabaseTestManager:
         return {
             "connection_count": 0,  # Test connections are contextual, not pooled
             "is_initialized": True,
-            "backend": self.backend,
+            "backend": "sqlalchemy",  # Always SQLAlchemy (aiosqlite removed)
         }
 
     async def cleanup(self) -> None:
@@ -169,7 +150,7 @@ async def isolated_db() -> AsyncGenerator[DatabaseTestManager, None]:
 
     This fixture:
     - Creates a fresh database for each test
-    - Automatically detects the backend (aiosqlite vs SQLAlchemy)
+    - Uses SQLAlchemy backend (aiosqlite backend removed)
     - Patches global state to use the test database
     - Ensures proper cleanup and state restoration
 
@@ -526,9 +507,9 @@ def is_sqlalchemy_backend() -> bool:
     Check if tests are running with SQLAlchemy backend.
 
     Returns:
-        True if USE_SQLALCHEMY=true, False otherwise
+        Always True (aiosqlite backend removed)
     """
-    return os.getenv("USE_SQLALCHEMY", "false").lower() == "true"
+    return True
 
 
 def is_aiosqlite_backend() -> bool:
@@ -536,6 +517,6 @@ def is_aiosqlite_backend() -> bool:
     Check if tests are running with aiosqlite backend.
 
     Returns:
-        True if USE_SQLALCHEMY=false or not set, False otherwise
+        Always False (aiosqlite backend removed)
     """
-    return not is_sqlalchemy_backend()
+    return False

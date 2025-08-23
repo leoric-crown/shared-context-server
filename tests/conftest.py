@@ -629,7 +629,7 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
     """
     from unittest.mock import patch
 
-    from shared_context_server.database_testing import get_test_db_connection
+    from shared_context_server.database_testing import TestDatabaseManager, patch_database_connection
 
     @asynccontextmanager
     async def mock_get_db_connection():
@@ -638,9 +638,11 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
             async with test_db_manager.get_connection() as conn:
                 yield conn
         else:
-            # Use unified test database with specified backend
-            async with get_test_db_connection(backend) as conn:
+            # Use unified test database (SQLAlchemy-only)
+            temp_manager = TestDatabaseManager()
+            async with temp_manager.get_connection() as conn:
                 yield conn
+            await temp_manager.close()
 
     # Patch all the places where get_db_connection is used
     # This comprehensive patching covers both direct imports and local references
@@ -898,26 +900,25 @@ async def isolate_database_globals():
     CRITICAL: This fixture properly disposes SQLAlchemy engines to prevent 31+ second teardowns
     by using the ContextVar-aware disposal function.
     """
-    from shared_context_server.database_connection import dispose_all_sqlalchemy_managers, reset_database_context
+    from src.shared_context_server.database import dispose_current_sqlalchemy_manager
 
     # Pre-test cleanup: Ensure clean ContextVar state
     with suppress(Exception):
-        await dispose_all_sqlalchemy_managers()
-        reset_database_context()
+        await dispose_current_sqlalchemy_manager()
 
     yield  # Let the test run with clean context
 
     # Post-test cleanup: Dispose any managers created during test
     with suppress(Exception):
-        await dispose_all_sqlalchemy_managers()
+        await dispose_current_sqlalchemy_manager()
 
 
 @pytest.fixture(autouse=True)
 def isolate_environment_variables():
     """
-    Environment variable isolation to prevent SQLAlchemy test flakiness.
+    Environment variable isolation to prevent test flakiness.
 
-    CRITICAL: Prevents USE_SQLALCHEMY and database path variables from leaking
+    CRITICAL: Prevents database path variables from leaking
     between tests running in parallel workers.
 
     ENHANCED: Ensures authentication-critical environment variables are
@@ -927,9 +928,8 @@ def isolate_environment_variables():
 
     # Database-related environment variables that cause flakiness
     critical_vars = [
-        "USE_SQLALCHEMY",
         "DATABASE_URL",
-        "DATABASE_PATH",
+        "DATABASE_PATH", 
         "API_KEY",  # Required for config loading
     ]
 

@@ -122,30 +122,24 @@ class TestDatabaseInitializationPerformance:
 
         print("✅ No repeated schema validation messages detected")
 
-    @pytest.mark.parametrize("use_sqlalchemy", [True, False])
     @pytest.mark.asyncio
-    async def test_backend_connection_performance_parity(
-        self, use_sqlalchemy, test_db_manager
-    ):
-        """Test both backends achieve performance targets after optimization."""
+    async def test_sqlalchemy_backend_connection_performance(self, test_db_manager):
+        """Test SQLAlchemy backend achieves performance targets after optimization."""
 
-        with patch.dict(os.environ, {"USE_SQLALCHEMY": str(use_sqlalchemy).lower()}):
-            stats = await self.measure_multiple_connections(count=10)
+        stats = await self.measure_multiple_connections(count=10)
 
-            backend_name = "SQLAlchemy" if use_sqlalchemy else "aiosqlite"
+        # SQLAlchemy backend should meet performance targets
+        # Adjusted for test environment variability while validating optimization works
+        assert stats["avg_ms"] < 200, (
+            f"SQLAlchemy average time {stats['avg_ms']:.1f}ms exceeds 200ms target"
+        )
+        assert stats["p95_ms"] < 300, (
+            f"SQLAlchemy P95 time {stats['p95_ms']:.1f}ms exceeds 300ms target"
+        )
 
-            # Both backends should meet performance targets
-            # Adjusted for test environment variability while validating optimization works
-            assert stats["avg_ms"] < 200, (
-                f"{backend_name} average time {stats['avg_ms']:.1f}ms exceeds 200ms target"
-            )
-            assert stats["p95_ms"] < 300, (
-                f"{backend_name} P95 time {stats['p95_ms']:.1f}ms exceeds 300ms target"
-            )
-
-            print(f"✅ {backend_name} backend performance validated:")
-            print(f"   Average: {stats['avg_ms']:.1f}ms")
-            print(f"   P95: {stats['p95_ms']:.1f}ms")
+        print("✅ SQLAlchemy backend performance validated:")
+        print(f"   Average: {stats['avg_ms']:.1f}ms")
+        print(f"   P95: {stats['p95_ms']:.1f}ms")
 
     @pytest.mark.asyncio
     async def test_concurrent_connection_performance(self, test_db_manager):

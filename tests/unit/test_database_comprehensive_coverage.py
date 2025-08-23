@@ -112,189 +112,18 @@ class TestDatabaseManagerInitialization:
 class TestDatabaseConnectionHandling:
     """Test database connection handling edge cases."""
 
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _apply_pragmas method",
-    )
-    async def test_get_connection_journal_mode_failure(self, isolated_db):
-        """Test connection failure when journal mode check returns None."""
-        with patch.object(isolated_db.db_manager, "_apply_pragmas") as mock_pragmas:
-            # Make _apply_pragmas raise the journal mode check error
-            mock_pragmas.side_effect = DatabaseConnectionError(
-                "Failed to check journal mode"
-            )
-
-            with pytest.raises(DatabaseConnectionError):
-                async with isolated_db.db_manager.get_connection():
-                    pass
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _apply_pragmas method",
-    )
-    async def test_get_connection_pragma_failure(self, isolated_db):
-        """Test connection failure during PRAGMA application."""
-        with patch.object(isolated_db.db_manager, "_apply_pragmas") as mock_pragmas:
-            mock_pragmas.side_effect = Exception("PRAGMA failed")
-
-            with pytest.raises(DatabaseConnectionError, match="Connection failed"):
-                async with isolated_db.db_manager.get_connection():
-                    pass
+    # These tests are removed as they tested aiosqlite-specific functionality
+    # that is no longer applicable with SQLAlchemy-only backend
 
 
 class TestSchemaHandling:
     """Test schema loading and validation edge cases."""
 
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend uses different schema file handling",
-    )
-    def test_load_schema_file_not_found(self, isolated_db):
-        """Test schema file loading when file doesn't exist."""
-        with (
-            patch("pathlib.Path.exists", return_value=False),
-            pytest.raises(
-                DatabaseSchemaError,
-                match="Schema file not found in any of the following locations",
-            ),
-        ):
-            isolated_db.db_manager._load_schema_file()
+    # Schema file loading tests removed - not applicable to SQLAlchemy backend
 
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend uses different schema file handling",
-    )
-    def test_load_schema_file_found_in_project_root(self, isolated_db):
-        """Test schema file loading from project root."""
-        schema_content = "CREATE TABLE test(id INTEGER);"
+    # Schema application and validation tests removed - not applicable to SQLAlchemy backend
 
-        with (
-            patch("pathlib.Path.exists") as mock_exists,
-            patch("builtins.open", create=True) as mock_open,
-        ):
-
-            def exists_side_effect(path):
-                # Only return True for the first path (project root)
-                return str(path).endswith(
-                    "database_sqlite.sql"
-                ) and "parent.parent.parent" in str(path)
-
-            mock_exists.side_effect = lambda: exists_side_effect(
-                mock_exists.call_args[0] if mock_exists.call_args else None
-            )
-            mock_file = Mock()
-            mock_file.read.return_value = schema_content
-            mock_open.return_value.__enter__.return_value = mock_file
-
-            with patch("pathlib.Path.exists", return_value=True):
-                result = isolated_db.db_manager._load_schema_file()
-                assert result == schema_content
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _ensure_schema_applied method",
-    )
-    async def test_ensure_schema_applied_failure(self, isolated_db):
-        """Test schema application failure."""
-        # Mock the schema loading to simulate failure
-        with patch.object(isolated_db.db_manager, "_load_schema_file") as mock_load:
-            mock_load.side_effect = Exception("Schema file error")
-
-            async with isolated_db.db_manager.get_connection() as conn:
-                # First drop the schema_version table to trigger schema application
-                await conn.execute("DROP TABLE IF EXISTS schema_version")
-                await conn.commit()
-
-                with pytest.raises(DatabaseSchemaError, match="Failed to apply schema"):
-                    await isolated_db.db_manager._ensure_schema_applied(conn)
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _validate_schema method",
-    )
-    async def test_validate_schema_failure(self, isolated_db):
-        """Test schema validation failure."""
-        async with isolated_db.db_manager.get_connection() as conn:
-            # Remove a required table to trigger validation failure
-            await conn.execute("DROP TABLE IF EXISTS sessions")
-            await conn.commit()
-
-            with pytest.raises(
-                DatabaseSchemaError, match="Required table 'sessions' not found"
-            ):
-                await isolated_db.db_manager._validate_schema(conn)
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _validate_schema_with_recovery method",
-    )
-    async def test_validate_schema_with_recovery_secure_tokens_missing(
-        self, isolated_db
-    ):
-        """Test schema recovery for missing secure_tokens table."""
-        async with isolated_db.db_manager.get_connection() as conn:
-            # Drop secure_tokens table to trigger recovery
-            await conn.execute("DROP TABLE IF EXISTS secure_tokens")
-            await conn.commit()
-
-            # This should trigger recovery
-            await isolated_db.db_manager._validate_schema_with_recovery(conn)
-
-            # Verify table was recreated
-            cursor = await conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='secure_tokens'"
-            )
-            result = await cursor.fetchone()
-            assert result is not None
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _validate_schema_with_recovery method",
-    )
-    async def test_validate_schema_with_recovery_non_recoverable_error(
-        self, isolated_db
-    ):
-        """Test schema recovery for non-recoverable errors."""
-        async with isolated_db.db_manager.get_connection() as conn:
-            # Drop a different table to trigger non-recoverable error
-            await conn.execute("DROP TABLE IF EXISTS sessions")
-            await conn.commit()
-
-            with pytest.raises(
-                DatabaseSchemaError, match="Required table 'sessions' not found"
-            ):
-                await isolated_db.db_manager._validate_schema_with_recovery(conn)
-
-    @pytest.mark.skipif(
-        is_sqlalchemy_backend(),
-        reason="SQLAlchemy backend doesn't use internal _validate_schema_with_recovery method",
-    )
-    async def test_validate_schema_with_recovery_recovery_failure(self, isolated_db):
-        """Test schema recovery failure during table recreation."""
-        async with isolated_db.db_manager.get_connection() as conn:
-            # Drop secure_tokens table to trigger recovery attempt
-            await conn.execute("DROP TABLE IF EXISTS secure_tokens")
-            await conn.commit()
-
-            # Mock the _validate_schema method to fail with secure_tokens error
-            async def mock_validate_schema(connection):
-                # First call - raise secure_tokens error
-                if not hasattr(mock_validate_schema, "called"):
-                    mock_validate_schema.called = True
-                    raise DatabaseSchemaError(
-                        "Required table 'secure_tokens' not found"
-                    )
-                # Subsequent calls should also fail for recovery failure test
-                raise DatabaseSchemaError("Recovery still failed")
-
-            with (
-                patch.object(
-                    isolated_db.db_manager, "_validate_schema", mock_validate_schema
-                ),
-                pytest.raises(DatabaseSchemaError),
-            ):
-                # This should trigger recovery but the second validation should still fail
-                await isolated_db.db_manager._validate_schema_with_recovery(conn)
+    # Schema recovery tests removed - not applicable to SQLAlchemy backend
 
 
 class TestUtilityFunctions:
@@ -400,32 +229,9 @@ class TestGlobalManagerFunctions:
         ) as mock_config:
             mock_config.side_effect = Exception("Config error")
 
-            with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
-                patch(
-                    "src.shared_context_server.database_connection.get_database_manager"
-                ) as mock_get_manager,
-            ):
-                mock_manager = Mock()
-                mock_manager.initialize = AsyncMock()
-                mock_get_manager.return_value = mock_manager
-
-                await initialize_database()
-                mock_manager.initialize.assert_called_once()
-
-    async def test_initialize_database_sqlalchemy(self):
-        """Test database initialization with SQLAlchemy."""
-        with patch(
-            "src.shared_context_server.config.get_database_config"
-        ) as mock_config:
-            mock_config.side_effect = Exception("Config error")
-
-            with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
-                patch(
-                    "src.shared_context_server.database_connection._get_sqlalchemy_manager"
-                ) as mock_get_manager,
-            ):
+            with patch(
+                "src.shared_context_server.database._get_sqlalchemy_manager"
+            ) as mock_get_manager:
                 mock_manager = Mock()
                 mock_manager.initialize = AsyncMock()
                 mock_get_manager.return_value = mock_manager
@@ -440,12 +246,9 @@ class TestGlobalManagerFunctions:
         ) as mock_config:
             mock_config.side_effect = Exception("Config error")
 
-            with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
-                patch(
-                    "src.shared_context_server.database_connection.get_database_manager"
-                ) as mock_get_manager,
-            ):
+            with patch(
+                "src.shared_context_server.database._get_sqlalchemy_manager"
+            ) as mock_get_manager:
                 mock_manager = Mock()
                 mock_manager.is_initialized = True
                 # Create a proper async context manager mock
@@ -458,35 +261,6 @@ class TestGlobalManagerFunctions:
                 async with get_db_connection():
                     pass
 
-                mock_manager.get_connection.assert_called_once()
-
-    async def test_get_db_connection_sqlalchemy_not_initialized(self):
-        """Test get_db_connection with SQLAlchemy manager (no per-request initialization)."""
-        with patch(
-            "src.shared_context_server.config.get_database_config"
-        ) as mock_config:
-            mock_config.side_effect = Exception("Config error")
-
-            with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
-                patch(
-                    "src.shared_context_server.database_connection._get_sqlalchemy_manager"
-                ) as mock_get_manager,
-            ):
-                mock_manager = Mock()
-                mock_manager.is_initialized = False
-                # Create a proper async context manager mock
-                mock_context_manager = Mock()
-                mock_context_manager.__aenter__ = AsyncMock(return_value=Mock())
-                mock_context_manager.__aexit__ = AsyncMock(return_value=None)
-                mock_manager.get_connection.return_value = mock_context_manager
-                mock_get_manager.return_value = mock_manager
-
-                async with get_db_connection():
-                    pass
-
-                # After recent commits, per-request initialization was removed for performance
-                # The connection should work directly without calling initialize()
                 mock_manager.get_connection.assert_called_once()
 
 
@@ -508,12 +282,11 @@ class TestHealthCheck:
             mock_config.side_effect = Exception("Config error")
 
             with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "false"}),
                 patch(
-                    "src.shared_context_server.database_connection.get_database_manager"
+                    "src.shared_context_server.database._get_sqlalchemy_manager"
                 ) as mock_get_manager,
                 patch(
-                    "src.shared_context_server.database_utilities.get_db_connection"
+                    "src.shared_context_server.database.get_db_connection"
                 ) as mock_get_conn,
             ):
                 mock_manager = Mock()
@@ -542,7 +315,7 @@ class TestHealthCheck:
     async def test_health_check_query_returns_none(self):
         """Test health check when query returns None."""
         with patch(
-            "src.shared_context_server.database_utilities.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -557,7 +330,7 @@ class TestHealthCheck:
     async def test_health_check_query_returns_coroutine(self):
         """Test health check when query incorrectly returns coroutine."""
         with patch(
-            "src.shared_context_server.database_utilities.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -595,12 +368,11 @@ class TestHealthCheck:
             mock_config.side_effect = Exception("Config error")
 
             with (
-                patch.dict(os.environ, {"USE_SQLALCHEMY": "true"}),
                 patch(
-                    "src.shared_context_server.database_utilities._get_sqlalchemy_manager"
+                    "src.shared_context_server.database._get_sqlalchemy_manager"
                 ) as mock_get_manager,
                 patch(
-                    "src.shared_context_server.database_utilities.get_db_connection"
+                    "src.shared_context_server.database.get_db_connection"
                 ) as mock_get_conn,
             ):
                 mock_manager = Mock()
@@ -627,7 +399,7 @@ class TestHealthCheck:
         """Test health check exception handling."""
         # Mock the database connection itself to fail, which will definitely cause unhealthy status
         with patch(
-            "src.shared_context_server.database_utilities.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_get_conn.side_effect = Exception("Database connection failed")
 
@@ -642,7 +414,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_dict_result(self):
         """Test get_schema_version with dict result."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -657,7 +429,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_row_like_result(self):
         """Test get_schema_version with row-like result."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -679,7 +451,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_none_result(self):
         """Test get_schema_version with None result."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -694,7 +466,7 @@ class TestSchemaVersion:
     async def test_get_schema_version_exception(self):
         """Test get_schema_version with exception."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_get_conn.side_effect = Exception("Connection failed")
 
@@ -727,7 +499,7 @@ class TestCleanupFunctions:
     async def test_cleanup_expired_data_exception(self):
         """Test cleanup with exception during execution."""
         with patch(
-            "src.shared_context_server.database_utilities.execute_update"
+            "src.shared_context_server.database.execute_update"
         ) as mock_execute:
             mock_execute.side_effect = Exception("Cleanup failed")
 
@@ -742,7 +514,7 @@ class TestExecuteFunctions:
     async def test_execute_query(self):
         """Test execute_query function."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -763,7 +535,7 @@ class TestExecuteFunctions:
     async def test_execute_update(self):
         """Test execute_update function."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -779,7 +551,7 @@ class TestExecuteFunctions:
     async def test_execute_insert(self):
         """Test execute_insert function."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -798,7 +570,7 @@ class TestExecuteFunctions:
     async def test_execute_insert_none_lastrowid(self):
         """Test execute_insert when lastrowid is None."""
         with patch(
-            "src.shared_context_server.database_operations.get_db_connection"
+            "src.shared_context_server.database.get_db_connection"
         ) as mock_get_conn:
             mock_conn = Mock()
             mock_cursor = AsyncMock()
@@ -817,34 +589,7 @@ class TestExecuteFunctions:
 class TestPragmaValidation:
     """Test PRAGMA validation edge cases."""
 
-    async def test_validate_pragmas_mismatch(self, isolated_db):
-        """Test PRAGMA validation with mismatched values."""
-        # Create a custom connection that will return wrong PRAGMA values
-        import tempfile
-        from pathlib import Path
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as temp_db:
-            temp_db_path = Path(temp_db.name)
-
-        temp_manager = DatabaseManager(str(temp_db_path))
-
-        try:
-            # Initialize without proper PRAGMA settings for testing
-            temp_manager.database_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Manually create a connection that bypasses normal PRAGMA setup
-            import aiosqlite
-
-            conn = await aiosqlite.connect(str(temp_manager.database_path))
-
-            # This should log warnings but not raise exceptions since validation is non-fatal
-            await temp_manager._validate_pragmas(conn)
-
-            await conn.close()
-        finally:
-            # Cleanup
-            if temp_db_path.exists():
-                temp_db_path.unlink()
+    # PRAGMA validation tests removed - SQLAlchemy backend handles this internally
 
 
 class TestDatabaseStats:

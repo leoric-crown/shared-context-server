@@ -17,7 +17,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-import aiosqlite
+# aiosqlite removed in favor of SQLAlchemy-only backend
 from fastmcp import Context  # noqa: TC002
 from pydantic import Field
 
@@ -104,7 +104,7 @@ def _get_admin_tools() -> dict[str, Any]:
 
 # Audit logging utility
 async def audit_log(
-    _conn: aiosqlite.Connection,
+    _conn: Any,  # SQLAlchemy connection wrapper
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -293,7 +293,7 @@ async def set_memory(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
+Any  # SQLAlchemy row type
             )  # CRITICAL: Set row factory for dict access
             # Check if session exists (if session-scoped)
             if session_id:
@@ -478,7 +478,7 @@ async def get_memory(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
+Any  # SQLAlchemy row type
             )  # CRITICAL: Set row factory for dict access
             # Clean expired entries first
             await conn.execute(
@@ -578,7 +578,7 @@ async def list_memory(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
+Any  # SQLAlchemy row type
             )  # CRITICAL: Set row factory for dict access
             # Clean expired entries
             await conn.execute(

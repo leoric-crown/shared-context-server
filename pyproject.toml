@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp>=2.11.3",
-    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
     "rapidfuzz>=3.0.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
@@ -64,7 +64,7 @@ docs = [
     "mkdocstrings[python]>=0.20.0",
 ]
 postgresql = [
-    "asyncpg>=0.29.0",
+    # asyncpg is now in main dependencies
 ]
 mysql = [
     "aiomysql>=0.2.0",

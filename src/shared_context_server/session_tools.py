@@ -18,11 +18,11 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Union
 from uuid import uuid4
 
-import aiosqlite
+# aiosqlite removed in favor of SQLAlchemy-only backend
 from pydantic import Field
 
 if TYPE_CHECKING:
-    TestConnectionType = Union[aiosqlite.Connection, None]
+    pass  # TYPE_CHECKING imports removed
 else:
     TestConnectionType = Any
 
@@ -93,7 +93,7 @@ logger = logging.getLogger(__name__)
 
 # Audit logging utility
 async def audit_log(
-    _conn: aiosqlite.Connection,
+    _conn: Any,  # SQLAlchemy connection wrapper
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -228,7 +228,7 @@ async def get_session(
 
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
-            conn.row_factory = aiosqlite.Row
+            # Row factory handled by SQLAlchemy connection wrapper
 
             # Get session info
             cursor = await conn.execute(
@@ -509,7 +509,7 @@ async def get_messages(
         # Regular production connection
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
-            conn.row_factory = aiosqlite.Row
+            # Row factory handled by SQLAlchemy connection wrapper
 
             # First, verify session exists
             cursor = await conn.execute(

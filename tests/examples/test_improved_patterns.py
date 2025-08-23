@@ -4,7 +4,7 @@ Example tests demonstrating improved testing patterns with reduced mocking.
 This file showcases the new testing approach that:
 1. Uses real database connections instead of excessive mocking
 2. Provides proper test isolation through clean database state
-3. Supports both aiosqlite and SQLAlchemy backends seamlessly
+3. Uses SQLAlchemy backend for consistent database operations
 4. Implements proper cleanup to prevent state leakage between tests
 
 These patterns replace overmocking with integration testing for better test fidelity.
@@ -113,26 +113,26 @@ class TestImprovedDatabasePatterns:
         await assert_message_exists(db_connection, session_id, "Helper message")
 
     @pytest.mark.asyncio
-    async def test_cross_backend_compatibility(self, isolated_db: DatabaseTestManager):
-        """Test that tests work regardless of backend (aiosqlite vs SQLAlchemy)."""
-        # This test works the same way regardless of USE_SQLALCHEMY setting
+    async def test_sqlalchemy_backend_operations(self, isolated_db: DatabaseTestManager):
+        """Test that database operations work correctly with SQLAlchemy backend."""
+        # This test validates SQLAlchemy backend operations
         async with isolated_db.get_connection() as conn:
             # Create test data
             await conn.execute(
                 """
                 INSERT INTO sessions (id, purpose, created_by, metadata)
-                VALUES ('backend_test', 'Backend compatibility', 'test_agent', '{"backend": "any"}')
+                VALUES ('backend_test', 'SQLAlchemy operations', 'test_agent', '{"backend": "sqlalchemy"}')
                 """
             )
             await conn.commit()
 
-            # Test JSON handling (works with both backends)
+            # Test JSON handling with SQLAlchemy backend
             cursor = await conn.execute(
                 "SELECT metadata FROM sessions WHERE id = 'backend_test'"
             )
             result = await cursor.fetchone()
             metadata_json = result[0]
-            assert '"backend": "any"' in metadata_json
+            assert '"backend": "sqlalchemy"' in metadata_json
 
     @pytest.mark.asyncio
     async def test_no_state_leakage(self, isolated_db: DatabaseTestManager):

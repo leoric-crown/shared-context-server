@@ -18,12 +18,13 @@ import traceback
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Union
 
-import aiosqlite
+# aiosqlite removed in favor of SQLAlchemy-only backend
 from pydantic import Field
 from rapidfuzz import fuzz, process
 
 if TYPE_CHECKING:
-    TestConnectionType = Union[aiosqlite.Connection, None]
+    # TestConnectionType now handled by SQLAlchemy connection wrapper
+    TestConnectionType = Any
 else:
     TestConnectionType = Any
 
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # Audit logging utility
 async def audit_log(
-    _conn: aiosqlite.Connection,
+    _conn: Any,  # SQLAlchemy connection wrapper
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -122,7 +123,7 @@ async def search_context(
         # Production connection path
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
-            conn.row_factory = aiosqlite.Row
+            # Row factory handled by SQLAlchemy connection wrapper
 
             # First, verify session exists
             cursor = await conn.execute(
@@ -337,7 +338,7 @@ async def search_by_sender(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
+Any  # SQLAlchemy row type
             )  # CRITICAL: Set row factory for dict access
 
             # First, verify session exists
@@ -406,7 +407,7 @@ async def search_by_timerange(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
+Any  # SQLAlchemy row type
             )  # CRITICAL: Set row factory for dict access
 
             # First, verify session exists
