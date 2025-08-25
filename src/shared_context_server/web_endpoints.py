@@ -85,9 +85,7 @@ async def dashboard(request: Request) -> HTMLResponse:
         database_url = os.getenv("DATABASE_URL", "not_set")
         ci_env = bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
 
-        logger.info(
-            f"Environment: DATABASE_URL={database_url}, CI={ci_env}"
-        )
+        logger.info(f"Environment: DATABASE_URL={database_url}, CI={ci_env}")
 
         return HTMLResponse(
             f"<html><body><h1>Dashboard Error</h1><p>Type: {type(e).__name__}</p><p>Error: {e}</p></body></html>",

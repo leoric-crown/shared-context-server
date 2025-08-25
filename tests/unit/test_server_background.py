@@ -446,14 +446,10 @@ class TestBackgroundTaskSystem:
 
         # Mock the cleanup_subscriptions_task to avoid long-running sleeps
         async def mock_cleanup_task():
-            try:
-                # Simulate task work without long sleeps
-                await asyncio.sleep(0.001)  # Very short sleep
-                while True:
-                    await asyncio.sleep(0.001)  # Simulate periodic work
-            except asyncio.CancelledError:
-                # Task should handle cancellation gracefully
-                raise
+            # Simulate task work without long sleeps
+            await asyncio.sleep(0.001)  # Very short sleep
+            while True:
+                await asyncio.sleep(0.001)  # Simulate periodic work
 
         # Start mocked task and cancel it quickly
         task = asyncio.create_task(mock_cleanup_task())

@@ -686,7 +686,6 @@ class SimpleSQLAlchemyManager:
         """Close the engine and all connections."""
         await self.engine.dispose()
 
-
     def get_stats(self) -> dict[str, Any]:
         """
         Get database manager statistics.

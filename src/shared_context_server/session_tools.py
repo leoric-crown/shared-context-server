@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import traceback
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 # aiosqlite removed in favor of SQLAlchemy-only backend

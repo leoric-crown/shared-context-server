@@ -16,7 +16,7 @@ import logging
 import time
 import traceback
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 # aiosqlite removed in favor of SQLAlchemy-only backend
 from pydantic import Field
@@ -338,8 +338,8 @@ async def search_by_sender(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-Any  # SQLAlchemy row type
-            )  # CRITICAL: Set row factory for dict access
+                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
+            )
 
             # First, verify session exists
             cursor = await conn.execute(
@@ -407,8 +407,8 @@ async def search_by_timerange(
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-Any  # SQLAlchemy row type
-            )  # CRITICAL: Set row factory for dict access
+                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
+            )
 
             # First, verify session exists
             cursor = await conn.execute(

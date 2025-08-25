@@ -288,7 +288,7 @@ class SimpleSQLAlchemyManager:
             if "sqlite" in self.database_url:
 
                 @event.listens_for(self.engine.sync_engine, "connect")
-                def set_sqlite_pragma(dbapi_connection, connection_record):
+                def set_sqlite_pragma(dbapi_connection, _connection_record):
                     cursor = dbapi_connection.cursor()
                     for pragma in _SQLITE_PRAGMAS:
                         cursor.execute(pragma)
@@ -421,12 +421,8 @@ class SimpleSQLAlchemyManager:
                     # Standard transactional mode
                     async with self.engine.begin() as conn:
                         wrapper = SQLAlchemyConnectionWrapper(conn, autocommit=False)
-                        try:
-                            yield wrapper
-                            return
-                        except Exception:
-                            # Connection will be automatically rolled back by SQLAlchemy
-                            raise
+                        yield wrapper
+                        return
             except Exception as e:
                 if attempt < max_retries - 1 and (
                     "database is locked" in str(e).lower()

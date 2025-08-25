@@ -80,7 +80,7 @@ class TestDatabaseManager:
                     )
                     time.sleep(delay)
                 else:
-                    logger.error(
+                    logger.exception(
                         f"All {max_retries + 1} temp file creation attempts failed"
                     )
 

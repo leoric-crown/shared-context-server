@@ -13,7 +13,6 @@ import os
 # Import testing helpers from conftest.py
 import sys
 import time
-from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -30,12 +29,11 @@ from shared_context_server.server import (
 
 sys.path.append(str(Path(__file__).parent.parent))
 from conftest import MockContext, call_fastmcp_tool
+
 from tests.fixtures.database import (
     DatabaseTestManager,
     patch_database_for_test,
 )
-
-
 
 
 @pytest.mark.asyncio

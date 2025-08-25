@@ -52,82 +52,88 @@ class TestUsageGuidanceCore:
         """Test that coordination guidance is generated correctly."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "coord_agent",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            ) as mock_validate,
+        ):
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "coord_agent",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="coordination",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="coordination",
+            )
 
-                assert result.get("success") is True
-                assert "guidance" in result
-                assert result.get("guidance_type") == "coordination"
+            assert result.get("success") is True
+            assert "guidance" in result
+            assert result.get("guidance_type") == "coordination"
 
     async def test_security_guidance_generation(self, isolated_db):
         """Test that security guidance is generated correctly."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "sec_agent",
-                    "agent_type": "admin",
-                    "permissions": ["read", "write", "admin"],
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            ) as mock_validate,
+        ):
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "sec_agent",
+                "agent_type": "admin",
+                "permissions": ["read", "write", "admin"],
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-admin-token",
-                    guidance_type="security",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-admin-token",
+                guidance_type="security",
+            )
 
-                assert result.get("success") is True
-                assert "guidance" in result
-                assert result.get("guidance_type") == "security"
+            assert result.get("success") is True
+            assert "guidance" in result
+            assert result.get("guidance_type") == "security"
 
     async def test_troubleshooting_guidance_generation(self, isolated_db):
         """Test that troubleshooting guidance is generated correctly."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "trouble_agent",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            ) as mock_validate,
+        ):
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "trouble_agent",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="troubleshooting",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="troubleshooting",
+            )
 
-                assert result.get("success") is True
-                assert "guidance" in result
-                assert result.get("guidance_type") == "troubleshooting"
+            assert result.get("success") is True
+            assert "guidance" in result
+            assert result.get("guidance_type") == "troubleshooting"
 
     async def test_permission_boundary_enforcement(self, isolated_db):
         """Test that guidance respects permission boundaries."""
@@ -161,28 +167,30 @@ class TestUsageGuidanceCore:
         """Test error handling for invalid guidance types."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "test_agent",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            ) as mock_validate,
+        ):
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "test_agent",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="invalid_type",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="invalid_type",
+            )
 
-                # Should handle gracefully - either error or fallback guidance
-                # The exact behavior depends on implementation
-                assert "error" in result or result.get("success") is not None
+            # Should handle gracefully - either error or fallback guidance
+            # The exact behavior depends on implementation
+            assert "error" in result or result.get("success") is not None
 
 
 class TestUsageGuidanceAuthentication:

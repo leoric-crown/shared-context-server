@@ -19,11 +19,11 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from ..utils.llm_errors import create_system_error
+
 # Configure sqlite3 to avoid deprecated datetime adapter warnings in Python 3.12+
 sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
 sqlite3.register_converter("TIMESTAMP", lambda b: datetime.fromisoformat(b.decode()))
-
-from ..utils.llm_errors import create_system_error
 
 logger = logging.getLogger(__name__)
 

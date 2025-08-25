@@ -99,12 +99,8 @@ class TestServerLifecycleHandling:
 
         # Test a simple background task pattern that handles cancellation
         async def cancellable_task():
-            try:
-                while True:
-                    await asyncio.sleep(0.001)  # Very short sleep for testing
-            except asyncio.CancelledError:
-                # Task should handle cancellation gracefully
-                raise  # Re-raise CancelledError as expected
+            while True:
+                await asyncio.sleep(0.001)  # Very short sleep for testing
 
         task = asyncio.create_task(cancellable_task())
         await asyncio.sleep(0.005)  # Let it run briefly
@@ -113,7 +109,7 @@ class TestServerLifecycleHandling:
         task.cancel()
 
         try:
-            result = await task
+            await task
             pytest.fail("Cancelled task should raise CancelledError")
         except asyncio.CancelledError:
             # This is expected behavior for cancelled tasks

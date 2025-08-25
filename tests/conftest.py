@@ -29,6 +29,8 @@ import pytest
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
+from shared_context_server.auth import AuthInfo
+
 
 @pytest.fixture(autouse=True, scope="session")
 def ensure_worker_environment():
@@ -67,8 +69,6 @@ async def reset_process_state_for_multiprocessing():
     # Final context reset
     reset_token_context()
 
-
-from shared_context_server.auth import AuthInfo
 
 pytest_plugins = ["tests.fixtures.database"]
 
@@ -947,7 +947,9 @@ async def isolate_database_globals():
     CRITICAL: This fixture properly disposes SQLAlchemy engines to prevent 31+ second teardowns
     by using the ContextVar-aware disposal function.
     """
-    from src.shared_context_server.database import dispose_current_sqlalchemy_manager
+    from shared_context_server.database_manager import (
+        dispose_current_sqlalchemy_manager,
+    )
 
     # Pre-test cleanup: Ensure clean ContextVar state
     with suppress(Exception):

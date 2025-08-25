@@ -13,12 +13,13 @@ import tempfile
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
 
-from src.shared_context_server.database import DatabaseManager
+if TYPE_CHECKING:
+    from src.shared_context_server.database import DatabaseManager
 
 # Global environment variables for pytest-xdist worker isolation
 # These ensure all workers have consistent authentication configuration

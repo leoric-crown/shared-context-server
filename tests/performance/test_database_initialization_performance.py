@@ -229,10 +229,9 @@ class TestDatabaseInitializationPerformance:
                 return False
 
         # Run all operations concurrently for better performance
-        tasks = []
-        for query in test_queries:
-            for _ in range(10):
-                tasks.append(test_query_operation(query))
+        tasks = [
+            test_query_operation(query) for query in test_queries for _ in range(10)
+        ]
 
         results = await asyncio.gather(*tasks)
         successful_operations = sum(results)
