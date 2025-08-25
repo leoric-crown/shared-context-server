@@ -20,6 +20,26 @@ import pytest
 
 from src.shared_context_server.database import DatabaseManager
 
+# Global environment variables for pytest-xdist worker isolation
+# These ensure all workers have consistent authentication configuration
+_WORKER_ENV_VARS = {
+    "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+    "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+    "API_KEY": "default-test-key-for-worker-isolation",
+}
+
+
+def ensure_worker_environment() -> None:
+    """
+    Ensure pytest-xdist workers have proper environment variables.
+
+    This fixes the authentication flakiness by ensuring that environment
+    variables are consistently available across all pytest-xdist workers.
+    """
+    for key, value in _WORKER_ENV_VARS.items():
+        if key not in os.environ:
+            os.environ[key] = value
+
 
 class DatabaseTestManager:
     """
@@ -37,10 +57,32 @@ class DatabaseTestManager:
 
     async def setup(self) -> None:
         """Initialize test database with proper backend detection."""
-        # Create temporary database in system tmp directory
+        # Ensure worker environment is properly set for pytest-xdist isolation
+        ensure_worker_environment()
 
-        # Create temp file and get just the filename
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        # Create temporary database in system tmp directory with enhanced worker isolation
+        # Enhanced unique identifier for worker isolation
+        import socket
+        import threading
+        import time
+        import uuid
+
+        worker_id = os.environ.get("PYTEST_XDIST_WORKER_ID", "main")
+        process_id = os.getpid()
+        thread_id = threading.get_ident()
+        hostname = socket.gethostname()
+        timestamp = int(time.time() * 1000000)  # microsecond timestamp
+        uuid_part = uuid.uuid4().hex[:12]  # Longer UUID part for better uniqueness
+
+        # Comprehensive unique suffix to prevent any database file conflicts
+        unique_suffix = (
+            f"{hostname}_{worker_id}_{process_id}_{thread_id}_{timestamp}_{uuid_part}"
+        )
+
+        # Create temp file with enhanced unique name per worker
+        with tempfile.NamedTemporaryFile(
+            suffix=f"_{unique_suffix}.db", delete=False
+        ) as f:
             temp_full_path = f.name
 
         # Use full temp path for both backends
@@ -78,7 +120,7 @@ class DatabaseTestManager:
         """Patch global managers to use test database."""
         try:
             import src.shared_context_server.database as db_module
-            
+
             # Set SQLAlchemy manager (aiosqlite backend removed)
             db_module._sqlalchemy_manager = self.db_manager
 
@@ -110,36 +152,66 @@ class DatabaseTestManager:
         }
 
     async def cleanup(self) -> None:
-        """Clean up test database and restore state."""
+        """Clean up test database and restore state with enhanced isolation."""
+        import asyncio
+
+        # Clear authentication context to prevent worker interference
+        try:
+            from src.shared_context_server.auth_context import reset_token_context
+
+            reset_token_context()
+        except Exception:
+            # Ignore context cleanup failures
+            pass
+
         # Restore global managers first
         self._restore_global_managers()
 
-        # Close database manager
+        # Close database manager with timeout for worker stability
         if self.db_manager:
-            # Proper cleanup for different backends
-            if hasattr(self.db_manager, "close"):
-                await self.db_manager.close()
-            self.db_manager = None
+            try:
+                # Use timeout to prevent hanging in worker cleanup
+                if hasattr(self.db_manager, "close"):
+                    await asyncio.wait_for(self.db_manager.close(), timeout=5.0)
+                self.db_manager = None
+            except asyncio.TimeoutError:
+                # Force cleanup if timeout occurs
+                self.db_manager = None
+            except Exception:
+                # Ignore cleanup errors in test environment
+                self.db_manager = None
 
-        # Remove temporary database file using full path
+        # Enhanced temporary database file removal with retries
         if (
             hasattr(self, "_full_temp_path")
             and self._full_temp_path
             and Path(self._full_temp_path).exists()
         ):
-            import contextlib
+            # Retry file deletion up to 3 times for worker stability
+            for attempt in range(3):
+                try:
+                    Path(self._full_temp_path).unlink()
+                    break
+                except OSError:
+                    if attempt < 2:  # Retry
+                        import time
 
-            with contextlib.suppress(OSError):
-                Path(self._full_temp_path).unlink()
+                        time.sleep(0.01 * (attempt + 1))  # Small delay
+                    # Ignore final failure - temp file will be cleaned up by OS
+
         self.temp_db_path = None
         self._full_temp_path = None
 
     @asynccontextmanager
-    async def get_connection(self):
-        """Get database connection for testing."""
+    async def get_connection(self, autocommit: bool = False):
+        """Get database connection for testing.
+
+        Args:
+            autocommit: If True, use autocommit mode for read-only operations (faster)
+        """
         if not self.db_manager:
             raise RuntimeError("Database manager not initialized")
-        async with self.db_manager.get_connection() as conn:
+        async with self.db_manager.get_connection(autocommit=autocommit) as conn:
             yield conn
 
 
@@ -279,8 +351,8 @@ def patch_database_for_test(db_manager: DatabaseTestManager):
     """
 
     @asynccontextmanager
-    async def mock_get_db_connection():
-        async with db_manager.get_connection() as conn:
+    async def mock_get_db_connection(autocommit: bool = False):
+        async with db_manager.get_connection(autocommit=autocommit) as conn:
             yield conn
 
     # Create patches for all common database import patterns

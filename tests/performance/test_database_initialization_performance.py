@@ -9,14 +9,12 @@ Target: 300ms → <30ms improvement for database connections.
 
 import asyncio
 import logging
-import os
 import statistics
 import time
-from unittest.mock import patch
 
 import pytest
 
-from shared_context_server.database_connection import get_db_connection
+from shared_context_server.database import get_db_connection
 
 
 class TestDatabaseInitializationPerformance:
@@ -164,7 +162,7 @@ class TestDatabaseInitializationPerformance:
         max_connection_time = max(connection_times)
 
         # Performance requirements for concurrent operations
-        # Adjusted for test environment variability while validating optimization works  
+        # Adjusted for test environment variability while validating optimization works
         assert total_time < 5, (
             f"Concurrent operations took {total_time:.1f}s, should be <5s"
         )

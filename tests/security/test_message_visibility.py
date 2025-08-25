@@ -15,7 +15,7 @@ class TestMessageVisibility:
         """Test that private messages are only visible to their sender."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create session first
             agent_a_ctx = MockContext(session_id="visibility_test", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="visibility_test", agent_id="agent_b")
@@ -79,7 +79,7 @@ class TestMessageVisibility:
         """Test that agent_only messages are properly filtered in Phase 1."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create session
             agent_a_ctx = MockContext(session_id="agent_only_test", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="agent_only_test", agent_id="agent_b")
@@ -128,7 +128,7 @@ class TestMessageVisibility:
         from shared_context_server import server
         from shared_context_server.auth import AuthInfo
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create regular agent context (no admin permissions)
             regular_ctx = MockContext(session_id="admin_test", agent_id="regular_agent")
 
@@ -198,7 +198,7 @@ class TestMessageVisibility:
         """Test that agents cannot see messages from sessions they're not part of."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Agent A creates session 1
             agent_a_ctx = MockContext(session_id="session_1", agent_id="agent_a")
             session_1_result = await call_fastmcp_tool(
@@ -261,7 +261,7 @@ class TestMessageVisibility:
         """Test that visibility_filter parameter properly filters messages."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             agent_ctx = MockContext(session_id="filter_test", agent_id="test_agent")
 
             session_result = await call_fastmcp_tool(
@@ -332,7 +332,7 @@ class TestMessageVisibility:
         """Test that search functionality respects message visibility controls."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create session with two agents
             agent_a_ctx = MockContext(session_id="search_test", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="search_test", agent_id="agent_b")

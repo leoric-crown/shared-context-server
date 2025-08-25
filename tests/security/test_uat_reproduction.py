@@ -30,7 +30,7 @@ class TestUATSecurityReproduction:
         """
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== UAT MEMORY ISOLATION REPRODUCTION TEST ===")
 
             # Recreate EXACT UAT scenario contexts
@@ -114,7 +114,7 @@ class TestUATSecurityReproduction:
         """
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== UAT MESSAGE SIZE LIMIT TEST ===")
 
             agent_ctx = MockContext(session_id="size_test", agent_id="size_test_agent")
@@ -178,7 +178,7 @@ class TestUATSecurityReproduction:
         """
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== UAT PARAMETER VALIDATION TEST ===")
 
             agent_ctx = MockContext(
@@ -245,7 +245,7 @@ class TestUATSecurityReproduction:
         from shared_context_server import server
         from shared_context_server.auth import AuthInfo
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== JWT TOKEN HANDLING TEST ===")
 
             # Test with properly JWT-authenticated context
@@ -311,7 +311,7 @@ class TestUATSecurityReproduction:
         """
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== ADMIN PERMISSION VERIFICATION ===")
 
             # Regular agent (no admin permissions)
@@ -368,7 +368,7 @@ class TestUATSecurityReproduction:
         """
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             print("\n=== COMPREHENSIVE SECURITY MODEL VALIDATION ===")
 
             # Create three agents with different roles

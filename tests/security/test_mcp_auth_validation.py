@@ -55,7 +55,7 @@ class TestMCPAuthValidation:
         """Test that only admins can create admin_only messages."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Admin creates session
             session_result = await call_fastmcp_tool(
                 server.create_session, admin_ctx, purpose="Admin security test"
@@ -91,7 +91,7 @@ class TestMCPAuthValidation:
         """Test that admin_only messages are only visible to admins."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Admin creates session and adds both public and admin_only messages
             session_result = await call_fastmcp_tool(
                 server.create_session, admin_ctx, purpose="Visibility test"
@@ -161,7 +161,7 @@ class TestMCPAuthValidation:
             auth_method="jwt",
         )
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Agent 1 creates session and private message
             session_result = await call_fastmcp_tool(
                 server.create_session, agent1_ctx, purpose="Agent isolation test"
@@ -216,7 +216,7 @@ class TestMCPAuthValidation:
         agent1_ctx = MockContext(session_id="memory_test", agent_id="memory-agent-1")
         agent2_ctx = MockContext(session_id="memory_test", agent_id="memory-agent-2")
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Agent 1 sets memory
             set_result = await call_fastmcp_tool(
                 server.set_memory,
@@ -255,7 +255,7 @@ class TestMCPAuthValidation:
             auth_method="api_key",
         )
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Agent with read-only permissions can create sessions
             # (create_session doesn't require write permission in current implementation)
             session_result = await call_fastmcp_tool(
@@ -279,7 +279,7 @@ class TestMCPAuthValidation:
         """Test that search results respect permission-based filtering."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Admin creates session with mixed visibility messages
             session_result = await call_fastmcp_tool(
                 server.create_session, admin_ctx, purpose="Search filtering test"

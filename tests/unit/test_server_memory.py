@@ -21,7 +21,7 @@ class TestMemoryOperationsEdgeCases:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             yield server
 
     async def test_set_memory_with_complex_json_value(

@@ -15,7 +15,7 @@ class TestAgentMemoryIsolation:
         """Test that agents cannot access each other's global memory."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Set up two different agent contexts
             agent_a_ctx = MockContext(session_id="test_session", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="test_session", agent_id="agent_b")
@@ -60,7 +60,7 @@ class TestAgentMemoryIsolation:
         """Test that agents cannot access each other's session-scoped memory."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Set up two different agent contexts in the same session
             agent_a_ctx = MockContext(session_id="memory_test", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="memory_test", agent_id="agent_b")
@@ -114,7 +114,7 @@ class TestAgentMemoryIsolation:
         """Test that session-scoped memory is isolated between sessions."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Same agent in different sessions
             agent_ctx_s1 = MockContext(session_id="session_1", agent_id="test_agent")
             agent_ctx_s2 = MockContext(session_id="session_2", agent_id="test_agent")
@@ -177,7 +177,7 @@ class TestAgentMemoryIsolation:
         """Test that agents can only list their own memory entries."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Set up two agents
             agent_a_ctx = MockContext(session_id="list_test", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="list_test", agent_id="agent_b")
@@ -234,7 +234,7 @@ class TestAgentMemoryIsolation:
         """Reproduce the exact UAT scenario that claimed memory isolation was broken."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Recreate UAT scenario exactly as described
             agent_1_ctx = MockContext(
                 session_id="uat_test", agent_id="test-phase3-complete"
@@ -278,7 +278,7 @@ class TestAgentMemoryIsolation:
         """Test that agent identity derivation doesn't create cross-contamination."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Test scenario where agents might get same derived IDs
             session_id = "context_derivation_test"
 

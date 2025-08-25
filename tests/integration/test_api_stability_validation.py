@@ -22,15 +22,10 @@ import pytest
 
 from shared_context_server.auth import AuthInfo
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
-from tests.fixtures.database import is_sqlalchemy_backend
 
 
 class TestAPIStabilityValidation:
     """Comprehensive API stability validation for refactoring."""
-
-    def _get_backend(self) -> str:
-        """Get the correct backend based on environment variable."""
-        return "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
 
     @pytest.fixture
     def authenticated_context(self):
@@ -53,7 +48,7 @@ class TestAPIStabilityValidation:
         """Test session management tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test create_session API stability
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -99,7 +94,7 @@ class TestAPIStabilityValidation:
         """Test message storage tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Create session for message testing
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Message API test"
@@ -152,7 +147,7 @@ class TestAPIStabilityValidation:
         """Test search tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Setup test data
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Search API test"
@@ -204,7 +199,7 @@ class TestAPIStabilityValidation:
         """Test agent memory tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Setup session
             session_result = await call_fastmcp_tool(
                 server.create_session, authenticated_context, purpose="Memory API test"
@@ -271,7 +266,7 @@ class TestAPIStabilityValidation:
         """Test admin tools maintain stable API contracts."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test get_performance_metrics API stability
             metrics_result = await call_fastmcp_tool(
                 server.get_performance_metrics, authenticated_context
@@ -318,7 +313,7 @@ class TestAPIStabilityValidation:
 
         # Ensure clean singleton state before test
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test authenticate_agent API stability
             mock_ctx = MockContext()
             mock_ctx.headers = {"X-API-Key": "test_api_key"}  # Add API key header
@@ -363,7 +358,7 @@ class TestAPIStabilityValidation:
         """Test that error responses maintain consistent structure across all tools."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test invalid session_id error consistency
             try:
                 error_result = await call_fastmcp_tool(
@@ -394,7 +389,7 @@ class TestAPIStabilityValidation:
         """Test that parameter validation is consistent across all tools."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test missing required parameters
             with pytest.raises((TypeError, ValueError, AssertionError)) as exc_info:
                 await call_fastmcp_tool(
@@ -412,7 +407,7 @@ class TestAPIStabilityValidation:
         """Test API stability under concurrent load."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Create session for concurrent testing
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -491,7 +486,7 @@ class TestAPIStabilityValidation:
         """Test that performance contracts are maintained during refactoring."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Setup test data
             session_result = await call_fastmcp_tool(
                 server.create_session,
@@ -588,7 +583,7 @@ class TestAPIStabilityValidation:
 
         # Ensure clean singleton state before test
 
-        with patch_database_connection(test_db_manager, backend=self._get_backend()):
+        with patch_database_connection(test_db_manager):
             # Test complete authentication flow
 
             # 1. Authenticate agent

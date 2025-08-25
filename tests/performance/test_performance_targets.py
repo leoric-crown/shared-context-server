@@ -1,67 +1,26 @@
 """
-Performance validation tests for Phase 4 production targets.
+Performance validation tests adapted for SQLAlchemy-only architecture (post PRP-024).
 
-Tests that the performance optimization system meets production requirements:
-- API response time: P95 < 100ms
-- Database queries: Average < 50ms
-- Connection pool utilization: < 80%
-- Cache hit ratio: > 70%
-- Support: 20+ concurrent agents
+Tests basic performance metrics and caching functionality:
+- Cache performance validation
+- Performance metrics availability
+- Basic database connection validation
 
-Built according to PRP-005: Phase 4 - Production Ready specification.
+Note: Connection pool performance tests removed as aiosqlite ConnectionPoolManager
+was deprecated in PRP-024. SQLAlchemy handles connection pooling internally.
 """
 
-import asyncio
-import contextlib
 import statistics
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
 
 from shared_context_server.utils.caching import cache_manager
-from shared_context_server.utils.performance import (
-    db_pool,
-    get_performance_metrics_dict,
-)
+from shared_context_server.utils.performance import get_performance_metrics_dict
 
 
 class TestPerformanceTargets:
-    """Test production performance targets."""
-
-    @pytest.fixture
-    async def temp_database(self):
-        """Create temporary database for performance testing."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        try:
-            yield db_path
-        finally:
-            # Cleanup
-            try:
-                db_file = Path(db_path)
-                if db_file.exists():
-                    db_file.unlink()
-            except Exception:
-                pass
-
-    @pytest.fixture
-    async def initialized_pool(self, temp_database):
-        """Initialize isolated connection pool for testing."""
-        # Reset the global pool to ensure clean state
-        with contextlib.suppress(Exception):
-            await db_pool.reset_for_testing()
-
-        # Initialize with test-specific settings
-        await db_pool.initialize_pool(temp_database, min_size=3, max_size=25)
-
-        yield db_pool
-
-        # Cleanup - reset to clean state
-        with contextlib.suppress(Exception):
-            await db_pool.reset_for_testing()
+    """Test basic performance targets with SQLAlchemy backend."""
 
     async def measure_operation_time(
         self, operation_func, iterations: int = 10
@@ -82,37 +41,6 @@ class TestPerformanceTargets:
             "min_ms": min(times),
             "max_ms": max(times),
         }
-
-    @pytest.mark.asyncio
-    async def test_connection_pool_performance(self, initialized_pool):
-        """Test connection pool meets performance targets."""
-
-        async def connection_op():
-            async with initialized_pool.get_connection("test_operation") as conn:
-                await conn.execute("SELECT 1")
-                return True
-
-        stats = await self.measure_operation_time(connection_op, iterations=100)
-
-        # Assert performance targets for database operations
-        assert stats["p95_ms"] < 50, (
-            f"Database operation P95 {stats['p95_ms']:.1f}ms exceeds 50ms target"
-        )
-        assert stats["avg_ms"] < 25, (
-            f"Database operation average {stats['avg_ms']:.1f}ms exceeds 25ms target"
-        )
-
-        # Check pool utilization
-        pool_stats = initialized_pool.get_performance_stats()
-        utilization = pool_stats["pool_stats"]["pool_utilization"]
-        assert utilization < 0.8, (
-            f"Pool utilization {utilization:.1%} exceeds 80% target"
-        )
-
-        print(
-            f"✅ Connection pool performance: {stats['avg_ms']:.1f}ms avg, {stats['p95_ms']:.1f}ms P95"
-        )
-        print(f"✅ Pool utilization: {utilization:.1%}")
 
     @pytest.mark.asyncio
     async def test_cache_performance(self):
@@ -157,72 +85,24 @@ class TestPerformanceTargets:
         print(f"✅ Cache hit ratio: {hit_ratio:.1%}")
 
     @pytest.mark.asyncio
-    async def test_concurrent_operations(self, initialized_pool):
-        """Test concurrent database operations performance."""
-
-        async def concurrent_db_operation(operation_id: int):
-            """Simulate concurrent database operation."""
-            try:
-                async with initialized_pool.get_connection(
-                    f"concurrent_op_{operation_id}"
-                ) as conn:
-                    # Simulate work
-                    await conn.execute("SELECT 1 WHERE ? > 0", (operation_id,))
-                    await asyncio.sleep(0.001)  # 1ms simulated work
-                    return {"success": True, "operation_id": operation_id}
-            except Exception as e:
-                return {"success": False, "error": str(e), "operation_id": operation_id}
-
-        # Test with 20 concurrent operations (meets 20+ concurrent agents requirement)
-        concurrent_count = 25
-        start_time = time.time()
-
-        tasks = [concurrent_db_operation(i) for i in range(concurrent_count)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        elapsed_time = time.time() - start_time
-
-        # Analyze results
-        successful = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
-        concurrent_count - successful
-        success_rate = successful / concurrent_count
-
-        # Assert performance requirements
-        assert successful >= 20, f"Only {successful} operations succeeded, need 20+"
-        assert success_rate >= 0.95, (
-            f"Success rate {success_rate:.1%} below 95% threshold"
-        )
-        assert elapsed_time < 5, (
-            f"Concurrent operations took {elapsed_time:.1f}s, should be <5s"
-        )
-
-        # Check final pool utilization
-        pool_stats = initialized_pool.get_performance_stats()
-        final_utilization = pool_stats["pool_stats"]["pool_utilization"]
-
-        print(f"✅ Concurrent operations: {successful}/{concurrent_count} succeeded")
-        print(f"   Success rate: {success_rate:.1%}, Total time: {elapsed_time:.1f}s")
-        print(f"   Final pool utilization: {final_utilization:.1%}")
-
-    @pytest.mark.asyncio
-    async def test_performance_metrics_availability(self, initialized_pool):
-        """Test performance metrics are available and contain expected data."""
-
-        # Generate some activity first
-        async def generate_activity():
-            for i in range(10):
-                async with initialized_pool.get_connection(f"metrics_test_{i}") as conn:
-                    await conn.execute("SELECT ?", (i,))
-
-        await generate_activity()
+    async def test_performance_metrics_availability(self):
+        """Test performance metrics are available and return expected structure."""
 
         # Test performance metrics collection
         metrics = get_performance_metrics_dict()
 
-        # Should return success
+        # Should return success (even if deprecated)
         assert metrics.get("success") is True, "Performance metrics should be available"
 
-        # Check database performance metrics
+        # Check that SQLAlchemy migration status is indicated
+        assert metrics.get("database_backend") == "sqlalchemy", (
+            "Should indicate SQLAlchemy backend"
+        )
+        assert metrics.get("migration_status") == "aiosqlite_removed", (
+            "Should indicate migration complete"
+        )
+
+        # Check database performance metrics structure (even if zeroed)
         db_performance = metrics.get("database_performance", {})
         assert "connection_stats" in db_performance, "Should contain connection stats"
         assert "pool_stats" in db_performance, "Should contain pool stats"
@@ -230,30 +110,25 @@ class TestPerformanceTargets:
             "Should contain performance indicators"
         )
 
-        # Check performance indicators
+        # Check performance indicators exist (values may be zero in deprecated mode)
         indicators = db_performance["performance_indicators"]
         assert "avg_query_time_ms" in indicators, "Should track average query time"
         assert "pool_utilization" in indicators, "Should track pool utilization"
         assert "error_rate" in indicators, "Should track error rate"
 
-        # Performance targets validation
-        avg_query_time = indicators["avg_query_time_ms"]
-        pool_utilization = indicators["pool_utilization"]
-        error_rate = indicators["error_rate"]
-
-        # Verify performance is within acceptable ranges
-        assert avg_query_time < 100, (
-            f"Average query time {avg_query_time:.1f}ms too high"
+        # Check system info indicates migration
+        system_info = metrics.get("system_info", {})
+        assert system_info.get("migration_complete") is True, (
+            "Should indicate migration complete"
         )
-        assert pool_utilization < 1.0, (
-            f"Pool utilization {pool_utilization:.1%} at maximum"
+        assert system_info.get("database_backend") == "sqlalchemy", (
+            "Should show SQLAlchemy backend"
         )
-        assert error_rate < 0.1, f"Error rate {error_rate:.1%} too high"
 
-        print("✅ Performance metrics available:")
-        print(f"   Average query time: {avg_query_time:.1f}ms")
-        print(f"   Pool utilization: {pool_utilization:.1%}")
-        print(f"   Error rate: {error_rate:.1%}")
+        print("✅ Performance metrics available (post-migration):")
+        print(f"   Database backend: {metrics.get('database_backend')}")
+        print(f"   Migration status: {metrics.get('migration_status')}")
+        print(f"   Migration complete: {system_info.get('migration_complete')}")
 
 
 if __name__ == "__main__":

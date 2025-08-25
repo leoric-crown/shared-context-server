@@ -20,12 +20,12 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
 
-import aiosqlite
 from fastmcp.resources import Resource, TextResource
 from pydantic import AnyUrl
 
 from .core_server import mcp
 from .database import get_db_connection
+from .database_manager import CompatibleRow
 
 # Removed sanitization imports - using generic logging instead
 
@@ -153,8 +153,8 @@ async def get_session_resource(session_id: str, ctx: Any = None) -> Resource:
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+                CompatibleRow  # CRITICAL: Set row factory for dict access
+            )
             # Get session information
             cursor = await conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
@@ -276,8 +276,8 @@ async def get_agent_memory_resource(agent_id: str, ctx: Any = None) -> Resource:
 
         async with get_db_connection() as conn:
             conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+                CompatibleRow  # CRITICAL: Set row factory for dict access
+            )
             # Clean expired memory entries
             await conn.execute(
                 """

@@ -27,7 +27,7 @@ _test_db_context: ContextVar[Optional[UnifiedTestDatabase]] = ContextVar(
 )
 
 
-def get_context_test_database(backend: str = "aiosqlite") -> UnifiedTestDatabase:
+def get_context_test_database(backend: str = "sqlalchemy") -> UnifiedTestDatabase:
     """
     Get test database from thread-local context.
 
@@ -36,7 +36,7 @@ def get_context_test_database(backend: str = "aiosqlite") -> UnifiedTestDatabase
     (threads, asyncio tasks, tests, etc.).
 
     Args:
-        backend: Database backend to use ("aiosqlite" or "sqlalchemy")
+        backend: Database backend to use ("sqlalchemy" or "aiosqlite" - deprecated)
 
     Returns:
         UnifiedTestDatabase: Thread-local test database instance
@@ -103,7 +103,7 @@ def get_current_test_database() -> Optional[UnifiedTestDatabase]:
 
 @asynccontextmanager
 async def get_context_test_db_connection(
-    backend: str = "aiosqlite",
+    backend: str = "sqlalchemy",
 ) -> AsyncGenerator[Any, None]:
     """
     Get test database connection from thread-local context.
@@ -112,7 +112,7 @@ async def get_context_test_db_connection(
     Each test/task gets its own database instance automatically.
 
     Args:
-        backend: Database backend to use ("aiosqlite" or "sqlalchemy")
+        backend: Database backend to use ("sqlalchemy" or "aiosqlite" - deprecated)
 
     Yields:
         Database connection (aiosqlite.Connection or SQLAlchemy wrapper)
