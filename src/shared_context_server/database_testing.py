@@ -36,12 +36,18 @@ class TestDatabaseManager:
         Args:
             database_url: Database URL (defaults to memory database)
         """
-        # Create temporary file for SQLite testing with exponential backoff retry
-        self._temp_file = self._create_temp_file_with_retry()
-        self.database_path = self._temp_file.name
+        if database_url == "sqlite:///:memory:":
+            # Use true in-memory database for test isolation
+            self._temp_file = None
+            self.database_path = ":memory:"
+            test_url = "sqlite+aiosqlite:///:memory:"
+        else:
+            # Create temporary file for SQLite testing with exponential backoff retry
+            self._temp_file = self._create_temp_file_with_retry()
+            self.database_path = self._temp_file.name
+            test_url = f"sqlite+aiosqlite:///{self.database_path}"
 
-        # Create SQLAlchemy manager with temporary database
-        test_url = f"sqlite+aiosqlite:///{self.database_path}"
+        # Create SQLAlchemy manager with configured database
         self._manager = SimpleSQLAlchemyManager(test_url)
         self._initialized = False
 
@@ -111,7 +117,7 @@ class TestDatabaseManager:
         if self._manager:
             await self._manager.close()
 
-        if hasattr(self, "_temp_file"):
+        if hasattr(self, "_temp_file") and self._temp_file is not None:
             self._temp_file.close()
 
     def get_stats(self) -> dict[str, Any]:
