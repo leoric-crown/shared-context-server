@@ -22,6 +22,7 @@ except ImportError:
     MCPSOCK_AVAILABLE = False
 
 from .database import get_db_connection
+from .database_manager import CompatibleRow
 from .server import websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -62,9 +63,7 @@ if MCPSOCK_AVAILABLE:
             async with get_db_connection() as conn:
                 # Set row factory for dict-like access
                 if hasattr(conn, "row_factory"):
-                    import aiosqlite
-
-                    conn.row_factory = aiosqlite.Row
+                    conn.row_factory = CompatibleRow
 
                 # Build query
                 query = """
@@ -107,9 +106,7 @@ if MCPSOCK_AVAILABLE:
             async with get_db_connection() as conn:
                 # Set row factory for dict-like access
                 if hasattr(conn, "row_factory"):
-                    import aiosqlite
-
-                    conn.row_factory = aiosqlite.Row
+                    conn.row_factory = CompatibleRow
 
                 cursor = await conn.execute(
                     "SELECT * FROM sessions WHERE id = ?", (session_id,)

@@ -30,7 +30,7 @@ class TestJWTHardeningValidation:
         """Test that tampered JWT tokens are properly rejected."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create legitimate token
             legitimate_ctx = MockContext(
                 session_id="security_test", agent_id="legitimate_agent"
@@ -92,7 +92,7 @@ class TestJWTHardeningValidation:
         """Test prevention of permission escalation attacks."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create read-only agent
             readonly_ctx = MockContext(
                 session_id="escalation_test", agent_id="readonly_agent"
@@ -140,7 +140,7 @@ class TestJWTHardeningValidation:
         """Test that expired tokens are properly rejected."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create expired token context
             expired_ctx = MockContext(
                 session_id="expiration_test", agent_id="expired_agent"
@@ -188,7 +188,7 @@ class TestJWTHardeningValidation:
         """Test that agents cannot access each other's private data."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create two separate agents
             agent_a_ctx = MockContext(session_id="isolation_test", agent_id="agent_a")
             agent_a_ctx._auth_info = AuthInfo(
@@ -268,7 +268,7 @@ class TestJWTHardeningValidation:
         from shared_context_server import server
         from shared_context_server.auth import audit_log_auth_event
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create authenticated context
             auth_ctx = MockContext(session_id="audit_test", agent_id="audit_agent")
             auth_ctx._auth_info = AuthInfo(
@@ -316,7 +316,7 @@ class TestJWTHardeningValidation:
         """Test that security model remains intact during refactoring."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Test all major security-sensitive operations
             security_ctx = MockContext(
                 session_id="continuity_test", agent_id="security_agent"
@@ -390,7 +390,7 @@ class TestJWTHardeningValidation:
         """Test security model under concurrent access."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             # Create multiple authenticated contexts
             contexts = []
             for i in range(5):

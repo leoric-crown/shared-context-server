@@ -18,6 +18,7 @@ Example:
 
 import asyncio
 import inspect
+import os
 import threading
 import time
 import weakref
@@ -29,6 +30,45 @@ from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
 from shared_context_server.auth import AuthInfo
+
+
+@pytest.fixture(autouse=True, scope="session")
+def ensure_worker_environment():
+    """
+    Ensure pytest-xdist workers have proper environment variables.
+
+    This autouse fixture runs once per worker to set up consistent
+    authentication environment across all pytest-xdist workers,
+    eliminating authentication flakiness in parallel execution.
+    """
+    from tests.fixtures.database import ensure_worker_environment
+
+    ensure_worker_environment()
+
+
+@pytest.fixture(autouse=True, scope="function")
+async def reset_process_state_for_multiprocessing():
+    """Ensure clean state for each test in pytest-xdist multiprocessing environment."""
+    from shared_context_server.auth_context import reset_token_context
+
+    # Reset authentication context at start of each test
+    reset_token_context()
+
+    yield
+
+    # Cleanup after test - dispose database connections
+    try:
+        from shared_context_server.database_manager import (
+            dispose_current_sqlalchemy_manager,
+        )
+
+        await dispose_current_sqlalchemy_manager()
+    except Exception:
+        pass  # Ignore cleanup errors in test environment
+
+    # Final context reset
+    reset_token_context()
+
 
 pytest_plugins = ["tests.fixtures.database"]
 
@@ -122,7 +162,7 @@ def unregister_observer(observer):
 # =============================================================================
 
 
-async def cleanup_async_tasks_with_timeout(timeout: float = 0.5) -> int:
+async def cleanup_async_tasks_with_timeout(timeout: float = 0.1) -> int:
     """
     Clean up asyncio tasks with robust timeout handling.
 
@@ -281,7 +321,6 @@ def pytest_configure(config):
     _pytest_quiet_mode = config.getoption("quiet", 0) > 0
 
     # Force asyncio mode settings
-    import os
 
     os.environ["PYTEST_ASYNCIO_MODE"] = "auto"
 
@@ -427,6 +466,10 @@ class MockContext:
 
     def __init__(self, session_id="test_session", agent_id="test_agent"):
         self.session_id = session_id
+
+        # Ensure proper API key header for authentication
+        self.headers = {"X-API-Key": "default-test-key-for-worker-isolation"}
+
         # Set up authentication using AuthInfo pattern
         self._auth_info = AuthInfo(
             jwt_validated=False,
@@ -613,23 +656,24 @@ async def seed_test_data(test_db_connection):
 # =============================================================================
 
 
-def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
+def patch_database_connection(test_db_manager=None):
     """
-    Create a unified patcher for all database connections that works with any backend.
+    Create a unified patcher for database connections using SQLAlchemy backend.
 
     This patches the source function in the database module to ensure
-    all imports and usages get the test database connection from the specified backend.
+    all imports and usages get the test database connection.
 
     Args:
         test_db_manager: The test database manager to use (optional, will create one if None)
-        backend: Database backend to use ("aiosqlite" or "sqlalchemy")
 
     Returns:
         unittest.mock.patch context manager
     """
     from unittest.mock import patch
 
-    from shared_context_server.database_testing import get_test_db_connection
+    from shared_context_server.database_testing import (
+        TestDatabaseManager,
+    )
 
     @asynccontextmanager
     async def mock_get_db_connection():
@@ -638,9 +682,11 @@ def patch_database_connection(test_db_manager=None, backend="aiosqlite"):
             async with test_db_manager.get_connection() as conn:
                 yield conn
         else:
-            # Use unified test database with specified backend
-            async with get_test_db_connection(backend) as conn:
+            # Use unified test database (SQLAlchemy-only)
+            temp_manager = TestDatabaseManager()
+            async with temp_manager.get_connection() as conn:
                 yield conn
+            await temp_manager.close()
 
     # Patch all the places where get_db_connection is used
     # This comprehensive patching covers both direct imports and local references
@@ -752,7 +798,6 @@ async def cleanup_background_tasks(request):
 
     # Use the enhanced cleanup utilities
     # Skip asyncio cleanup in CI due to event loop closure issues across Python versions
-    import os
 
     # Performance tests get faster cleanup to reduce teardown time
     def is_performance_test_robust(request):
@@ -812,13 +857,13 @@ async def cleanup_background_tasks(request):
             f"⚡ Skipped async cleanup for performance test: {getattr(request.node, 'name', 'unknown')}"
         )
     else:
-        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=0.5)
+        cancelled_tasks = await cleanup_async_tasks_with_timeout(timeout=0.1)
 
     # Skip thread cleanup for performance tests to avoid hanging
     if is_performance_test:
         cleaned_threads = 0  # Skip thread cleanup for performance tests
     else:
-        cleaned_threads = cleanup_threads_with_timeout(timeout=0.5)
+        cleaned_threads = cleanup_threads_with_timeout(timeout=0.2)
     cleaned_observers = cleanup_observers()
 
     # Log detailed information about cleanup
@@ -847,12 +892,14 @@ async def reset_global_singletons():
     """
     yield  # Let the test run
 
-    # Reset connection pool if it exists
+    # Reset connection pool if it exists - use fast reset to prevent long teardowns
     try:
         from shared_context_server.utils.performance import db_pool
 
+        # Force immediate reset without graceful shutdown for tests
         with suppress(Exception):
-            await db_pool.reset_for_testing()
+            # Don't wait for the reset - just fire and forget for maximum speed
+            asyncio.create_task(db_pool.reset_for_testing())
     except ImportError:
         pass
 
@@ -879,21 +926,15 @@ async def reset_global_singletons():
     # Note: Authentication singleton reset no longer needed with ContextVar approach
     # Each test automatically gets isolated token manager instances
 
-    # Enhanced database manager cleanup for SQLAlchemy flakiness prevention
+    # Enhanced database manager cleanup for SQLAlchemy teardown performance fix
     try:
-        import shared_context_server.database as db_module
+        from shared_context_server.database_manager import (
+            dispose_all_sqlalchemy_managers,
+        )
 
         with suppress(Exception):
-            # Critical: Close SQLAlchemy manager properly before reset
-            if (
-                hasattr(db_module, "_sqlalchemy_manager")
-                and db_module._sqlalchemy_manager
-            ):
-                await db_module._sqlalchemy_manager.close()
-
-            # Reset global database managers to ensure clean state
-            db_module._db_manager = None
-            db_module._sqlalchemy_manager = None
+            # Critical: Dispose ALL SQLAlchemy managers across contexts to fix 31s teardowns
+            await dispose_all_sqlalchemy_managers()
     except ImportError:
         pass
 
@@ -901,54 +942,40 @@ async def reset_global_singletons():
 @pytest.fixture(autouse=True)
 async def isolate_database_globals():
     """
-    Comprehensive database global state isolation for SQLAlchemy flakiness prevention.
+    ContextVar-based database isolation for SQLAlchemy teardown performance fix.
 
-    CRITICAL: This fixture addresses the root cause of SQLAlchemy test flakiness by ensuring
-    complete isolation of global database managers between tests.
+    CRITICAL: This fixture properly disposes SQLAlchemy engines to prevent 31+ second teardowns
+    by using the ContextVar-aware disposal function.
     """
-    import shared_context_server.database as db_module
+    from shared_context_server.database_manager import (
+        dispose_current_sqlalchemy_manager,
+    )
 
-    # Store original state
-    original_db_manager = getattr(db_module, "_db_manager", None)
-    original_sqlalchemy_manager = getattr(db_module, "_sqlalchemy_manager", None)
+    # Pre-test cleanup: Ensure clean ContextVar state
+    with suppress(Exception):
+        await dispose_current_sqlalchemy_manager()
 
-    # Critical: Properly close SQLAlchemy manager BEFORE resetting globals
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
+    yield  # Let the test run with clean context
 
-    # Reset to None for complete test isolation
-    db_module._db_manager = None
-    db_module._sqlalchemy_manager = None
-
-    yield  # Let the test run with clean globals
-
-    # Post-test cleanup: Close any managers created during test
-    if hasattr(db_module, "_sqlalchemy_manager") and db_module._sqlalchemy_manager:
-        with suppress(Exception):
-            await db_module._sqlalchemy_manager.close()
-
-    # Restore original state (usually None anyway, but ensures consistency)
-    db_module._db_manager = original_db_manager
-    db_module._sqlalchemy_manager = original_sqlalchemy_manager
+    # Post-test cleanup: Dispose any managers created during test
+    with suppress(Exception):
+        await dispose_current_sqlalchemy_manager()
 
 
 @pytest.fixture(autouse=True)
 def isolate_environment_variables():
     """
-    Environment variable isolation to prevent SQLAlchemy test flakiness.
+    Environment variable isolation to prevent test flakiness.
 
-    CRITICAL: Prevents USE_SQLALCHEMY and database path variables from leaking
+    CRITICAL: Prevents database path variables from leaking
     between tests running in parallel workers.
 
     ENHANCED: Ensures authentication-critical environment variables are
     always available to prevent "authentication_service temporarily unavailable" errors.
     """
-    import os
 
     # Database-related environment variables that cause flakiness
     critical_vars = [
-        "USE_SQLALCHEMY",
         "DATABASE_URL",
         "DATABASE_PATH",
         "API_KEY",  # Required for config loading
@@ -1159,7 +1186,6 @@ def pytest_unconfigure(config):
     This is the very last hook and our final chance to clean up.
     Uses a combination of elegant cleanup and nuclear exit as last resort.
     """
-    import os
     import threading
     import time
 
@@ -1234,7 +1260,7 @@ async def server_with_db(test_db_manager):
     """Create server instance with test database."""
     from shared_context_server import server
 
-    with patch_database_connection(test_db_manager, backend="aiosqlite"):
+    with patch_database_connection(test_db_manager):
         yield server
 
 
@@ -1293,7 +1319,6 @@ def singleton_isolation():
     This fixture resolves the "authentication_service temporarily unavailable"
     errors caused by singleton state corruption across multiple managers.
     """
-    import os
     from unittest.mock import patch
 
     from shared_context_server.auth_core import reset_auth_manager

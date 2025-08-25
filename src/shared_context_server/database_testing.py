@@ -1,238 +1,163 @@
 """
 Simplified database testing infrastructure for shared context server.
 
-This module provides a clean, simple database testing approach that eliminates
-complexity around CI environment detection, WAL mode handling, and backend switching.
+This module provides testing utilities for the SQLAlchemy-only database backend,
+eliminating dual-backend complexity while maintaining test isolation and reliability.
 """
 
 from __future__ import annotations
 
 import logging
+import tempfile
+import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
-
-import aiosqlite
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-logger = logging.getLogger(__name__)
+from .database_manager import SimpleSQLAlchemyManager, SQLAlchemyConnectionWrapper
 
-# Simplified PRAGMA settings for testing (no WAL mode complications)
-_TEST_SQLITE_PRAGMAS = [
-    "PRAGMA foreign_keys = ON;",  # Enable foreign key constraints
-    "PRAGMA synchronous = NORMAL;",  # Balance performance and safety
-    "PRAGMA cache_size = -2000;",  # 2MB cache (smaller for testing)
-    "PRAGMA temp_store = MEMORY;",  # Use memory for temporary tables
-]
+logger = logging.getLogger(__name__)
 
 
 class TestDatabaseManager:
     """
-    Simplified database manager for testing that eliminates CI conditionals.
+    Simplified SQLAlchemy-based test database manager.
 
-    Uses a shared temporary file to ensure schema persistence across connections.
-    Memory databases create new instances for each connection, so we use temp files
-    that get automatically cleaned up.
+    Uses temporary SQLite files for testing to ensure schema persistence
+    and proper cleanup without the complexity of dual backends.
     """
 
-    def __init__(self, database_url: str = "sqlite:///:memory:"):
+    def __init__(self, database_url: str = "sqlite:///:memory:") -> None:
         """
         Initialize test database manager.
 
         Args:
             database_url: Database URL (defaults to memory database)
         """
-        import tempfile
+        if database_url == "sqlite:///:memory:":
+            # Use true in-memory database for test isolation
+            self._temp_file = None
+            self.database_path = ":memory:"
+            test_url = "sqlite+aiosqlite:///:memory:"
+        else:
+            # Create temporary file for SQLite testing with exponential backoff retry
+            self._temp_file = self._create_temp_file_with_retry()
+            self.database_path = self._temp_file.name
+            test_url = f"sqlite+aiosqlite:///{self.database_path}"
 
-        # Create a temporary file that will be automatically cleaned up
-        # This ensures schema persistence across connections
-        self._temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=True)  # noqa: SIM115
-        self.database_path = self._temp_file.name
+        # Create SQLAlchemy manager with configured database
+        self._manager = SimpleSQLAlchemyManager(test_url)
+        self._initialized = False
 
-        self.is_initialized = False
+    def _create_temp_file_with_retry(self, max_retries: int = 3) -> Any:
+        """Create temporary file with exponential backoff retry for test environments.
 
-    async def initialize(self) -> None:
-        """Initialize database with schema."""
-        if self.is_initialized:
-            return
-
-        # Apply schema to the memory database
-        async with self.get_connection() as conn:
-            await self._ensure_schema_applied(conn)
-
-        self.is_initialized = True
-        logger.info("Test database initialized successfully (memory)")
-
-    @asynccontextmanager
-    async def get_connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
-        """
-        Get database connection with optimized settings applied.
-
-        Yields:
-            aiosqlite.Connection: Database connection with simplified settings
-        """
-        conn = None
-        try:
-            # Connect to in-memory database
-            conn = await aiosqlite.connect(
-                self.database_path,
-                isolation_level=None,
-                timeout=30.0,
-                check_same_thread=False,
-            )
-
-            # Apply simplified PRAGMA settings (no WAL mode)
-            for pragma in _TEST_SQLITE_PRAGMAS:
-                await conn.execute(pragma)
-
-            yield conn
-
-        except Exception as e:
-            logger.exception("Test database connection failed")
-            raise RuntimeError(f"Test connection failed: {e}") from e
-
-        finally:
-            if conn:
-                await conn.close()
-
-    async def _ensure_schema_applied(self, conn: aiosqlite.Connection) -> None:
-        """Ensure database schema is applied."""
-        try:
-            # Load and apply schema
-            schema_content = self._load_schema_file()
-            await conn.executescript(schema_content)
-            logger.info("Test database schema applied successfully")
-
-        except Exception as e:
-            logger.exception("Test schema application failed")
-            raise RuntimeError(f"Failed to apply test schema: {e}") from e
-
-    def _load_schema_file(self) -> str:
-        """Load database schema file."""
-        from pathlib import Path
-
-        # Find schema file (same logic as production but simplified)
-        current_file = Path(__file__).resolve()
-        project_root = current_file.parent.parent.parent
-        schema_path = project_root / "database_sqlite.sql"
-
-        if schema_path.exists():
-            with open(schema_path) as f:
-                return f.read()
-
-        # Fallback to package directory
-        schema_path = current_file.parent / "database_sqlite.sql"
-        if schema_path.exists():
-            with open(schema_path) as f:
-                return f.read()
-
-        raise RuntimeError(f"Schema file not found: {schema_path}")
-
-
-class UnifiedTestDatabase:
-    """
-    Unified database interface that works with both aiosqlite and SQLAlchemy backends.
-
-    This provides a single interface for testing that eliminates backend switching complexity.
-    """
-
-    def __init__(self, backend: str = "aiosqlite"):
-        """
-        Initialize unified test database.
+        This prevents "unable to open database file" errors in parallel testing
+        by retrying temp file creation with exponential backoff when file creation fails.
 
         Args:
-            backend: Database backend to use ("aiosqlite" or "sqlalchemy")
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            tempfile.NamedTemporaryFile: Successfully created temporary file
+
+        Raises:
+            OSError: If all retry attempts fail
         """
-        self.backend = backend
-        self._aiosqlite_manager: TestDatabaseManager | None = None
-        self._sqlalchemy_manager: Any = None
+        last_exception = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=True)  # noqa: SIM115
+                # Verify file can be opened (prevents "unable to open database file" later)
+                temp_file.flush()
+                return temp_file
+
+            except OSError as e:  # noqa: PERF203
+                last_exception = e
+                if attempt < max_retries:
+                    # Exponential backoff: 0.1s, 0.2s, 0.4s
+                    delay = 0.1 * (2**attempt)
+                    logger.warning(
+                        f"Temp file creation attempt {attempt + 1}/{max_retries + 1} failed: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.exception(
+                        f"All {max_retries + 1} temp file creation attempts failed"
+                    )
+
+        # All retries exhausted
+        raise OSError(
+            f"Failed to create temporary database file after {max_retries + 1} attempts"
+        ) from last_exception
 
     async def initialize(self) -> None:
-        """Initialize the appropriate backend."""
-        if self.backend == "aiosqlite":
-            self._aiosqlite_manager = TestDatabaseManager()
-            await self._aiosqlite_manager.initialize()
-        elif self.backend == "sqlalchemy":
-            # Import here to avoid circular dependencies
-            from .database_sqlalchemy import SimpleSQLAlchemyManager
-
-            self._sqlalchemy_manager = SimpleSQLAlchemyManager(
-                "sqlite+aiosqlite:///:memory:"
-            )
-            await self._sqlalchemy_manager.initialize()
-        else:
-            raise ValueError(f"Unsupported backend: {self.backend}")
+        """Initialize test database with schema."""
+        if not self._initialized:
+            await self._manager.initialize()
+            self._initialized = True
 
     @asynccontextmanager
-    async def get_connection(self) -> AsyncGenerator[Any, None]:
-        """Get database connection from the appropriate backend."""
-        if self.backend == "aiosqlite":
-            if not self._aiosqlite_manager:
-                raise RuntimeError("aiosqlite manager not initialized")
-            async with self._aiosqlite_manager.get_connection() as conn:
-                yield conn
-        elif self.backend == "sqlalchemy":
-            if not self._sqlalchemy_manager:
-                raise RuntimeError("SQLAlchemy manager not initialized")
-            async with self._sqlalchemy_manager.get_connection() as conn:
-                yield conn
-        else:
-            raise RuntimeError(f"Backend not initialized: {self.backend}")
+    async def get_connection(self) -> AsyncGenerator[SQLAlchemyConnectionWrapper, None]:
+        """Get test database connection."""
+        if not self._initialized:
+            await self.initialize()
 
+        async with self._manager.get_connection() as conn:
+            # Enable dict-like row access for testing compatibility
+            conn.row_factory = None  # Use raw SQLAlchemy row
+            yield conn
 
-# LEGACY: Global test database singleton anti-pattern (DEPRECATED)
-# Maintained for backward compatibility only
-_test_db_instance: UnifiedTestDatabase | None = None
+    async def close(self) -> None:
+        """Close test database and clean up resources."""
+        if self._manager:
+            await self._manager.close()
 
+        if hasattr(self, "_temp_file") and self._temp_file is not None:
+            self._temp_file.close()
 
-def get_test_database(backend: str = "aiosqlite") -> UnifiedTestDatabase:
-    """
-    DEPRECATED: Get test database (redirects to ContextVar implementation).
-
-    This function is maintained for backward compatibility.
-    New code should use get_context_test_database() from test_database_context.py
-    which provides proper thread-safe ContextVar-based management.
-
-    Args:
-        backend: Database backend to use
-
-    Returns:
-        UnifiedTestDatabase: Thread-local test database instance
-    """
-    from .test_database_context import get_context_test_database
-
-    return get_context_test_database(backend)
-
-
-def reset_test_database() -> None:
-    """
-    DEPRECATED: No-op for backward compatibility.
-
-    ContextVar provides automatic isolation, making manual resets unnecessary.
-    This function is retained for backward compatibility but does nothing.
-    """
-    pass  # No-op - ContextVar provides automatic isolation
+    def get_stats(self) -> dict[str, Any]:
+        """Get test database statistics."""
+        return {
+            "database_path": self.database_path,
+            "is_initialized": self._initialized,
+            "connection_count": 1,  # Simplified for testing
+            "database_exists": True,
+            "database_size_mb": 0.1,  # Minimal for testing
+        }
 
 
 @asynccontextmanager
-async def get_test_db_connection(
-    backend: str = "aiosqlite",
-) -> AsyncGenerator[Any, None]:
+async def patch_database_connection(
+    test_db_manager: TestDatabaseManager,
+) -> AsyncGenerator[None, None]:
     """
-    DEPRECATED: Get test database connection (redirects to ContextVar implementation).
+    Patch database connection to use test database.
 
-    This function is maintained for backward compatibility.
-    New code should use get_context_test_db_connection() from test_database_context.py
-    which provides proper thread-safe ContextVar-based management.
+    Simplified version that only supports SQLAlchemy backend testing.
 
     Args:
-        backend: Database backend to use ("aiosqlite" or "sqlalchemy")
-
-    Yields:
-        Database connection (aiosqlite.Connection or SQLAlchemy wrapper)
+        test_db_manager: Test database manager to use
     """
-    from .test_database_context import get_context_test_db_connection
+    # Import here to avoid circular imports
+    from . import database_manager
 
-    async with get_context_test_db_connection(backend) as conn:
-        yield conn
+    # Store original manager function
+    original_get_manager = database_manager.get_sqlalchemy_manager
+
+    # Patch to return test manager
+    database_manager.get_sqlalchemy_manager = lambda: test_db_manager._manager
+
+    try:
+        # Initialize test database
+        await test_db_manager.initialize()
+        yield
+    finally:
+        # Restore original function
+        database_manager.get_sqlalchemy_manager = original_get_manager
+        # Clean up test database
+        await test_db_manager.close()

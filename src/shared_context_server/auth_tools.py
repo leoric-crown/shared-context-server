@@ -10,10 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    import aiosqlite
+from typing import Any
 
 from fastmcp import Context  # noqa: TC002
 from pydantic import Field
@@ -140,7 +137,7 @@ def _generate_authenticate_agent_docstring() -> str:
 
 
 async def audit_log(
-    conn: aiosqlite.Connection,
+    conn: Any,
     event_type: str,
     agent_id: str,
     session_id: str | None = None,

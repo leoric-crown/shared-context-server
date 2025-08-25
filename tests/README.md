@@ -62,8 +62,8 @@ Use pytest markers to categorize tests for selective execution:
 - `@pytest.mark.flaky` - Potentially unstable tests
 
 ### Backend Specific
-- `@pytest.mark.sqlalchemy` - SQLAlchemy backend required (`USE_SQLALCHEMY=true`)
-- `@pytest.mark.aiosqlite` - aiosqlite backend specific (`USE_SQLALCHEMY=false`)
+- `@pytest.mark.sqlalchemy` - SQLAlchemy backend (now the only backend)
+- `@pytest.mark.database` - Database functionality tests
 
 ## Test Execution Patterns
 
@@ -89,7 +89,7 @@ pytest -m "core and not slow" -v           # Core functionality
 pytest -m "tools and unit" -v              # MCP tools unit tests
 pytest -m "websocket and integration" -v   # WebSocket integration
 
-# Test both database backends
+# Test database functionality
 pytest -m "database and unit" -v --tb=short
 ```
 
@@ -168,13 +168,13 @@ async def test_auth_functionality(self):
     # ... test logic
 ```
 
-### 2. Backend Compatibility
-Use dynamic backend detection:
+### 2. Database Testing
+Use SQLAlchemy backend for all database operations:
 ```python
 @pytest.mark.database
 async def test_database_operation(self, test_db_manager):
-    backend = "sqlalchemy" if is_sqlalchemy_backend() else "aiosqlite"
-    with patch_database_connection(test_db_manager, backend=backend):
+    # All tests use SQLAlchemy backend (aiosqlite backend removed)
+    with patch_database_connection(test_db_manager):
         # ... test logic
 ```
 
@@ -194,7 +194,7 @@ async def test_with_clean_environment(self):
 
 ### Test Matrix
 The CI system runs tests with different configurations:
-- **Backend Matrix**: `USE_SQLALCHEMY=true/false`
+- **Database Backend**: SQLAlchemy (single backend)
 - **Python Versions**: 3.11, 3.12
 - **Parallel Execution**: Auto-detected CPU cores
 - **Coverage Target**: 84%+
@@ -206,7 +206,7 @@ The CI system runs tests with different configurations:
 4. **Full Test Suite** (10 minutes) - Complete validation
 
 ### Failure Investigation
-1. Check test markers - might be backend-specific issue
+1. Check test markers - identify specific test category
 2. Run individual test for isolation - `pytest path/to/test.py::test_name -v`
 3. Check singleton state - authentication tests often have isolation issues
 4. Validate environment variables - missing JWT keys cause auth failures
@@ -225,7 +225,7 @@ When adding new tests:
 1. **Choose appropriate directory** based on test scope
 2. **Add relevant markers** for categorization
 3. **Follow singleton patterns** for authentication tests
-4. **Include both backend tests** when database-related
+4. **Use SQLAlchemy backend** for all database-related tests
 5. **Document edge cases** with descriptive test names
 
 This categorization system enables precise test execution, faster development cycles, and reliable CI/CD validation.

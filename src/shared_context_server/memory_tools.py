@@ -17,7 +17,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-import aiosqlite
+# aiosqlite removed in favor of SQLAlchemy-only backend
 from fastmcp import Context  # noqa: TC002
 from pydantic import Field
 
@@ -104,7 +104,7 @@ def _get_admin_tools() -> dict[str, Any]:
 
 # Audit logging utility
 async def audit_log(
-    _conn: aiosqlite.Connection,
+    _conn: Any,  # SQLAlchemy connection wrapper
     action: str,
     agent_id: str,
     session_id: str | None = None,
@@ -292,9 +292,7 @@ async def set_memory(
             )
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Check if session exists (if session-scoped)
             if session_id:
                 cursor = await conn.execute(
@@ -324,30 +322,57 @@ async def set_memory(
                 if await cursor.fetchone():
                     return ERROR_MESSAGE_PATTERNS["memory_key_exists"](key)  # type: ignore[no-any-return,operator]
 
-            # Insert or update memory entry
-            await conn.execute(
+            # Insert or update memory entry using manual upsert
+            # Check if entry already exists
+            cursor = await conn.execute(
                 """
-                INSERT INTO agent_memory
-                (agent_id, session_id, key, value, metadata, created_at, expires_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(agent_id, session_id, key)
-                DO UPDATE SET
-                    value = excluded.value,
-                    metadata = excluded.metadata,
-                    updated_at = excluded.updated_at,
-                    expires_at = excluded.expires_at
+                SELECT id FROM agent_memory
+                WHERE agent_id = ? AND key = ?
+                AND (session_id = ? OR (? IS NULL AND session_id IS NULL))
             """,
-                (
-                    agent_id,
-                    session_id,
-                    key,
-                    serialized_value,
-                    json.dumps(metadata or {}),
-                    created_at_timestamp,  # Explicit created_at to ensure constraint works
-                    expires_at,
-                    now_timestamp.isoformat(),
-                ),
+                (agent_id, key, session_id, session_id),
             )
+            existing_row = await cursor.fetchone()
+
+            if existing_row:
+                # Update existing entry
+                await conn.execute(
+                    """
+                    UPDATE agent_memory
+                    SET value = ?, metadata = ?, updated_at = ?, expires_at = ?
+                    WHERE agent_id = ? AND key = ?
+                    AND (session_id = ? OR (? IS NULL AND session_id IS NULL))
+                """,
+                    (
+                        serialized_value,
+                        json.dumps(metadata or {}),
+                        now_timestamp.isoformat(),
+                        expires_at,
+                        agent_id,
+                        key,
+                        session_id,
+                        session_id,
+                    ),
+                )
+            else:
+                # Insert new entry
+                await conn.execute(
+                    """
+                    INSERT INTO agent_memory
+                    (agent_id, session_id, key, value, metadata, created_at, expires_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        agent_id,
+                        session_id,
+                        key,
+                        serialized_value,
+                        json.dumps(metadata or {}),
+                        created_at_timestamp,  # Explicit created_at to ensure constraint works
+                        expires_at,
+                        now_timestamp.isoformat(),
+                    ),
+                )
             await conn.commit()
 
             # Audit log
@@ -450,9 +475,7 @@ async def get_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Clean expired entries first
             await conn.execute(
                 """
@@ -550,9 +573,7 @@ async def list_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                aiosqlite.Row
-            )  # CRITICAL: Set row factory for dict access
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Clean expired entries
             await conn.execute(
                 """

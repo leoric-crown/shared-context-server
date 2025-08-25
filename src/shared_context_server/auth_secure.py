@@ -15,9 +15,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    import aiosqlite
-
 # Lazy import FastMCP to avoid performance overhead
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -398,9 +395,7 @@ class SecureTokenManager:
         """
 
         # Helper function to handle token validation errors
-        async def _handle_token_error(
-            conn: aiosqlite.Connection, is_sqlalchemy: bool
-        ) -> None:
+        async def _handle_token_error(conn: Any, is_sqlalchemy: bool) -> None:
             """Handle token validation error with proper rollback."""
             if not is_sqlalchemy:
                 await conn.rollback()
@@ -639,7 +634,7 @@ class SecureTokenManager:
                     # CodeQL: This logging statement uses non-sensitive count data only
                     logger.info("Cleaned up %d expired secure tokens", count)
 
-                return count
+                return int(count)
         except Exception:
             logger.exception("Failed to cleanup expired tokens")
             return 0

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from shared_context_server.database_manager import CompatibleRow
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
 
 
@@ -22,7 +23,7 @@ class TestRapidFuzzSearchSystem:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             yield server
 
     @pytest.fixture
@@ -593,9 +594,7 @@ class TestRapidFuzzSearchSystem:
 
         # Search for messages in specific time range
         async with test_db_manager.get_connection() as test_conn:
-            import aiosqlite
-
-            test_conn.row_factory = aiosqlite.Row
+            test_conn.row_factory = CompatibleRow
 
             result = await call_fastmcp_tool(
                 server_with_db.search_by_timerange,
@@ -614,9 +613,7 @@ class TestRapidFuzzSearchSystem:
 
         # Test narrower time range
         async with test_db_manager.get_connection() as test_conn:
-            import aiosqlite
-
-            test_conn.row_factory = aiosqlite.Row
+            test_conn.row_factory = CompatibleRow
 
             narrow_result = await call_fastmcp_tool(
                 server_with_db.search_by_timerange,

@@ -23,7 +23,7 @@ class TestMCPResourceSystem:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             yield server
 
     @pytest.fixture

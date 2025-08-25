@@ -21,7 +21,7 @@ class TestPerformanceMetricsAccessControl:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             yield server
 
     async def test_get_performance_metrics_no_auth_token(
@@ -348,7 +348,7 @@ class TestPerformanceMetricsEdgeCases:
         """Create server instance with test database."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager, backend="aiosqlite"):
+        with patch_database_connection(test_db_manager):
             yield server
 
     async def test_get_performance_metrics_import_error(
