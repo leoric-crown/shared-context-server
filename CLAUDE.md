@@ -93,7 +93,7 @@ pytest -m "not slow" -v                     # Exclude slow tests
 ```
 
 ### Database Testing
-Tests automatically use in-memory SQLite with WAL mode for isolation. Backend switching is tested via `test_simplified_backend_switching.py`.
+Tests automatically use in-memory SQLite with WAL mode for isolation.
 
 ### Parallel Test Execution
 Tests use pytest-xdist with automatic worker distribution (`-n auto`) for reliable parallel execution:

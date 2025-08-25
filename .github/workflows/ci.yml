@@ -1,4 +1,4 @@
-# CI workflow aligned with make quality && make test-all
+# CI workflow aligned with make quality && make test
 name: CI
 
 on:
@@ -8,7 +8,7 @@ on:
     branches: [ main ]
 
 env:
-  # Test environment variables (consistent with existing CI)
+  # Test environment variables
   API_KEY: "test-api-key-for-ci-only"
   DATABASE_URL: "sqlite:///:memory:"
   ENVIRONMENT: "testing"
@@ -22,10 +22,8 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-        backend: ["aiosqlite", "sqlalchemy"]
         include:
           - python-version: "3.12"
-            backend: "sqlalchemy"
             upload-coverage: true
 
     steps:
@@ -41,31 +39,17 @@ jobs:
       run: uv sync --all-extras
 
     - name: Run quality checks (aligned with make quality)
-      if: matrix.backend == 'aiosqlite'
       run: |
         uv run ruff format
         uv run ruff check --fix
         uv run mypy src
         uv run pip-audit
 
-    - name: Run simplified backend tests (covers both backends)
-      run: |
-        uv run pytest tests/test_simplified_backend_switching.py -v
-
-    - name: Run smoke tests (${{ matrix.backend }} backend)
-      env:
-        USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' }}
+    - name: Run smoke tests
       run: |
         uv run pytest tests/test_smoke.py -q
 
-    - name: Run integration and behavioral tests (once per Python version)
-      if: matrix.backend == 'aiosqlite'
-      run: |
-        uv run pytest tests/integration/ tests/behavioral/ -q
-
-    - name: Run comprehensive test suite (${{ matrix.backend }} backend)
-      env:
-        USE_SQLALCHEMY: ${{ matrix.backend == 'sqlalchemy' }}
+    - name: Run comprehensive test suite
       run: |
         uv run pytest tests/ \
           --cov=src \
@@ -73,8 +57,7 @@ jobs:
           --cov-report=term-missing \
           -q \
           --maxfail=3 \
-          --tb=short \
-          --ignore=tests/test_simplified_backend_switching.py
+          --tb=short
 
     - name: Upload coverage
       if: matrix.upload-coverage

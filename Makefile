@@ -62,7 +62,7 @@ pre-commit: ## Run pre-commit hooks on all files
 	@echo "Running: uv run pre-commit run --show-diff-on-failure"
 	uv run pre-commit run --show-diff-on-failure
 
-quality: format lint type ## Run all quality checks (use with test-all for complete CI)
+quality: format lint type ## Run all quality checks (use with test for complete CI)
 	@echo "Running: uv run pip-audit"
 	uv run pip-audit
 
