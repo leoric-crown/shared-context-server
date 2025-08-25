@@ -90,11 +90,11 @@ def _generate_authenticate_agent_docstring() -> str:
         Generate JWT token for agent authentication.
 
         This is the primary authentication gateway for multi-agent coordination.
-        Only the main Claude agent should call this - subagents receive tokens via handoff.
+        Only the orchestrator agent should call this - subagents receive tokens via handoff.
 
         **Multi-Agent Pattern:**
-        1. Main Claude calls authenticate_agent to get tokens
-        2. Main Claude provisions tokens to subagents with appropriate permissions
+        1. Orchestrator agent calls authenticate_agent to get tokens
+        2. Orchestrator provisions tokens to subagents with appropriate permissions
         3. Subagents use refresh_token to maintain their sessions
 
         {}
@@ -174,7 +174,9 @@ def _create_authenticate_agent_tool() -> Any:
     # Generate dynamic field description
     agent_type_description = _generate_agent_type_field_description()
 
-    @mcp.tool(exclude_args=["ctx"])
+    @mcp.tool(
+        exclude_args=["ctx"], description=_generate_authenticate_agent_docstring()
+    )
     async def authenticate_agent(
         agent_id: str = Field(
             description="Agent identifier", min_length=1, max_length=100
@@ -185,13 +187,9 @@ def _create_authenticate_agent_tool() -> Any:
         ),
         ctx: Context = None,  # type: ignore[assignment]
     ) -> dict[str, Any]:
-        # Dynamic docstring generation would be handled here if needed by introspection tools
         return await _authenticate_agent_impl(
             ctx, agent_id, agent_type, requested_permissions
         )
-
-    # Set the dynamic docstring
-    authenticate_agent.__doc__ = _generate_authenticate_agent_docstring()
 
     return authenticate_agent
 

@@ -73,7 +73,7 @@ async def audit_log(
 async def get_usage_guidance(
     auth_token: str | None = Field(
         default=None,
-        description="JWT token to analyze. If not provided, uses current request context",
+        description="Optional JWT token for elevated permissions",
     ),
     guidance_type: str = Field(
         default="operations",
@@ -82,10 +82,18 @@ async def get_usage_guidance(
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
-    Get contextual operational guidance based on JWT access level.
+    🚨 **CALL THIS TOOL FIRST** - Get your operational capabilities and permission boundaries.
 
-    Provides JWT access-level appropriate operational guidance for multi-agent coordination.
-    Returns structured guidance response based on access level (ADMIN/AGENT/READ_ONLY).
+    Essential first step for multi-agent coordination. Provides JWT access-level appropriate
+    operational guidance based on your authentication context (ADMIN/AGENT/READ_ONLY).
+
+    This tool tells you:
+    - What operations you can perform
+    - Your permission boundaries
+    - Available tools based on your access level
+    - Examples of proper usage patterns
+
+    Always call this before attempting other operations to avoid permission errors.
     """
 
     try:
@@ -284,10 +292,11 @@ def _generate_coordination_guidance(access_level: str) -> dict[str, Any]:
     if access_level == "AGENT":
         return {
             "coordination_instructions": [
-                "Use shared sessions for multi-agent collaboration",
-                "Leverage agent_only visibility for coordination messages",
-                "Store workflow state in private memory for persistence",
-                "Use search operations to understand session context",
+                "Use shared sessions for multi-agent collaboration (sessions are collaborative by design)",
+                "Any authenticated agent can join existing sessions to contribute",
+                "Leverage agent_only visibility for coordination messages with same agent type",
+                "Store workflow state in private memory for persistence (memory is agent-isolated)",
+                "Use search operations to understand session context before contributing",
             ],
             "handoff_patterns": [
                 "Add coordination messages before handoff",
@@ -358,7 +367,7 @@ def _generate_security_guidance(access_level: str) -> dict[str, Any]:
         return {
             "security_boundaries": base_security
             + [
-                "Access limited to own private memory and sessions",
+                "Access limited to own private memory (memory is agent-isolated, sessions are collaborative)",
                 "Cannot generate tokens for other agents",
                 "Responsible for own token security and refresh",
                 "Limited to agent_only and public message visibility",
@@ -502,7 +511,7 @@ def _generate_guidance_examples(
                 "# Admin coordinating multi-agent workflow",
                 "admin_guidance = await get_usage_guidance(guidance_type='coordination')",
                 "# Generate tokens for agents",
-                "agent_token = await authenticate_agent(agent_id='worker_agent', agent_type='claude')",
+                "agent_token = await authenticate_agent(agent_id='worker_agent', agent_type='generic')",
                 "# Create coordination session",
                 "session = await create_session(purpose='Multi-agent task coordination')",
                 "# Monitor performance",

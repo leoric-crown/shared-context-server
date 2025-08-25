@@ -297,7 +297,7 @@ async def add_message(
     ),
     visibility: str = Field(
         default="public",
-        description="Message visibility: public, private, agent_only, or admin_only",
+        description="Message visibility: public, private, agent_only, or admin_only (requires admin permissions)",
     ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
@@ -308,6 +308,10 @@ async def add_message(
     - public: Visible to all agents in session
     - private: Visible only to sender
     - agent_only: Visible only to agents of same type
+    - admin_only: Visible only to agents with admin permissions (⚠️ REQUIRES ADMIN TOKEN)
+
+    ⚠️ IMPORTANT: admin_only visibility requires admin permissions. Use get_usage_guidance()
+    first to check your access level and available operations to avoid permission errors.
     """
 
     try:
