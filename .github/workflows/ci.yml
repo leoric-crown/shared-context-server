@@ -8,8 +8,8 @@ on:
     branches: [ main ]
 
 env:
-  # Test environment variables
-  API_KEY: "test-api-key-for-ci-only"
+  # Test environment variables - must match MockContext API key in tests
+  API_KEY: "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk="
   DATABASE_URL: "sqlite:///test_ci_database.db"
   ENVIRONMENT: "testing"
   JWT_SECRET_KEY: "test-jwt-secret-key-for-ci-only-not-for-production"
