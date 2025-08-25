@@ -224,6 +224,12 @@ async def set_memory(
 
         agent_id = agent_context["agent_id"]
 
+        # Check write permission
+        if "write" not in agent_context.get("permissions", []):
+            return ERROR_MESSAGE_PATTERNS["write_required"](  # type: ignore[no-any-return,operator]
+                agent_context.get("permissions", [])
+            )
+
         # Validate and process expires_in parameter
         expires_in_seconds = None
         if expires_in is not None:

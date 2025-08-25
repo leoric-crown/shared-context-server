@@ -38,7 +38,10 @@ class TestAuthenticationSecurity:
                 jwt_validated=True,
                 agent_id="authenticated_agent_2",
                 agent_type="gemini",
-                permissions=["read"],  # Different permissions
+                permissions=[
+                    "read",
+                    "write",
+                ],  # Need write permissions to create sessions
                 authenticated=True,
                 auth_method="jwt",
                 token_id="token_2",

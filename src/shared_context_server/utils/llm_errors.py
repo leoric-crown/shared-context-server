@@ -334,6 +334,15 @@ ERROR_MESSAGE_PATTERNS = {
             "Check agent authentication and role assignment",
         ],
     ),
+    "write_required": lambda current_permissions=None: create_permission_denied_error(
+        "write",
+        current_permissions=current_permissions or [],
+        suggestions=[
+            "Use read-only operations like get_session or get_messages",
+            "Request write permission from user",
+            "Check agent authentication and role assignment",
+        ],
+    ),
     # System errors
     "database_error": lambda operation: create_system_error(
         operation, "database", temporary=True

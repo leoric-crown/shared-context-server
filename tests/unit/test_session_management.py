@@ -49,6 +49,9 @@ class TestCreateSession:
                 metadata={"test": True},
             )
 
+            # Debug: Print actual result
+            print(f"DEBUG: result = {result}")
+
             # Verify results
             assert result["success"] is True
             assert "session_id" in result

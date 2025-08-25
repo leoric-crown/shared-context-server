@@ -467,8 +467,8 @@ class MockContext:
     def __init__(self, session_id="test_session", agent_id="test_agent"):
         self.session_id = session_id
 
-        # Ensure proper API key header for authentication
-        self.headers = {"X-API-Key": "default-test-key-for-worker-isolation"}
+        # Ensure proper API key header for authentication (must match .env file)
+        self.headers = {"X-API-Key": "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk="}
 
         # Set up authentication using AuthInfo pattern
         self._auth_info = AuthInfo(
@@ -978,11 +978,11 @@ def isolate_environment_variables():
     critical_vars = [
         "DATABASE_URL",
         "DATABASE_PATH",
-        "API_KEY",  # Required for config loading
     ]
 
     # Authentication variables that should NEVER be cleared (always ensure they exist)
     auth_required_vars = {
+        "API_KEY": "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk=",  # Must match .env and MockContext headers
         "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
         "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
     }

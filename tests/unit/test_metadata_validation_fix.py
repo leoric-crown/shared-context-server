@@ -33,6 +33,9 @@ class MockContext:
         if permissions is None:
             permissions = ["read", "write"]
 
+        # Ensure proper API key header for authentication (must match .env file)
+        self.headers = {"X-API-Key": "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk="}
+
         # Set up authentication using AuthInfo pattern
         self._auth_info = AuthInfo(
             jwt_validated=False,

@@ -146,6 +146,12 @@ async def create_session(
 
         agent_id = agent_context["agent_id"]
 
+        # Check write permission
+        if "write" not in agent_context.get("permissions", []):
+            return ERROR_MESSAGE_PATTERNS["write_required"](  # type: ignore[no-any-return,operator]
+                agent_context.get("permissions", [])
+            )
+
         # Input sanitization
         purpose = sanitize_text_input(purpose)
         if not purpose:
@@ -315,6 +321,12 @@ async def add_message(
 
         agent_id = agent_context["agent_id"]
         agent_type = agent_context["agent_type"]
+
+        # Check write permission
+        if "write" not in agent_context.get("permissions", []):
+            return ERROR_MESSAGE_PATTERNS["write_required"](  # type: ignore[no-any-return,operator]
+                agent_context.get("permissions", [])
+            )
 
         # Validate visibility level (Phase 3 adds admin_only)
         if visibility not in ["public", "private", "agent_only", "admin_only"]:

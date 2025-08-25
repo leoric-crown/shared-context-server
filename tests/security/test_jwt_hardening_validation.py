@@ -107,21 +107,45 @@ class TestJWTHardeningValidation:
                 token_id="readonly_token",
             )
 
-            # Create session first (should work - read permission)
+            # Try to create session (should FAIL - requires write permission)
             session_result = await call_fastmcp_tool(
                 server.create_session, readonly_ctx, purpose="Read-only session"
+            )
+            assert "error" in session_result
+            assert session_result["code"] == "PERMISSION_DENIED"
+            assert "Write permission required" in session_result["error"]
+
+            # Create session with proper permissions for message testing
+            write_ctx = MockContext(
+                session_id="escalation_test", agent_id="write_agent"
+            )
+            write_ctx._auth_info = AuthInfo(
+                jwt_validated=True,
+                agent_id="write_agent",
+                agent_type="claude",
+                permissions=["read", "write"],
+                authenticated=True,
+                auth_method="jwt",
+                token_id="write_token",
+            )
+
+            session_result = await call_fastmcp_tool(
+                server.create_session, write_ctx, purpose="Write-enabled session"
             )
             assert session_result["success"] is True
             session_id = session_result["session_id"]
 
-            # Try to add message (should work - basic operation)
-            await call_fastmcp_tool(
+            # Try to add message with read-only agent (should FAIL - requires write permission)
+            message_result = await call_fastmcp_tool(
                 server.add_message,
                 readonly_ctx,
                 session_id=session_id,
                 content="Test message",
                 visibility="public",
             )
+            assert "error" in message_result
+            assert message_result["code"] == "PERMISSION_DENIED"
+            assert "Write permission required" in message_result["error"]
             # This might succeed or fail depending on permissions model
             # The key is consistent behavior
 

@@ -130,7 +130,8 @@ class TestRefreshTokenEdgeCases:
     async def test_refresh_token_invalid_api_key(self, server_with_db, test_db_manager):
         """Test refresh_token with invalid API key."""
         ctx = MockContext()
-        # Don't set API key headers
+        # Don't set API key headers - remove the default headers
+        ctx.headers = {}
 
         result = await call_fastmcp_tool(
             server_with_db.refresh_token,

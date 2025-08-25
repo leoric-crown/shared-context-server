@@ -194,20 +194,25 @@ def _generate_guidance_content(access_level: str, guidance_type: str) -> dict[st
 def _generate_operations_guidance(access_level: str) -> dict[str, Any]:
     """Generate operations guidance based on access level."""
 
-    base_operations = [
-        "create_session - Create new shared context sessions",
+    read_only_operations = [
         "get_session - Retrieve session information and messages",
-        "add_message - Add messages to sessions (respects visibility controls)",
         "get_messages - Retrieve messages with agent-specific filtering",
         "search_context - Fuzzy search messages with RapidFuzz",
         "search_by_sender - Find messages by specific sender",
         "search_by_timerange - Search messages within time ranges",
-    ]
-
-    agent_operations = base_operations + [
-        "set_memory - Store values in agent's private memory",
         "get_memory - Retrieve values from agent's private memory",
         "list_memory - List agent's memory entries with filtering",
+    ]
+
+    write_operations = [
+        "create_session - Create new shared context sessions",
+        "add_message - Add messages to sessions (respects visibility controls)",
+        "set_memory - Store values in agent's private memory",
+    ]
+
+    base_operations = read_only_operations + write_operations
+
+    agent_operations = base_operations + [
         "refresh_token - Refresh authentication tokens",
     ]
 
@@ -233,7 +238,7 @@ def _generate_operations_guidance(access_level: str) -> dict[str, Any]:
             "Can create and manage sessions and messages",
         ]
     else:  # READ_ONLY
-        available_ops = base_operations[:4]  # Only read operations
+        available_ops = read_only_operations  # Only read operations
         permission_notes = [
             "Read-only access to sessions and messages",
             "Cannot create or modify data",

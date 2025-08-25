@@ -5,6 +5,9 @@ Tests that agents cannot access each other's private memory (both global and ses
 Uses real database connections and authentication contexts to validate security model.
 """
 
+import os
+from unittest.mock import patch
+
 from tests.conftest import MockContext, call_fastmcp_tool, patch_database_connection
 
 
@@ -15,7 +18,19 @@ class TestAgentMemoryIsolation:
         """Test that agents cannot access each other's global memory."""
         from shared_context_server import server
 
-        with patch_database_connection(test_db_manager):
+        # Set up API key to match MockContext
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "API_KEY": "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk=",
+                    "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+                    "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+                },
+                clear=False,
+            ),
+            patch_database_connection(test_db_manager),
+        ):
             # Set up two different agent contexts
             agent_a_ctx = MockContext(session_id="test_session", agent_id="agent_a")
             agent_b_ctx = MockContext(session_id="test_session", agent_id="agent_b")
