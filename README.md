@@ -256,10 +256,10 @@ session = await client.post("http://localhost:23456/mcp/tool/create_session",
 - ✅ Advanced indexing and performance
 - ❌ Requires database administration
 
-**Database Backend Options**
-- **Default**: Direct aiosqlite (fastest, simplest)
-- **Optional**: SQLAlchemy Core via `USE_SQLALCHEMY=true` (future-ready for PostgreSQL)
-- **Migration**: Seamless switching between backends with identical interface
+**Database Backend**
+- **Unified**: SQLAlchemy Core (supports SQLite, PostgreSQL, MySQL)
+- **Development**: SQLite with aiosqlite driver (fastest, simplest)
+- **Production**: PostgreSQL/MySQL with async drivers (scalable, robust)
 
 **Migration Path**: SQLAlchemy backend provides smooth transition to PostgreSQL when scaling needs arise.
 

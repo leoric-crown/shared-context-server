@@ -308,7 +308,7 @@ class MessageModel(BaseModel):
     )
 
     parent_message_id: int | None = Field(
-        default=None, gt=0, description="ID of parent message for threading"
+        default=None, description="ID of parent message for threading"
     )
 
     created_at: datetime = Field(

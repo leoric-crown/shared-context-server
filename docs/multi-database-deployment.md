@@ -15,11 +15,6 @@ The Shared Context Server supports three database backends:
 
 ```bash
 # Development (default configuration)
-export USE_SQLALCHEMY=false
-export DATABASE_PATH="./chat_history.db"
-
-# Or with SQLAlchemy backend
-export USE_SQLALCHEMY=true
 export DATABASE_URL="sqlite+aiosqlite:///./chat_history.db"
 ```
 
@@ -27,7 +22,6 @@ export DATABASE_URL="sqlite+aiosqlite:///./chat_history.db"
 
 ```bash
 # Basic PostgreSQL setup
-export USE_SQLALCHEMY=true
 export DATABASE_URL="postgresql+asyncpg://user:pass@localhost:5432/shared_context"
 
 # With custom pool configuration
@@ -39,7 +33,6 @@ export ENABLE_QUERY_LOGGING=true
 
 ```bash
 # Basic MySQL setup
-export USE_SQLALCHEMY=true
 export DATABASE_URL="mysql+aiomysql://user:pass@localhost:3306/shared_context"
 
 # With custom pool configuration
@@ -55,7 +48,6 @@ PostgreSQL offers the best performance and features for production deployments:
 
 ```bash
 # Environment Variables
-export USE_SQLALCHEMY=true
 export DATABASE_URL="postgresql+asyncpg://username:password@host:5432/database"
 
 # Pool Configuration
@@ -79,7 +71,6 @@ MySQL provides reliable production performance with InnoDB:
 
 ```bash
 # Environment Variables
-export USE_SQLALCHEMY=true
 export DATABASE_URL="mysql+aiomysql://username:password@host:3306/database"
 
 # Pool Configuration
@@ -102,12 +93,7 @@ export ENABLE_QUERY_LOGGING=false       # Disable in production
 SQLite is perfect for development and lightweight deployments:
 
 ```bash
-# Direct aiosqlite backend (default)
-export USE_SQLALCHEMY=false
-export DATABASE_PATH="./chat_history.db"
-
-# Or SQLAlchemy backend
-export USE_SQLALCHEMY=true
+# SQLite configuration
 export DATABASE_URL="sqlite+aiosqlite:///./chat_history.db"
 
 # Pool Configuration
@@ -176,7 +162,7 @@ COPY . /app
 WORKDIR /app
 
 # Environment variables
-ENV USE_SQLALCHEMY=true
+# SQLAlchemy is the unified backend
 ENV DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/shared_context
 ENV POSTGRESQL_POOL_SIZE=20
 ENV ENVIRONMENT=production
@@ -192,7 +178,6 @@ services:
   app:
     build: .
     environment:
-      - USE_SQLALCHEMY=true
       - DATABASE_URL=mysql+aiomysql://root:password@db:3306/shared_context
       - MYSQL_POOL_SIZE=15
       - ENVIRONMENT=production
@@ -215,7 +200,6 @@ volumes:
 
 ```bash
 # Environment configuration for AWS RDS
-export USE_SQLALCHEMY=true
 export DATABASE_URL="postgresql+asyncpg://username:password@rds-instance.region.rds.amazonaws.com:5432/shared_context"
 export POSTGRESQL_POOL_SIZE=25
 export DATABASE_TIMEOUT=60
@@ -226,7 +210,6 @@ export ENVIRONMENT=production
 
 ```bash
 # Environment configuration for Google Cloud SQL
-export USE_SQLALCHEMY=true
 export DATABASE_URL="mysql+aiomysql://username:password@cloud-sql-proxy:3306/shared_context"
 export MYSQL_POOL_SIZE=20
 export DATABASE_TIMEOUT=45
@@ -239,7 +222,6 @@ export ENVIRONMENT=production
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `USE_SQLALCHEMY` | `false` | Enable SQLAlchemy backend |
 | `DATABASE_URL` | - | Full database connection URL |
 | `DATABASE_PATH` | `./chat_history.db` | SQLite database file path |
 | `POSTGRESQL_POOL_SIZE` | `20` | PostgreSQL connection pool size |

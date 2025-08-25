@@ -1,4 +1,5 @@
 .kiro/
+.gemini/
 .DS_Store
 .playwright-mcp
 postgresql

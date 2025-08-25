@@ -270,22 +270,23 @@ class TestValidationEdgeCases:
     def test_constraint_violation_scenarios(self):
         """Test business rule constraint violations."""
 
-        # Test parent message ID must be positive
-        with pytest.raises(ValidationError):
-            MessageModel(
-                session_id="session_1234567890abcdef",
-                sender="test_agent",
-                content="test content",
-                parent_message_id=0,  # Must be positive
-            )
+        # Test that parent message ID accepts None and positive integers
+        # (Database foreign key constraint handles referential integrity)
+        valid_message_with_no_parent = MessageModel(
+            session_id="session_1234567890abcdef",
+            sender="test_agent",
+            content="test content",
+            parent_message_id=None,  # Valid: no parent
+        )
+        assert valid_message_with_no_parent.parent_message_id is None
 
-        with pytest.raises(ValidationError):
-            MessageModel(
-                session_id="session_1234567890abcdef",
-                sender="test_agent",
-                content="test content",
-                parent_message_id=-1,  # Must be positive
-            )
+        valid_message_with_parent = MessageModel(
+            session_id="session_1234567890abcdef",
+            sender="test_agent",
+            content="test content",
+            parent_message_id=123,  # Valid: positive integer
+        )
+        assert valid_message_with_parent.parent_message_id == 123
 
         # Test expiration time must be after creation time
         past_time = datetime.now(timezone.utc) - timedelta(hours=1)

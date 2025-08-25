@@ -285,9 +285,11 @@ async def add_message(
         examples=[{"message_type": "test", "priority": "high"}, None],
         json_schema_extra={"type": "object", "additionalProperties": True},
     ),
-    parent_message_id: int | None = Field(
+    parent_message_id: Any = Field(
         default=None,
-        description="ID of parent message for threading",
+        description="ID of parent message for threading (integer or null)",
+        examples=[565, None],
+        json_schema_extra={"type": ["integer", "null"]},
     ),
     auth_token: str | None = Field(
         default=None,
