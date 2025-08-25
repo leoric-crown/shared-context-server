@@ -139,11 +139,10 @@ class TestAuthenticateAgentCore:
                 "shared_context_server.auth_tools.validate_api_key_header",
                 return_value=True,
             ),
-        ):
-            # Mock JWT generation failure
-            with patch(
+            patch(
                 "shared_context_server.auth_tools.generate_agent_jwt_token"
-            ) as mock_jwt:
+            ) as mock_jwt,
+        ):
                 mock_jwt.side_effect = Exception("JWT generation failed")
 
                 # Mock audit logging

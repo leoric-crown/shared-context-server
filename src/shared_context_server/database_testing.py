@@ -64,12 +64,12 @@ class TestDatabaseManager:
 
         for attempt in range(max_retries + 1):
             try:
-                temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=True)
+                temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=True)  # noqa: SIM115
                 # Verify file can be opened (prevents "unable to open database file" later)
                 temp_file.flush()
                 return temp_file
 
-            except OSError as e:
+            except OSError as e:  # noqa: PERF203
                 last_exception = e
                 if attempt < max_retries:
                     # Exponential backoff: 0.1s, 0.2s, 0.4s

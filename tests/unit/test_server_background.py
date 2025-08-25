@@ -419,12 +419,14 @@ class TestBackgroundTaskSystem:
         """Test server startup error handling with realistic failure scenario."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
+                "shared_context_server.database_manager.get_sqlalchemy_manager"
+            ) as mock_manager,
+        ):
             # Test that the server can handle database connection issues
             # by checking error messages from actual connection failures
-            with patch(
-                "shared_context_server.database_manager.get_sqlalchemy_manager"
-            ) as mock_manager:
                 # Mock a real SQLAlchemy connection failure
                 mock_manager.side_effect = Exception("unable to open database file")
 

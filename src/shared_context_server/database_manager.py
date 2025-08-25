@@ -361,7 +361,7 @@ class SimpleSQLAlchemyManager:
                     for statement in statements:
                         try:
                             await conn.execute(text(statement))
-                        except Exception as e:
+                        except Exception as e:  # noqa: PERF203
                             logger.warning(f"Failed to execute schema statement: {e}")
                             logger.debug(f"Statement: {statement}")
 
@@ -423,7 +423,7 @@ class SimpleSQLAlchemyManager:
                         wrapper = SQLAlchemyConnectionWrapper(conn, autocommit=False)
                         yield wrapper
                         return
-            except Exception as e:
+            except Exception as e:  # noqa: PERF203
                 if attempt < max_retries - 1 and (
                     "database is locked" in str(e).lower()
                     or "unable to open database file" in str(e).lower()
@@ -555,7 +555,7 @@ async def dispose_all_sqlalchemy_managers() -> None:
             else:
                 await manager.close()
             disposed_count += 1
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # noqa: PERF203
             logger.warning(
                 f"SQLAlchemy manager {id(manager)} disposal timed out in test environment"
             )

@@ -89,11 +89,13 @@ class TestUsageGuidanceSecurity:
         """Test guidance respects actual JWT permissions."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Mock successful authentication validation for standard agent
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
+            ) as mock_validate,
+        ):
+            # Mock successful authentication validation for standard agent
                 mock_validate.return_value = {
                     "authenticated": True,
                     "agent_id": "agent_worker",

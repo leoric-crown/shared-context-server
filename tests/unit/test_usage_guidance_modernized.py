@@ -19,11 +19,13 @@ class TestUsageGuidanceCore:
         """Test that operations guidance is generated correctly."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Mock successful authentication validation (minimal mocking)
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
+            ) as mock_validate,
+        ):
+            # Mock successful authentication validation (minimal mocking)
                 mock_validate.return_value = {
                     "authenticated": True,
                     "agent_id": "test_agent",
@@ -139,11 +141,13 @@ class TestUsageGuidanceCore:
         """Test that guidance respects permission boundaries."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Test standard agent permissions
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
+            ) as mock_validate,
+        ):
+            # Test standard agent permissions
                 mock_validate.return_value = {
                     "authenticated": True,
                     "agent_id": "standard_agent",
@@ -200,11 +204,13 @@ class TestUsageGuidanceAuthentication:
         """Test handling of authentication failures."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Mock authentication failure
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.admin_guidance.validate_agent_context_or_error"
-            ) as mock_validate:
+            ) as mock_validate,
+        ):
+            # Mock authentication failure
                 mock_validate.return_value = {
                     "error": "Invalid token",
                     "code": "INVALID_TOKEN",

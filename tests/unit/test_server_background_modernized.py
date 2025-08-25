@@ -19,11 +19,13 @@ class TestServerLifecycleHandling:
         """Test server handles database connection issues gracefully."""
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Test realistic database connection failure
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.database_manager.SimpleSQLAlchemyManager.initialize"
-            ) as mock_init:
+            ) as mock_init,
+        ):
+            # Test realistic database connection failure
                 mock_init.side_effect = Exception("Connection failed: database locked")
 
                 from shared_context_server.server import lifespan
@@ -45,11 +47,13 @@ class TestServerLifecycleHandling:
         from shared_context_server.admin_lifecycle import _perform_memory_cleanup
         from tests.fixtures.database import patch_database_for_test
 
-        with patch_database_for_test(isolated_db):
-            # Test that cleanup functions handle database errors gracefully
-            with patch(
+        with (
+            patch_database_for_test(isolated_db),
+            patch(
                 "shared_context_server.database_manager.get_db_connection"
-            ) as mock_conn:
+            ) as mock_conn,
+        ):
+            # Test that cleanup functions handle database errors gracefully
                 mock_conn.side_effect = Exception("Database unavailable")
 
                 # Should not raise exception - background tasks must be resilient
