@@ -10,7 +10,7 @@ on:
 env:
   # Test environment variables
   API_KEY: "test-api-key-for-ci-only"
-  DATABASE_URL: "sqlite:///:memory:"
+  DATABASE_URL: "test_ci_database.db"
   ENVIRONMENT: "testing"
   JWT_SECRET_KEY: "test-jwt-secret-key-for-ci-only-not-for-production"
   JWT_ENCRYPTION_KEY: "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
