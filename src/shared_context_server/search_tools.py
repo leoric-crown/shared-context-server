@@ -337,9 +337,7 @@ async def search_by_sender(
         agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = None  # Use SQLAlchemy row type
 
             # First, verify session exists
             cursor = await conn.execute(
@@ -406,9 +404,7 @@ async def search_by_timerange(
             }
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = None  # Use SQLAlchemy row type
 
             # First, verify session exists
             cursor = await conn.execute(

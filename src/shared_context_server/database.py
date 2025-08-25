@@ -272,7 +272,7 @@ async def execute_update(query: str, params: tuple[Any, ...] = ()) -> int:
     async with get_db_connection() as conn:
         cursor = await conn.execute(query, params)
         await conn.commit()
-        return cursor.rowcount
+        return int(cursor.rowcount)
 
 
 async def execute_insert(query: str, params: tuple[Any, ...] = ()) -> int:
@@ -311,7 +311,7 @@ async def get_schema_version() -> int:
             # Handle different result formats
             try:
                 version = None
-                if isinstance(result, dict):
+                if hasattr(result, "values") and callable(result.values):
                     version = list(result.values())[0]
                 elif hasattr(result, "keys") and callable(
                     getattr(result, "keys", None)
@@ -349,6 +349,7 @@ async def health_check() -> dict[str, Any]:
                 _raise_basic_query_error()
 
             # Extract value from result
+            assert result is not None  # for mypy
             try:
                 value = None
                 if hasattr(result, "__getitem__"):

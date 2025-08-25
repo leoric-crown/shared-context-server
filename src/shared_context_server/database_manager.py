@@ -30,6 +30,9 @@ from datetime import timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool, StaticPool
@@ -118,13 +121,13 @@ class CompatibleRow:
             return self._row._mapping[key]
         return self._row[key]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self._row)
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return self._keys
 
-    def values(self):
+    def values(self) -> list[Any]:
         # Use _mapping for SQLAlchemy rows, fallback to direct access
         if hasattr(self._row, "_mapping"):
             return [self._row._mapping[key] for key in self._keys]
@@ -136,11 +139,11 @@ class SQLAlchemyConnectionWrapper:
 
     def __init__(self, connection: AsyncConnection, autocommit: bool = False) -> None:
         self._connection = connection
-        self.row_factory = None
+        self.row_factory: type[CompatibleRow] | None = None
         self.autocommit = autocommit
 
     async def execute(
-        self, query: str, parameters: tuple[Any, ...] = ()
+        self, query: str, parameters: tuple[Any, ...] | list[Any] = ()
     ) -> SQLAlchemyCursorWrapper:
         """Execute SQL query with parameter binding."""
         # Convert ? placeholders to SQLAlchemy :param format
@@ -154,8 +157,12 @@ class SQLAlchemyConnectionWrapper:
         """Commit transaction."""
         await self._connection.commit()
 
+    async def rollback(self) -> None:
+        """Rollback transaction."""
+        await self._connection.rollback()
+
     def _convert_query_params(
-        self, query: str, params: tuple[Any, ...]
+        self, query: str, params: tuple[Any, ...] | list[Any]
     ) -> tuple[str, dict[str, Any]]:
         """Convert ? placeholders to SQLAlchemy named parameters."""
         if not params:
@@ -189,14 +196,14 @@ class SQLAlchemyCursorWrapper:
 
         if self._row_factory:
             return CompatibleRow(row)
-        return row
+        return CompatibleRow(row)
 
     async def fetchall(self) -> list[CompatibleRow]:
         """Fetch all rows."""
         rows = self._result.fetchall()
         if self._row_factory:
             return [CompatibleRow(row) for row in rows]
-        return rows
+        return [CompatibleRow(row) for row in rows]
 
 
 class SimpleSQLAlchemyManager:
@@ -233,7 +240,7 @@ class SimpleSQLAlchemyManager:
 
         async with self._init_lock:
             if self._initialized:
-                return
+                return  # type: ignore[unreachable]
 
             # Determine if we're in a testing environment
             is_testing = _is_testing_environment()
@@ -288,7 +295,9 @@ class SimpleSQLAlchemyManager:
             if "sqlite" in self.database_url:
 
                 @event.listens_for(self.engine.sync_engine, "connect")
-                def set_sqlite_pragma(dbapi_connection, _connection_record):
+                def set_sqlite_pragma(
+                    dbapi_connection: Any, _connection_record: Any
+                ) -> None:
                     cursor = dbapi_connection.cursor()
                     for pragma in _SQLITE_PRAGMAS:
                         cursor.execute(pragma)

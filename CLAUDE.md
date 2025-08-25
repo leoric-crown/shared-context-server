@@ -14,7 +14,7 @@ make validate     # Validate development environment
 ```bash
 make test         # Run tests with coverage (target: 84%+)
 make test-quick   # Run tests without coverage (faster)
-make test-backend # Test both database backends (aiosqlite & SQLAlchemy)
+make test-backend # Test database backend (SQLAlchemy)
 make test-all     # Run comprehensive test matrix
 ```
 
@@ -45,17 +45,12 @@ make docker       # Full Docker lifecycle: stop → build → up → logs
 - `websocket_server.py` - WebSocket support for real-time updates
 - `scripts/dev.py` - Development server with hot reload
 
-### Database Backends
+### Database Backend
 
-The system supports two interchangeable backends:
-- **aiosqlite** (default): Direct async SQLite, optimized for development
-- **SQLAlchemy**: Future-ready for PostgreSQL/MySQL migration
-
-Switch backends via environment variable:
-```bash
-USE_SQLALCHEMY=true make test  # Test with SQLAlchemy
-USE_SQLALCHEMY=false make test # Test with aiosqlite (default)
-```
+The system uses SQLAlchemy for all database operations:
+- **SQLAlchemy**: Unified backend supporting SQLite, PostgreSQL, and MySQL
+- Provides connection pooling, transaction management, and schema validation
+- Optimized for both development (SQLite) and production (PostgreSQL/MySQL)
 
 ### MCP Tools Architecture
 
@@ -103,7 +98,7 @@ Tests automatically use in-memory SQLite with WAL mode for isolation. Backend sw
 ### Parallel Test Execution
 Tests use pytest-xdist with automatic worker distribution (`-n auto`) for reliable parallel execution:
 - **Configuration**: Uses pytest-xdist default behavior (worksteal distribution)
-- **Compatibility**: Works reliably with ContextVar-based database and auth management  
+- **Compatibility**: Works reliably with ContextVar-based database and auth management
 - **Performance**: Faster than sequential execution with proper worker isolation
 - **Known Issue**: `--dist=loadscope` distribution causes test failures due to ContextVar state conflicts
 
@@ -181,7 +176,7 @@ API_KEY=your-key                # Required for MCP authentication
 JWT_SECRET_KEY=your-secret      # Required for JWT signing
 JWT_ENCRYPTION_KEY=fernet-key   # Required for token encryption
 DATABASE_URL=path/to/db         # Optional (default: chat_history.db)
-USE_SQLALCHEMY=true/false       # Backend selection (default: false)
+# USE_SQLALCHEMY is no longer needed - SQLAlchemy is the only backend
 ```
 
 ## Performance Targets
@@ -204,7 +199,7 @@ USE_SQLALCHEMY=true/false       # Backend selection (default: false)
 ### Database Schema Changes
 
 1. Update schema in `database_*.sql` files
-2. Modify both backends (`database.py` and `database_sqlalchemy.py`)
+2. Update database schema in `database_manager.py`
 3. Run migration via `initialize_database(reset=True)` in dev
 4. Test with `make test-backend`
 

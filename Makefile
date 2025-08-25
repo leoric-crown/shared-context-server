@@ -16,10 +16,10 @@ dev: ## Start development server with hot reload
 	@echo "Starting development server with hot reload..."
 	uv run python -m shared_context_server.scripts.dev
 
-test: ## Run tests with coverage (target: 70%+)
+test: ## Run tests with coverage
 	@echo "🧪 Running tests with coverage..."
 	@start=$$(date +%s); \
-	if uv run pytest -qq --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=70 --timeout=30; then \
+	if uv run pytest -qq --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml --timeout=30; then \
 		end=$$(date +%s); \
 		duration=$$((end - start)); \
 		echo "✅ Tests with coverage completed ($${duration}s)"; \

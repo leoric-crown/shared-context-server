@@ -292,9 +292,7 @@ async def set_memory(
             )
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Check if session exists (if session-scoped)
             if session_id:
                 cursor = await conn.execute(
@@ -477,9 +475,7 @@ async def get_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Clean expired entries first
             await conn.execute(
                 """
@@ -577,9 +573,7 @@ async def list_memory(
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                Any  # SQLAlchemy row type  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = None  # Use SQLAlchemy row type
             # Clean expired entries
             await conn.execute(
                 """

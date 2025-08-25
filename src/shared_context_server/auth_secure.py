@@ -634,7 +634,7 @@ class SecureTokenManager:
                     # CodeQL: This logging statement uses non-sensitive count data only
                     logger.info("Cleaned up %d expired secure tokens", count)
 
-                return count
+                return int(count)
         except Exception:
             logger.exception("Failed to cleanup expired tokens")
             return 0

@@ -427,21 +427,21 @@ class TestBackgroundTaskSystem:
         ):
             # Test that the server can handle database connection issues
             # by checking error messages from actual connection failures
-                # Mock a real SQLAlchemy connection failure
-                mock_manager.side_effect = Exception("unable to open database file")
+            # Mock a real SQLAlchemy connection failure
+            mock_manager.side_effect = Exception("unable to open database file")
 
-                from shared_context_server.server import lifespan
+            from shared_context_server.server import lifespan
 
-                # The lifespan should handle database errors appropriately
-                try:
-                    async with lifespan():
-                        pass
-                except Exception as e:
-                    # Should get a meaningful error about database connection issues
-                    assert (
-                        "unable to open database file" in str(e)
-                        or "database" in str(e).lower()
-                    )
+            # The lifespan should handle database errors appropriately
+            try:
+                async with lifespan():
+                    pass
+            except Exception as e:
+                # Should get a meaningful error about database connection issues
+                assert (
+                    "unable to open database file" in str(e)
+                    or "database" in str(e).lower()
+                )
 
     async def test_task_cancellation_handling(self, server_with_db, test_db_manager):
         """Test that background tasks handle cancellation correctly."""

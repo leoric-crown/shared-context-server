@@ -143,23 +143,23 @@ class TestAuthenticateAgentCore:
                 "shared_context_server.auth_tools.generate_agent_jwt_token"
             ) as mock_jwt,
         ):
-                mock_jwt.side_effect = Exception("JWT generation failed")
+            mock_jwt.side_effect = Exception("JWT generation failed")
 
-                # Mock audit logging
-                with patch(
-                    "shared_context_server.auth_tools.audit_log_auth_event"
-                ) as mock_audit:
-                    result = await _authenticate_agent_impl(
-                        MockContext(),
-                        agent_id="test_agent",
-                        agent_type="claude",
-                        requested_permissions=["read"],
-                    )
+            # Mock audit logging
+            with patch(
+                "shared_context_server.auth_tools.audit_log_auth_event"
+            ) as mock_audit:
+                result = await _authenticate_agent_impl(
+                    MockContext(),
+                    agent_id="test_agent",
+                    agent_type="claude",
+                    requested_permissions=["read"],
+                )
 
-                    # Should return system error
-                    assert "error" in result or result.get("success") is False
-                    # Should attempt to audit the error
-                    mock_audit.assert_called_once()
+                # Should return system error
+                assert "error" in result or result.get("success") is False
+                # Should attempt to audit the error
+                mock_audit.assert_called_once()
 
     async def test_token_format_validation(self, isolated_db):
         """Test that tokens are properly formatted and contain expected data."""

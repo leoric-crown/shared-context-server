@@ -103,7 +103,7 @@ class TestDatabaseManager:
 
         async with self._manager.get_connection() as conn:
             # Enable dict-like row access for testing compatibility
-            conn.row_factory = lambda row: row  # Use raw SQLAlchemy row
+            conn.row_factory = None  # Use raw SQLAlchemy row
             yield conn
 
     async def close(self) -> None:

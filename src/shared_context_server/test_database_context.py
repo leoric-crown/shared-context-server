@@ -18,16 +18,16 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from typing import Any, Optional
 
-from .database_testing import UnifiedTestDatabase
+from .database_testing import TestDatabaseManager
 
 # Thread-safe context variable for test database instances
 # Each asyncio task/thread gets its own isolated instance
-_test_db_context: ContextVar[Optional[UnifiedTestDatabase]] = ContextVar(
+_test_db_context: ContextVar[Optional[TestDatabaseManager]] = ContextVar(
     "test_database", default=None
 )
 
 
-def get_context_test_database(backend: str = "sqlalchemy") -> UnifiedTestDatabase:
+def get_context_test_database(_backend: str = "sqlalchemy") -> TestDatabaseManager:
     """
     Get test database from thread-local context.
 
@@ -39,7 +39,7 @@ def get_context_test_database(backend: str = "sqlalchemy") -> UnifiedTestDatabas
         backend: Database backend to use ("sqlalchemy" or "aiosqlite" - deprecated)
 
     Returns:
-        UnifiedTestDatabase: Thread-local test database instance
+        TestDatabaseManager: Thread-local test database instance
 
     Thread Safety:
         Perfect - each context gets its own instance automatically
@@ -50,12 +50,12 @@ def get_context_test_database(backend: str = "sqlalchemy") -> UnifiedTestDatabas
     """
     # Always create a new instance for perfect test isolation
     # This follows the same pattern as the original get_test_database()
-    db = UnifiedTestDatabase(backend)
+    db = TestDatabaseManager()
     _test_db_context.set(db)
     return db
 
 
-def set_test_database_for_testing(db: Optional[UnifiedTestDatabase]) -> None:
+def set_test_database_for_testing(db: Optional[TestDatabaseManager]) -> None:
     """
     Set test database in context - for test injection only.
 
@@ -87,12 +87,12 @@ def reset_test_database_context() -> None:
     _test_db_context.set(None)
 
 
-def get_current_test_database() -> Optional[UnifiedTestDatabase]:
+def get_current_test_database() -> Optional[TestDatabaseManager]:
     """
     Get current test database from context without creating one.
 
     Returns:
-        UnifiedTestDatabase or None: Current database if one exists in context
+        TestDatabaseManager or None: Current database if one exists in context
 
     Use Case:
         Checking if a test database exists without triggering creation.
@@ -130,9 +130,7 @@ async def get_context_test_db_connection(
     db = get_context_test_database(backend)
 
     # Initialize database if needed
-    if not (db._aiosqlite_manager and db._aiosqlite_manager.is_initialized) and not (
-        db._sqlalchemy_manager and db._sqlalchemy_manager.is_initialized
-    ):
+    if not db._initialized:
         await db.initialize()
 
     async with db.get_connection() as conn:

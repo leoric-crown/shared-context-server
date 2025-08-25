@@ -96,29 +96,29 @@ class TestUsageGuidanceSecurity:
             ) as mock_validate,
         ):
             # Mock successful authentication validation for standard agent
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "agent_worker",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],  # Standard agent permissions
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "agent_worker",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],  # Standard agent permissions
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                # Test operations guidance with standard agent permissions
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="operations",
-                )
+            # Test operations guidance with standard agent permissions
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="operations",
+            )
 
-                assert result["success"] is True
-                assert result["access_level"] == "AGENT"
+            assert result["success"] is True
+            assert result["access_level"] == "AGENT"
 
-                # Should have basic guidance structure
-                assert "guidance" in result
-                guidance = result["guidance"]
-                assert isinstance(guidance, dict)
+            # Should have basic guidance structure
+            assert "guidance" in result
+            guidance = result["guidance"]
+            assert isinstance(guidance, dict)
 
     async def test_malformed_token_handling(self):
         """Test proper error responses for invalid tokens."""

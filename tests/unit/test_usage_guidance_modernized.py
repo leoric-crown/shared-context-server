@@ -26,29 +26,29 @@ class TestUsageGuidanceCore:
             ) as mock_validate,
         ):
             # Mock successful authentication validation (minimal mocking)
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "test_agent",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "test_agent",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="operations",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="operations",
+            )
 
-                # Test what actually matters
-                assert result.get("success") is True
-                assert "guidance" in result
-                assert result.get("guidance_type") == "operations"
+            # Test what actually matters
+            assert result.get("success") is True
+            assert "guidance" in result
+            assert result.get("guidance_type") == "operations"
 
-                guidance = result["guidance"]
-                assert isinstance(guidance, dict)
-                assert len(guidance) > 0
+            guidance = result["guidance"]
+            assert isinstance(guidance, dict)
+            assert len(guidance) > 0
 
     async def test_coordination_guidance_generation(self, isolated_db):
         """Test that coordination guidance is generated correctly."""
@@ -148,24 +148,24 @@ class TestUsageGuidanceCore:
             ) as mock_validate,
         ):
             # Test standard agent permissions
-                mock_validate.return_value = {
-                    "authenticated": True,
-                    "agent_id": "standard_agent",
-                    "agent_type": "claude",
-                    "permissions": ["read", "write"],  # No admin permission
-                    "expires_at": "2025-12-31T23:59:59Z",
-                }
+            mock_validate.return_value = {
+                "authenticated": True,
+                "agent_id": "standard_agent",
+                "agent_type": "claude",
+                "permissions": ["read", "write"],  # No admin permission
+                "expires_at": "2025-12-31T23:59:59Z",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="valid-token",
-                    guidance_type="operations",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="valid-token",
+                guidance_type="operations",
+            )
 
-                assert result.get("success") is True
-                assert result.get("access_level") == "AGENT"
-                # Should not expose admin-only operations
+            assert result.get("success") is True
+            assert result.get("access_level") == "AGENT"
+            # Should not expose admin-only operations
 
     async def test_invalid_guidance_type_handling(self, isolated_db):
         """Test error handling for invalid guidance types."""
@@ -211,20 +211,20 @@ class TestUsageGuidanceAuthentication:
             ) as mock_validate,
         ):
             # Mock authentication failure
-                mock_validate.return_value = {
-                    "error": "Invalid token",
-                    "code": "INVALID_TOKEN",
-                }
+            mock_validate.return_value = {
+                "error": "Invalid token",
+                "code": "INVALID_TOKEN",
+            }
 
-                result = await call_fastmcp_tool(
-                    get_usage_guidance,
-                    MockContext(),
-                    auth_token="invalid-token",
-                    guidance_type="operations",
-                )
+            result = await call_fastmcp_tool(
+                get_usage_guidance,
+                MockContext(),
+                auth_token="invalid-token",
+                guidance_type="operations",
+            )
 
-                assert "error" in result
-                assert result.get("success") is not True
+            assert "error" in result
+            assert result.get("success") is not True
 
     async def test_missing_token_handling(self, isolated_db):
         """Test handling of missing authentication tokens."""

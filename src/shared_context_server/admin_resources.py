@@ -152,9 +152,7 @@ async def get_session_resource(session_id: str, ctx: Any = None) -> Resource:
             agent_id = "current_agent"
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                CompatibleRow  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = CompatibleRow  # Set row factory for dict access
             # Get session information
             cursor = await conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
@@ -275,9 +273,7 @@ async def get_agent_memory_resource(agent_id: str, ctx: Any = None) -> Resource:
         current_timestamp = datetime.now(timezone.utc).timestamp()
 
         async with get_db_connection() as conn:
-            conn.row_factory = (
-                CompatibleRow  # CRITICAL: Set row factory for dict access
-            )
+            conn.row_factory = CompatibleRow  # Set row factory for dict access
             # Clean expired memory entries
             await conn.execute(
                 """

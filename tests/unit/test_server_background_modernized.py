@@ -26,21 +26,21 @@ class TestServerLifecycleHandling:
             ) as mock_init,
         ):
             # Test realistic database connection failure
-                mock_init.side_effect = Exception("Connection failed: database locked")
+            mock_init.side_effect = Exception("Connection failed: database locked")
 
-                from shared_context_server.server import lifespan
+            from shared_context_server.server import lifespan
 
-                # Server should handle database connection issues
-                try:
-                    async with lifespan():
-                        pass
-                except Exception as e:
-                    # Should get meaningful error about database issues
-                    error_msg = str(e).lower()
-                    assert any(
-                        keyword in error_msg
-                        for keyword in ["database", "connection", "locked"]
-                    ), f"Expected database-related error, got: {e}"
+            # Server should handle database connection issues
+            try:
+                async with lifespan():
+                    pass
+            except Exception as e:
+                # Should get meaningful error about database issues
+                error_msg = str(e).lower()
+                assert any(
+                    keyword in error_msg
+                    for keyword in ["database", "connection", "locked"]
+                ), f"Expected database-related error, got: {e}"
 
     async def test_background_task_error_resilience(self, isolated_db):
         """Test that background tasks handle errors without crashing."""
@@ -54,20 +54,20 @@ class TestServerLifecycleHandling:
             ) as mock_conn,
         ):
             # Test that cleanup functions handle database errors gracefully
-                mock_conn.side_effect = Exception("Database unavailable")
+            mock_conn.side_effect = Exception("Database unavailable")
 
-                # Should not raise exception - background tasks must be resilient
-                try:
-                    await _perform_memory_cleanup()
-                    # If we reach here, the function handled the error gracefully
-                    success = True
-                except Exception as e:
-                    success = False
-                    pytest.fail(
-                        f"Background task should handle errors gracefully, but raised: {e}"
-                    )
+            # Should not raise exception - background tasks must be resilient
+            try:
+                await _perform_memory_cleanup()
+                # If we reach here, the function handled the error gracefully
+                success = True
+            except Exception as e:
+                success = False
+                pytest.fail(
+                    f"Background task should handle errors gracefully, but raised: {e}"
+                )
 
-                assert success is True
+            assert success is True
 
     async def test_notification_cleanup_functionality(self, isolated_db):
         """Test notification cleanup works correctly."""

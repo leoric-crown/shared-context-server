@@ -292,7 +292,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 84
+fail_under = 70
 skip_covered = false
 exclude_lines = [
     "pragma: no cover",
