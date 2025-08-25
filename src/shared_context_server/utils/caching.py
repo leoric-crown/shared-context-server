@@ -433,11 +433,12 @@ def generate_search_cache_key(
     query: str,
     fuzzy_threshold: float = 60.0,
     search_scope: str = "all",
+    limit: int = 10,
 ) -> str:
     """Generate cache key for search results."""
     # Hash query for consistent key generation
     query_hash = secure_hash_short_for_cache_keys(query, length=8)
-    return f"search:{session_id}:query:{query_hash}:threshold:{fuzzy_threshold}:scope:{search_scope}"
+    return f"search:{session_id}:query:{query_hash}:threshold:{fuzzy_threshold}:scope:{search_scope}:limit:{limit}"
 
 
 def generate_memory_cache_key(agent_id: str, scope: str = "all") -> str:

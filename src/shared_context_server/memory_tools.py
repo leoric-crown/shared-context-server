@@ -128,11 +128,7 @@ async def audit_log(
 async def set_memory(
     key: str = Field(description="Memory key", min_length=1, max_length=255),
     value: Any = Field(
-        description="Value to store (JSON serializable)",
-        json_schema_extra={
-            "type": "string",
-            "description": "Value to store (JSON serializable - objects will be auto-converted)",
-        },
+        description="Value to store (JSON serializable - objects will be auto-converted)",
     ),
     session_id: str | None = Field(
         default=None,
@@ -271,12 +267,12 @@ async def set_memory(
                     ],
                 )
 
-        # Calculate timestamps
-        now_timestamp = datetime.now(timezone.utc)
-        created_at_timestamp = now_timestamp.timestamp()
-        expires_at = None
-        if expires_in_seconds and expires_in_seconds > 0:
-            expires_at = created_at_timestamp + expires_in_seconds
+        # TTL validation and warning for short durations
+        if expires_in_seconds and expires_in_seconds < 10:
+            logger.warning(
+                f"Short TTL detected ({expires_in_seconds}s) for key '{key}' - "
+                "may expire faster than expected due to processing time"
+            )
 
         # Serialize value to JSON with error handling
         try:
@@ -299,6 +295,14 @@ async def set_memory(
 
         async with get_db_connection() as conn:
             conn.row_factory = None  # Use SQLAlchemy row type
+
+            # Calculate timestamps just before database operations to minimize timing gap
+            now_timestamp = datetime.now(timezone.utc)
+            created_at_timestamp = now_timestamp.timestamp()
+            expires_at = None
+            if expires_in_seconds and expires_in_seconds > 0:
+                expires_at = created_at_timestamp + expires_in_seconds
+
             # Check if session exists (if session-scoped)
             if session_id:
                 cursor = await conn.execute(
@@ -593,9 +597,16 @@ async def list_memory(
             where_conditions = ["agent_id = ?"]
             params = [agent_id]
 
-            if session_id and session_id != "all":
+            if session_id == "all":
+                # Include both global and session-scoped entries
+                pass
+            elif session_id:
+                # Specific session scope
                 where_conditions.append("session_id = ?")
                 params.append(session_id)
+            else:
+                # Global scope only (session_id is None or empty)
+                where_conditions.append("session_id IS NULL")
 
             if prefix:
                 where_conditions.append("key LIKE ?")

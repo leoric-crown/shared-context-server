@@ -106,7 +106,7 @@ async def search_context(
 
         # Phase 4: Try cache first for search results (10-minute TTL due to compute cost)
         cache_key = generate_search_cache_key(
-            session_id, query, fuzzy_threshold, search_scope
+            session_id, query, fuzzy_threshold, search_scope, limit
         )
         cache_context = {"agent_id": agent_id, "search_metadata": search_metadata}
 
