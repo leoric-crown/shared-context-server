@@ -1,413 +1,746 @@
-# E2E Regression Testing Script for Shared Context Server
+# E2E Regression Testing Script for Shared Context Server v1.1.0
 
-This script is designed to be executed by an LLM to automatically test the server functionality. Execute each step in order and verify the expected results.
+This comprehensive script is designed to be executed by an LLM to automatically validate all server functionality before the 1.1.0 release. Execute each step in order and verify the expected results.
 
 ## Prerequisites
-- Server is running and accessible
-- LLM has access to shared-context-server tools
-- Authentication is properly configured
+- Server is running and accessible (http://localhost:23456 or production URL)
+- LLM has access to shared-context-server MCP tools
+- Authentication environment properly configured
+- SQLAlchemy database backend operational (v1.1.0 uses SQLAlchemy exclusively)
 
 ## Important Testing Guidelines
+- **Performance Requirements**: Message ops <30ms, search <3ms, auth <100ms
 - **Use authentication tokens**: Always pass auth_token parameter when available for proper identification
 - **Validate responses**: Check not just success=true but actual data structure and values
 - **Save test data**: Keep track of tokens, session_ids, memory keys throughout test execution
-- **Time operations**: Note response times - flag any operation taking >2 seconds
+- **Time operations**: Flag any operation exceeding performance thresholds
 - **Check data isolation**: Verify agents can only see data they should have access to
+- **Security Validation**: Ensure no JWT tokens leak in error messages or logs
 
-## Test Suite: Core Functionality Regression
+## Test Suite: Core Functionality Regression (v1.1.0)
 
-### Test 1: Authentication System
-**Goal**: Verify authentication system is working
+### Test 1: Authentication System (ContextVar-based JWT)
+**Goal**: Verify ContextVar-based authentication system is working with JWT tokens
 
 **Execute**:
 ```
 Use the authenticate_agent tool with:
-- agent_id: "test_regression_agent"
+- agent_id: "e2e_test_agent_primary"
 - agent_type: "claude"
 - requested_permissions: ["read", "write"]
 ```
 
 **Expected Result**:
 - Success: true
-- Token format: starts with "sct_"
+- Token format: starts with "sct_" (protected token format)
 - Token type: "Protected"
-- Expires_at: ~1 hour from now
-- Agent_id matches input exactly
+- Expires_at: ~1 hour from now (3600 seconds)
+- Agent_id matches input exactly: "e2e_test_agent_primary"
+- Agent_type: "claude"
 - Permissions: ["read", "write"]
+- No JWT content visible in response (security requirement)
 
 **Critical Validations**:
-- Token format looks correct (starts with "sct_")
-- Expiration time is reasonable (about 1 hour)
-- Store this token for use in subsequent tests
-- Response includes all expected fields
+- **Performance**: Authentication completes in <100ms
+- **Security**: No raw JWT tokens visible in response
+- **Token Format**: Protected token starts with "sct_" and is 36+ chars
+- **Expiration**: Reasonable expiration time (~3600 seconds from now)
+- **Thread Safety**: ContextVar isolation working (no test interference)
+- Store this token as `primary_auth_token` for subsequent tests
+
+**Additional Security Test**:
+```
+Try to authenticate with invalid agent_type: "malicious_agent"
+Expected: Should fail gracefully with clear error message
+```
 
 ---
 
-### Test 2: Session Management
-**Goal**: Test session creation and retrieval
+### Test 2: Session Management with Agent Context
+**Goal**: Test session creation and retrieval with proper agent context
 
 **Execute**:
 ```
-1. Use create_session tool with purpose: "E2E regression testing session"
-2. Store the returned session_id for use in subsequent tests
+1. Use create_session tool with:
+   - purpose: "E2E regression testing session v1.1.0"
+   - metadata: {"test_type": "e2e_regression", "version": "1.1.0", "agent": "primary"}
+
+2. Store the returned session_id as `primary_session_id`
+
 3. Use get_session tool with the session_id from step 1
 ```
 
 **Expected Result**:
-- Session created successfully with session_id
-- Session retrieval shows correct purpose and created_by
-- Created_at timestamp is recent (within last minute)
+- Session created successfully with UUID-format session_id
+- Session retrieval shows correct purpose and metadata
+- Created_by field shows agent identification
+- Created_at timestamp is recent (within last 30 seconds)
+- Metadata properly preserved and retrievable
 
 **Critical Validations**:
-- Session_id is a reasonable format
-- Created_by field is populated
-- Created_at shows recent time
-- Store session_id for use in subsequent tests
+- **Performance**: Session creation completes in <50ms
+- **Session ID Format**: UUID format validation (36 chars with hyphens)
+- **Metadata Preservation**: JSON metadata stored and retrieved correctly
+- **Agent Context**: Created_by field properly populated from auth context
+- **Timestamps**: Unix timestamp format with proper timezone handling
+- Store `primary_session_id` for use in subsequent tests
+
+**Edge Case Testing**:
+```
+4. Try to create session with empty purpose: ""
+   Expected: Should fail with validation error
+
+5. Try to create session with invalid metadata (non-JSON)
+   Expected: Should fail gracefully or auto-serialize
+```
 
 ---
 
-### Test 3: Message Storage and Retrieval
-**Goal**: Test message operations with visibility controls
+### Test 3: Message Storage and Retrieval with Visibility Controls
+**Goal**: Test comprehensive message operations with 4-tier visibility system
 
 **Execute**:
 ```
-Using the session_id from Test 2 and auth_token from Test 1:
+Using primary_session_id from Test 2 and primary_auth_token from Test 1:
 
 1. Add a public message:
-   - content: "Public message for regression test"
+   - session_id: primary_session_id
+   - content: "Public message for E2E regression test v1.1.0"
    - visibility: "public"
-   - auth_token: <token from Test 1>
+   - metadata: {"message_type": "test", "visibility_test": "public"}
+   - auth_token: primary_auth_token
 
 2. Add a private message:
-   - content: "Private message for regression test"
+   - session_id: primary_session_id
+   - content: "Private message for E2E regression test v1.1.0"
    - visibility: "private"
-   - auth_token: <token from Test 1>
+   - metadata: {"message_type": "test", "visibility_test": "private"}
+   - auth_token: primary_auth_token
 
 3. Add an agent-only message:
-   - content: "Agent-only message for regression test"
+   - session_id: primary_session_id
+   - content: "Agent-only message for E2E regression test v1.1.0"
    - visibility: "agent_only"
-   - auth_token: <token from Test 1>
+   - metadata: {"message_type": "test", "visibility_test": "agent_only"}
+   - auth_token: primary_auth_token
 
-4. Get messages from the session (limit: 10, auth_token: <token from Test 1>)
+4. Add an admin-only message (requires admin token):
+   - session_id: primary_session_id
+   - content: "Admin-only message for E2E regression test v1.1.0"
+   - visibility: "admin_only"
+   - auth_token: primary_auth_token (should fail with permissions error)
+
+5. Get all messages from session:
+   - session_id: primary_session_id
+   - limit: 10
+   - auth_token: primary_auth_token
+
+6. Test visibility filtering:
+   - Get messages with visibility_filter: "public"
+   - Get messages with visibility_filter: "private"
+   - Get messages with visibility_filter: "agent_only"
 ```
 
 **Expected Result**:
-- All 3 messages stored successfully with sequential message_ids
-- get_messages returns all 3 messages (agent can see all visibility types)
-- Messages have correct timestamps, sender, and content
+- First 3 messages stored successfully with incremental message_ids
+- Admin-only message fails with permission error (expected behavior)
+- get_messages returns 3 messages (sender can see all their own non-admin messages)
+- Messages have correct timestamps, sender, content, and metadata
 - Visibility fields match what was sent
+- Filtering works correctly for each visibility level
 
 **Critical Validations**:
-- Sender field shows "test_regression_agent" (correct agent identification)
-- Message IDs are sequential numbers
-- Timestamps are recent and properly formatted
-- All 3 messages returned (sender should see all their own messages)
-- Test visibility filtering by using get_messages with visibility_filter parameter
+- **Performance**: Each message add operation completes in <30ms
+- **Agent Identity**: Sender field shows "e2e_test_agent_primary"
+- **Message IDs**: Sequential integer IDs (1, 2, 3)
+- **Timestamps**: Unix format timestamps within last minute
+- **Metadata**: JSON metadata preserved correctly in messages
+- **Visibility Controls**: Proper filtering by visibility level
+- **Security**: Admin-only message properly rejected without admin permissions
+- **Data Integrity**: All message content exactly matches input
 
 ---
 
-### Test 4: Agent Memory Operations
-**Goal**: Test private memory storage with session and global scopes
+### Test 4: Agent Memory Operations with TTL and Scoping
+**Goal**: Test private memory storage with session/global scopes and TTL functionality
 
 **Execute**:
 ```
-Using the auth_token from Test 1:
+Using primary_auth_token from Test 1 and primary_session_id from Test 2:
 
-1. Set session-scoped memory:
-   - key: "regression_test_session"
-   - value: {"test": "session_memory", "timestamp": current_timestamp}
-   - session_id: use from Test 2
-   - auth_token: <token from Test 1>
+1. Set session-scoped memory with TTL:
+   - key: "e2e_test_session_memory"
+   - value: {"test": "session_memory", "timestamp": current_unix_timestamp, "version": "1.1.0"}
+   - session_id: primary_session_id
+   - expires_in: 300 (5 minutes)
+   - metadata: {"scope": "session", "test_type": "e2e"}
+   - overwrite: true
+   - auth_token: primary_auth_token
 
-2. Set global memory:
-   - key: "regression_test_global"
-   - value: {"test": "global_memory", "shared": true}
-   - (no session_id for global)
-   - auth_token: <token from Test 1>
+2. Set global memory (permanent):
+   - key: "e2e_test_global_memory"
+   - value: {"test": "global_memory", "shared": true, "version": "1.1.0"}
+   - session_id: null (global scope)
+   - expires_in: null (permanent)
+   - metadata: {"scope": "global", "test_type": "e2e"}
+   - overwrite: true
+   - auth_token: primary_auth_token
 
-3. Retrieve session memory using key and session_id with auth_token
-4. Retrieve global memory using key only with auth_token
-5. List memory entries (should show both) with auth_token
+3. Set another session memory with short TTL:
+   - key: "e2e_test_ttl_memory"
+   - value: {"expires": "soon", "test": "ttl_validation"}
+   - session_id: primary_session_id
+   - expires_in: 5 (5 seconds)
+   - auth_token: primary_auth_token
+
+4. Retrieve all memory entries:
+   - Get session memory using key and session_id
+   - Get global memory using key only (no session_id)
+   - List all memory entries with session scope filter
+   - List all memory entries with global scope filter
+
+5. TTL validation:
+   - Immediately retrieve short TTL memory (should succeed)
+   - Wait 6 seconds
+   - Try to retrieve short TTL memory again (should fail)
 ```
 
 **Expected Result**:
 - Session memory stored and retrievable only with correct session_id
 - Global memory stored and retrievable without session_id
+- TTL memory initially accessible, then expires correctly
 - Both memories contain exact JSON values that were stored
-- List shows both entries with correct scopes
+- List shows both entries with correct scopes and metadata
+- TTL expiration works within expected time range
 
 **Critical Validations**:
-- Data preservation: values retrieved exactly match what was stored
-- Session memory requires session_id for retrieval
-- Global memory accessible without session_id
-- Memory keys are stored correctly
-- List memory shows both entries with proper organization
+- **Performance**: Memory operations complete in <20ms each
+- **Data Preservation**: JSON values retrieved exactly match stored values
+- **Scope Isolation**: Session memory requires session_id for retrieval
+- **Global Access**: Global memory accessible without session_id from any session
+- **TTL Accuracy**: TTL expiration within ±2 seconds of expected time
+- **Metadata Support**: Memory metadata properly stored and retrieved
+- **Memory Listing**: Proper filtering by session scope (session_id vs null)
+- **Error Handling**: Expired memory returns appropriate "MEMORY_NOT_FOUND" error
 
 ---
 
-### Test 5: Memory Isolation Testing
-**Goal**: Verify session memory isolation between different sessions
-
-**Execute**:
-```
-Using the auth_token from Test 1:
-
-1. Create a second session: purpose "Isolation test session"
-2. In new session, try to get memory key "regression_test_session" (should fail)
-3. In new session, try to get global memory "regression_test_global" (should succeed)
-4. Set new session memory in second session:
-   - key: "regression_test_session" (same key, different session)
-   - value: {"test": "different_session", "isolated": true}
-   - session_id: second session ID
-   - auth_token: <token from Test 1>
-5. Verify first session still has original session memory
-```
-
-**Expected Result**:
-- Session memory from first session is NOT accessible from second session
-- Global memory IS accessible from second session
-- Each session can have same key with different values (isolation working)
-- Original session memory unchanged
-
-**Critical Validations**:
-- Memory isolation: session memory cannot be accessed from different sessions
-- Global memory sharing: same global memory available across sessions
-- Separate storage: same key in different sessions stores different values
-- Data protection: original session memory unchanged after isolation test
-
----
-
-### Test 6: Search Functionality
-**Goal**: Test fuzzy search across messages
-
-**Execute**:
-```
-Using the session from Test 2 and auth_token from Test 1:
-1. Search for "regression" in the session
-2. Search for "private" in the session
-3. Search for "nonexistent" in the session
-4. Test fuzzy search with "regresion" (typo)
-```
-
-**Expected Result**:
-- "regression" search returns multiple messages (all 3 contain this word)
-- "private" search returns the private message
-- "nonexistent" search returns empty results
-- All results include similarity scores and proper message data
-
-**Critical Validations**:
-- Search results include similarity scores
-- Message data in results looks correct
-- Search shows appropriate messages based on access rules
-- Fuzzy search handles typos reasonably well
-- Search completes quickly (under 1 second)
-
----
-
-### Test 7: Cleanup and TTL Testing
-**Goal**: Test memory expiration and cleanup
-
-**Execute**:
-```
-Using auth_token from Test 1:
-
-1. Set memory with short TTL:
-   - key: "ttl_test"
-   - value: {"expires": "soon"}
-   - expires_in: "5" (5 seconds - test string conversion)
-   - auth_token: <token from Test 1>
-
-2. Immediately retrieve the memory (should work)
-3. Wait 6 seconds
-4. Try to retrieve the memory again (should fail)
-5. Test TTL edge case with expires_in: 0 (should mean no expiration)
-```
-
-**Expected Result**:
-- Memory stored successfully with expiration
-- Immediate retrieval works
-- After expiration, retrieval fails with "MEMORY_NOT_FOUND"
-- TTL system working correctly
-
-**Critical Validations**:
-- TTL accepts both number and text values ("5" vs 5)
-- expires_in: 0 creates permanent memory (no expiration)
-- Error messages are appropriate when memory expires
-- Timing works correctly: memory expires close to expected time
-- Different TTL formats work properly
-
----
-
-### Test 8: Error Handling and Edge Cases
-**Goal**: Test system resilience and error responses
-
-**Execute**:
-```
-1. Try to get session with invalid session_id: "invalid_session"
-2. Try to get memory with non-existent key: "does_not_exist"
-3. Try to add message to non-existent session: "invalid_session"
-4. Try to create session with empty purpose: ""
-5. Test invalid visibility levels: "invalid_visibility"
-6. Test malformed authentication token: "invalid.token"
-7. Test expired/invalid tokens
-```
-
-**Expected Result**:
-- All operations fail gracefully with proper error codes
-- Error messages are descriptive and include suggestions
-- No server crashes or unexpected responses
-- Error structure includes: success=false, error, code, severity
-
-**Critical Validations**:
-- Error response format is consistent across all operations
-- Error codes are meaningful and clear
-- Error messages are helpful and descriptive
-- No sensitive data leaked in error messages
-- Server remains stable after error conditions
-- System handles invalid requests gracefully
-
----
-
-### Test 9: Concurrent Operations Simulation
-**Goal**: Test multi-agent scenario simulation
+### Test 5: Cross-Session Memory Isolation and Multi-Agent Testing
+**Goal**: Verify memory isolation between sessions and agents
 
 **Execute**:
 ```
 1. Authenticate a second agent:
-   - agent_id: "concurrent_test_agent"
+   - agent_id: "e2e_test_agent_secondary"
    - agent_type: "gemini"
-   - Store this token as agent2_token
+   - requested_permissions: ["read", "write"]
+   - Store token as secondary_auth_token
 
-2. Have both agents add messages to the same session rapidly:
-   - Agent 1 (Test 1 token): "Message from agent 1 - test 1" (auth_token: agent1_token)
-   - Agent 2 (new token): "Message from agent 2 - test 1" (auth_token: agent2_token)
-   - Agent 1: "Message from agent 1 - test 2" (auth_token: agent1_token)
-   - Agent 2: "Message from agent 2 - test 2" (auth_token: agent2_token)
+2. Create a second session with secondary agent:
+   - purpose: "E2E isolation test session v1.1.0"
+   - metadata: {"test_type": "isolation", "agent": "secondary"}
+   - Store session_id as secondary_session_id
 
-3. Retrieve all messages and verify ordering with each agent's token
-4. Test cross-agent message visibility (agent1 vs agent2 private messages)
+3. Cross-session memory access tests:
+   - Try to get session memory "e2e_test_session_memory" from secondary session (should fail)
+   - Try to get global memory "e2e_test_global_memory" from secondary agent (should succeed)
+
+4. Same-key isolation test:
+   - Set session memory in secondary session:
+     * key: "e2e_test_session_memory" (same key as Test 4)
+     * value: {"test": "different_session", "agent": "secondary", "isolated": true}
+     * session_id: secondary_session_id
+     * auth_token: secondary_auth_token
+
+5. Verify data isolation:
+   - Get session memory from primary session (should show original value)
+   - Get session memory from secondary session (should show different value)
+   - List memory from each agent (should show proper isolation)
+
+6. Agent-only message visibility test:
+   - Add agent-only message to primary session with primary agent
+   - Add agent-only message to primary session with secondary agent
+   - Verify each agent can only see their own agent-only messages
 ```
 
 **Expected Result**:
-- Both agents authenticated with different tokens
-- All messages stored successfully without conflicts
-- Messages have proper sender attribution
-- No database locking or concurrency issues
+- Two different agents authenticated successfully
+- Session memory isolated between sessions (no cross-access)
+- Global memory shared between agents (same values accessible)
+- Same keys in different sessions store different values independently
+- Agent-only messages properly filtered by agent type
+- Original session memory unchanged after isolation tests
 
 **Critical Validations**:
-- Sender attribution: messages show correct agent names ("test_regression_agent" vs "concurrent_test_agent")
-- Token uniqueness: each agent gets different authentication tokens
-- Message ordering: timestamps show proper sequence
-- Privacy rules: private messages only visible to the sender
-- No conflicts: messages don't get mixed up or lost
-- Performance: operations remain fast with multiple agents
+- **Agent Isolation**: Each agent gets unique authentication context
+- **Session Isolation**: Session memory cannot cross session boundaries
+- **Global Sharing**: Global memory accessible to all agents
+- **Key Independence**: Same key in different sessions = different storage
+- **Agent-Only Filtering**: Messages filtered by agent_type for agent_only visibility
+- **Data Protection**: No memory leakage between isolated contexts
+- **Performance**: All isolation tests complete in reasonable time
 
 ---
 
-### Test 10: Performance and Scale Testing
-**Goal**: Test system under moderate load
+### Test 6: Advanced Search Functionality (RapidFuzz-powered)
+**Goal**: Test comprehensive search with RapidFuzz fuzzy matching and visibility controls
 
 **Execute**:
 ```
-Using auth_token from Test 1:
+Using primary_session_id and primary_auth_token from previous tests:
 
-1. Create 5 sessions with different purposes ("Scale test 1", "Scale test 2", etc.)
-2. Add 10 messages to each session (50 total messages) with auth_token
-3. Set 10 memory entries (mix of session and global) with auth_token
-4. Search across all sessions for common term "scale"
-5. Retrieve all sessions and verify data integrity
-6. Measure response times for each operation type
-7. Test list_memory performance with larger dataset
+1. Exact term search:
+   - Query: "regression" in primary_session_id
+   - Expected: Multiple messages containing "regression"
+
+2. Fuzzy search with typos:
+   - Query: "regresion" (missing 's') in primary_session_id
+   - Query: "publc" (missing 'i') in primary_session_id
+   - Expected: Still finds relevant messages with good similarity scores
+
+3. Partial content search:
+   - Query: "v1.1.0" in primary_session_id
+   - Expected: Messages containing version information
+
+4. Search with visibility filtering:
+   - Query: "message" with search_scope: "public"
+   - Query: "message" with search_scope: "private"
+   - Query: "message" with search_scope: "all"
+
+5. Advanced search parameters:
+   - Query: "test" with fuzzy_threshold: 80 (high precision)
+   - Query: "test" with fuzzy_threshold: 40 (low precision)
+   - Query: "message" with limit: 2 (pagination)
+   - Query: "content" with search_metadata: true
+
+6. Search performance test:
+   - Query: "e2e" (should be fast with RapidFuzz optimization)
+   - Measure response time
+
+7. Empty and edge case searches:
+   - Query: "" (empty string)
+   - Query: "xyzneverexists" (guaranteed no match)
+   - Query: "a" (single character)
 ```
 
 **Expected Result**:
-- All operations complete successfully
-- Response times remain reasonable (< 1 second each)
-- Data integrity maintained across all operations
-- Memory usage stable
+- Exact searches return precise matches with high similarity scores (>90)
+- Fuzzy searches handle typos and return relevant results with lower scores
+- Visibility filtering properly restricts results based on access rules
+- Different threshold settings affect result precision appropriately
+- Metadata search includes content from message metadata fields
+- Performance meets target: <3ms for typical searches
+- Edge cases handle gracefully without errors
 
 **Critical Validations**:
-- Performance benchmarks:
-  * Session creation: under 1 second each
-  * Message addition: under 1 second each
-  * Memory operations: under 1 second each
-  * Search operations: under 1 second each
-- Data accuracy: all created data retrievable and correct
-- Proper isolation: data stays separated across sessions
-- Reasonable scale: performance doesn't degrade significantly with more data
-- System stability: no crashes or major slowdowns
-- Consistent behavior: operations work the same way under load
+- **Performance**: Search operations complete in <3ms (RapidFuzz optimization)
+- **Accuracy**: Similarity scores reflect match quality (exact=100, typos=60-80)
+- **Fuzzy Matching**: Handles common typos and partial matches effectively
+- **Visibility Respect**: Search respects agent visibility rules and scope filters
+- **Metadata Search**: Can find content in both message content and metadata
+- **Pagination**: Limit parameter works correctly for large result sets
+- **Threshold Control**: fuzzy_threshold parameter affects result filtering
+- **Error Handling**: Empty/invalid queries handled gracefully
+- **Result Format**: Search results include message data, scores, and proper formatting
 
 ---
 
-## Test Results Summary
+### Test 7: Token Refresh and Admin Tools Testing
+**Goal**: Test token refresh mechanism and admin-level functionality
 
-After completing all tests, provide a comprehensive summary:
-
-**PASS/FAIL Status for each test (1-10)**
+**Execute**:
 ```
-Test 1 (Authentication): PASS/FAIL - [details if failed]
+1. Test token refresh:
+   - Use refresh_token tool with primary_auth_token
+   - Store new token as refreshed_auth_token
+   - Verify old token still works (should work during grace period)
+   - Verify new token works for authenticated operations
+
+2. Test admin authentication:
+   - Authenticate admin agent:
+     * agent_id: "e2e_test_admin_agent"
+     * agent_type: "admin"
+     * requested_permissions: ["read", "write", "admin"]
+     * Store as admin_auth_token
+
+3. Test admin-only message creation:
+   - Add admin-only message to primary session:
+     * content: "Admin-only message for E2E test v1.1.0"
+     * visibility: "admin_only"
+     * auth_token: admin_auth_token (should succeed now)
+
+4. Test admin tools access:
+   - get_performance_metrics with admin_auth_token
+   - get_usage_guidance with admin_auth_token and guidance_type: "operations"
+
+5. Test admin visibility rules:
+   - Get messages as admin (should see admin-only messages)
+   - Get messages as regular agent (should NOT see admin-only messages)
+
+6. Test permission boundaries:
+   - Try admin tools with regular agent token (should fail)
+   - Try admin-only message creation with regular token (should fail)
+```
+
+**Expected Result**:
+- Token refresh generates new valid token
+- Admin authentication succeeds with admin permissions
+- Admin-only messages can be created with admin token
+- Admin tools accessible with admin token only
+- Admin agents can see admin-only messages
+- Regular agents cannot see admin-only content
+- Permission boundaries properly enforced
+
+**Critical Validations**:
+- **Token Refresh**: New token generated and functional
+- **Admin Permissions**: Admin token grants access to admin tools
+- **Permission Enforcement**: Regular tokens properly restricted from admin features
+- **Visibility Hierarchy**: Admin sees all, regular agents see appropriate subset
+- **Security**: No permission escalation or bypasses possible
+- **Performance**: Admin operations complete within reasonable time
+
+---
+
+### Test 8: Comprehensive Error Handling and Security Validation
+**Goal**: Test system resilience, security, and error response consistency
+
+**Execute**:
+```
+1. Invalid session operations:
+   - Get session with invalid session_id: "invalid_session_12345"
+   - Add message to non-existent session: "fake_session_uuid"
+   - Get messages from non-existent session: "another_fake_session"
+
+2. Memory operation errors:
+   - Get memory with non-existent key: "never_existed_key"
+   - Get memory from wrong session context
+   - Set memory with invalid TTL values: -1, "invalid_ttl"
+
+3. Authentication and security errors:
+   - Use malformed token: "invalid.malformed.token"
+   - Use expired/non-existent token: "sct_00000000-0000-0000-0000-000000000000"
+   - Try operations without authentication token
+   - Test authentication with invalid agent_type: "malicious_agent"
+
+4. Input validation errors:
+   - Create session with empty purpose: ""
+   - Add message with invalid visibility: "invalid_visibility"
+   - Search with invalid parameters: negative limits, invalid thresholds
+   - Set memory with invalid JSON in value field
+
+5. Permission boundary testing:
+   - Regular agent trying admin operations
+   - Agent trying to access other agent's private data
+   - Cross-agent session manipulation attempts
+
+6. Resource exhaustion testing:
+   - Extremely long message content (>10MB)
+   - Very long memory keys (>1000 chars)
+   - Excessive search query length
+
+7. SQL injection and security testing:
+   - Message content with SQL-like strings
+   - Memory keys with special characters
+   - Search queries with injection attempts
+```
+
+**Expected Result**:
+- All invalid operations fail gracefully with appropriate error codes
+- Error messages are descriptive but don't reveal sensitive information
+- No server crashes, hangs, or unexpected responses
+- Consistent error structure: success=false, error, code, message
+- Security boundaries maintained under all conditions
+- Performance remains stable even with invalid requests
+
+**Critical Validations**:
+- **Error Consistency**: All errors follow same JSON structure format
+- **Security**: No JWT tokens, secrets, or internal paths in error messages
+- **Descriptiveness**: Error messages help identify the issue without exposing internals
+- **Stability**: Server remains responsive after all error conditions
+- **Input Validation**: All user inputs properly validated and sanitized
+- **Permission Security**: No way to escalate privileges or bypass access controls
+- **SQL Safety**: No SQL injection vulnerabilities in any input fields
+- **Resource Protection**: Server handles resource exhaustion attempts gracefully
+
+---
+
+### Test 9: High-Load Performance and Scale Testing
+**Goal**: Test system performance under realistic load conditions
+
+**Execute**:
+```
+1. Performance baseline establishment:
+   - Record current system state and performance metrics
+   - Use get_performance_metrics (with admin token) to establish baseline
+
+2. Rapid message creation test:
+   - Create 20 messages rapidly in primary session using primary agent
+   - Create 20 messages rapidly in secondary session using secondary agent
+   - Measure total time and average per-message time
+   - Target: <30ms per message operation
+
+3. Memory operations at scale:
+   - Set 25 memory entries with various TTL values
+   - Get all 25 memory entries rapidly
+   - List memory multiple times to test caching
+   - Target: <20ms per memory operation
+
+4. Search performance under load:
+   - Perform 10 different search queries rapidly
+   - Include both exact and fuzzy searches
+   - Test searches with different parameters
+   - Target: <3ms per search operation
+
+5. Concurrent agent simulation:
+   - Use both authenticated agents simultaneously
+   - Have them perform operations on shared and separate sessions
+   - Monitor for any race conditions or conflicts
+   - Verify data integrity after concurrent operations
+
+6. Large data handling:
+   - Create messages with substantial content (~50KB each)
+   - Set memory with complex nested JSON structures
+   - Test search across large content volumes
+   - Ensure performance doesn't degrade significantly
+
+7. System resource validation:
+   - Check performance metrics after load testing
+   - Verify no memory leaks or resource exhaustion
+   - Confirm system remains responsive
+   - Validate database performance hasn't degraded
+```
+
+**Expected Result**:
+- All performance targets met consistently
+- No degradation in response times under load
+- Concurrent operations complete without conflicts
+- Large data handled efficiently
+- System remains stable and responsive
+- No resource leaks or exhaustion detected
+
+**Critical Validations**:
+- **Message Performance**: Average <30ms per message operation under load
+- **Memory Performance**: Average <20ms per memory operation under load
+- **Search Performance**: Average <3ms per search operation under load
+- **Concurrency Safety**: No data corruption or conflicts with concurrent agents
+- **Scalability**: Performance scales appropriately with data volume
+- **Resource Management**: No memory leaks, connection leaks, or resource exhaustion
+- **Data Integrity**: All data remains accurate and accessible after load testing
+- **System Stability**: Server remains responsive throughout all load tests
+
+---
+
+### Test 10: WebSocket Integration and Real-Time Features
+**Goal**: Test WebSocket functionality and real-time session updates
+
+**Execute**:
+```
+Note: WebSocket testing requires compatible client or manual verification via UI dashboard
+
+1. WebSocket connection validation:
+   - Verify WebSocket server is running on ws://127.0.0.1:34567
+   - Check UI dashboard is accessible at http://localhost:23456/ui/
+   - Confirm WebSocket endpoints are properly configured
+
+2. Real-time message notification testing:
+   - Add message to primary session with primary agent
+   - Verify WebSocket notification is sent (if WebSocket client available)
+   - Check that message appears in real-time in dashboard (if accessible)
+
+3. Session update notifications:
+   - Create new session and verify WebSocket notification
+   - Update session metadata and verify notification
+   - Test that WebSocket clients receive proper session updates
+
+4. Multi-agent WebSocket coordination:
+   - Use both authenticated agents to add messages to same session
+   - Verify that all WebSocket clients receive updates from both agents
+   - Test message ordering and real-time delivery
+
+5. WebSocket error handling:
+   - Test WebSocket behavior with invalid session IDs
+   - Verify proper error handling for disconnected clients
+   - Confirm WebSocket server remains stable after errors
+
+6. Performance validation:
+   - Test WebSocket notification latency
+   - Verify WebSocket doesn't impact core MCP tool performance
+   - Confirm WebSocket server scales with multiple connections
+```
+
+**Expected Result**:
+- WebSocket server running and accessible on configured port
+- UI dashboard functional and displays real-time updates
+- WebSocket notifications sent for all relevant operations
+- Multiple agents can coordinate through WebSocket updates
+- Error handling is graceful and doesn't crash WebSocket server
+- WebSocket adds minimal latency to core operations
+
+**Critical Validations**:
+- **WebSocket Availability**: Server running on ws://127.0.0.1:34567
+- **UI Dashboard**: Accessible at http://localhost:23456/ui/ with real-time updates
+- **Notification Delivery**: WebSocket messages sent for session/message updates
+- **Multi-Agent Support**: WebSocket coordinates multiple agent activities
+- **Error Resilience**: WebSocket errors don't impact core MCP functionality
+- **Performance Impact**: WebSocket adds <5ms latency to core operations
+- **Scalability**: WebSocket server handles multiple concurrent connections
+
+---
+
+## Test Results Summary for v1.1.0 Release Validation
+
+After completing all tests, provide a comprehensive summary for 1.1.0 release readiness:
+
+### **PASS/FAIL Status for each test (1-10)**
+```
+Test 1 (Authentication & JWT): PASS/FAIL - [details if failed]
 Test 2 (Session Management): PASS/FAIL - [details if failed]
-Test 3 (Message Operations): PASS/FAIL - [details if failed]
-Test 4 (Agent Memory): PASS/FAIL - [details if failed]
-Test 5 (Memory Isolation): PASS/FAIL - [details if failed]
-Test 6 (Search Functionality): PASS/FAIL - [details if failed]
-Test 7 (TTL Testing): PASS/FAIL - [details if failed]
-Test 8 (Error Handling): PASS/FAIL - [details if failed]
-Test 9 (Concurrency): PASS/FAIL - [details if failed]
-Test 10 (Performance): PASS/FAIL - [details if failed]
+Test 3 (Message Operations & Visibility): PASS/FAIL - [details if failed]
+Test 4 (Memory Operations & TTL): PASS/FAIL - [details if failed]
+Test 5 (Multi-Agent Isolation): PASS/FAIL - [details if failed]
+Test 6 (Advanced Search & RapidFuzz): PASS/FAIL - [details if failed]
+Test 7 (Token Refresh & Admin Tools): PASS/FAIL - [details if failed]
+Test 8 (Error Handling & Security): PASS/FAIL - [details if failed]
+Test 9 (Performance & Load Testing): PASS/FAIL - [details if failed]
+Test 10 (WebSocket & Real-time): PASS/FAIL - [details if failed]
 ```
 
-**Critical Issues Found** (if any):
-- List any test failures with specific error details
-- Note any performance degradation (response times >expected)
-- Identify any security vulnerabilities or data leaks
-- Authentication or authorization bypasses
-- Data corruption or inconsistencies
+### **Critical Issues Found** (if any):
+- **Authentication Failures**: List any JWT, token refresh, or ContextVar issues
+- **Performance Degradation**: Response times exceeding targets (>30ms messages, >3ms search, >100ms auth)
+- **Security Vulnerabilities**: Token leaks, permission bypasses, injection attacks
+- **Data Integrity Issues**: Memory isolation failures, message corruption, search inaccuracies
+- **Multi-Agent Conflicts**: Race conditions, data conflicts, improper isolation
+- **WebSocket Problems**: Connection failures, notification delivery issues
 
-**System Health Indicators**:
-- Authentication: ✅/❌ - Token generation and validation system
-- Session Management: ✅/❌ - Session creation, retrieval, isolation
-- Memory System: ✅/❌ - Data storage and isolation between agents/sessions
-- Search Functionality: ✅/❌ - Search with proper access controls
-- Error Handling: ✅/❌ - Graceful failures with clear error messages
-- Multi-Agent Support: ✅/❌ - Multiple agents working without conflicts
+### **System Health Indicators for v1.1.0**:
+- **Authentication System**: ✅/❌ - ContextVar-based JWT token generation and validation
+- **Session Management**: ✅/❌ - Session creation, retrieval, metadata handling
+- **Message System**: ✅/❌ - 4-tier visibility controls, proper agent attribution
+- **Memory Operations**: ✅/❌ - Session/global scopes, TTL functionality, isolation
+- **Search Performance**: ✅/❌ - RapidFuzz optimization, visibility-aware search
+- **Admin Tools**: ✅/❌ - Performance metrics, usage guidance, admin permissions
+- **Error Handling**: ✅/❌ - Consistent error format, security-conscious messages
+- **Multi-Agent Support**: ✅/❌ - Isolation, coordination, concurrent operations
+- **WebSocket Integration**: ✅/❌ - Real-time updates, dashboard functionality
+- **Database Backend**: ✅/❌ - SQLAlchemy-only architecture stability
 
-**Performance Metrics** (if measured):
-- Average session creation time: [ms]
-- Average message addition time: [ms]
-- Average memory operation time: [ms]
-- Average search time: [ms]
-- Total test suite runtime: [minutes:seconds]
+### **Performance Metrics for v1.1.0** (measured targets):
+- **Authentication Performance**: Target <100ms, Actual: [X]ms
+- **Session Creation Time**: Target <50ms, Actual: [X]ms
+- **Message Addition Time**: Target <30ms, Actual: [X]ms
+- **Memory Operation Time**: Target <20ms, Actual: [X]ms
+- **Search Performance**: Target <3ms, Actual: [X]ms
+- **Admin Tool Response**: Target <200ms, Actual: [X]ms
+- **WebSocket Latency**: Target <5ms, Actual: [X]ms
+- **Total Test Suite Runtime**: Actual: [X] minutes
 
-**Regression Detection**:
-- New failures compared to previous runs?
-- Response time degradation since last test?
-- Features that previously worked but now fail?
-- Changes in error message format or codes?
+### **v1.1.0 Architecture Validation**:
+- **SQLAlchemy Backend**: ✅/❌ - Unified database backend operational
+- **ContextVar Authentication**: ✅/❌ - Thread-safe token management working
+- **RapidFuzz Search**: ✅/❌ - Optimized fuzzy search performing correctly
+- **4-Tier Visibility**: ✅/❌ - public/private/agent_only/admin_only working
+- **JWT Security**: ✅/❌ - Protected tokens, no token leakage
+- **WebSocket Integration**: ✅/❌ - Real-time updates and dashboard functionality
 
-**Data Validation Results**:
-- Authentication token format: ✅/❌
-- Message sender identification: ✅/❌
-- Message visibility controls: ✅/❌
-- Memory isolation between agents/sessions: ✅/❌
-- Memory expiration timing: ✅/❌
+### **Regression Detection for v1.1.0**:
+- **New Failures**: Any tests that passed in previous versions but now fail?
+- **Performance Regression**: Response times slower than previous benchmarks?
+- **Feature Regression**: Previously working features now broken?
+- **API Changes**: Breaking changes in tool interfaces or responses?
+- **Security Regression**: New vulnerabilities or weakened security controls?
 
-## Execution Notes
+### **Data Validation Results**:
+- **Protected Token Format**: ✅/❌ - Proper "sct_" prefixed tokens
+- **Agent Identity Tracking**: ✅/❌ - Correct sender attribution in all messages
+- **Visibility Controls**: ✅/❌ - 4-tier system working correctly
+- **Memory Isolation**: ✅/❌ - Session/global scopes properly separated
+- **TTL Functionality**: ✅/❌ - Memory expiration within ±2 seconds
+- **Search Accuracy**: ✅/❌ - Fuzzy search and exact matching working
+- **Admin Permissions**: ✅/❌ - Admin tools restricted to admin tokens
+- **WebSocket Notifications**: ✅/❌ - Real-time updates delivered correctly
 
-- Run this entire suite whenever making changes to core server functionality
-- Each test should complete in under 30 seconds
-- Total test suite runtime should be under 5 minutes
-- Save test results with timestamps for regression comparison
-- If any test fails, investigate before deploying changes
+### **Release Readiness Assessment**:
 
-## Emergency Rollback Criteria
+**🟢 READY FOR RELEASE**: All critical tests pass, performance targets met, no security issues
+**🟡 CONDITIONAL RELEASE**: Minor issues present but not blocking, may need hotfix
+**🔴 NOT READY**: Critical failures, security issues, or performance problems - delay release
 
-Stop testing and rollback if:
-- Authentication system fails (Test 1)
-- Data corruption detected (messages/memory wrong)
-- Server becomes unresponsive
-- Memory leaks detected (performance degradation)
-- Security vulnerabilities discovered
+**Final Recommendation**: [READY/CONDITIONAL/NOT READY] - [Brief justification]
 
-This script ensures the Shared Context MCP Server maintains reliability and functionality across updates and deployments.
+## Execution Notes for v1.1.0
+
+### **When to Run This Test Suite**:
+- Before any production deployment or release
+- After major architectural changes (like the SQLAlchemy migration)
+- Before merging significant feature branches
+- Weekly as part of regression testing cycle
+- After security updates or dependency upgrades
+
+### **Execution Requirements**:
+- **Server**: Must be running on localhost:23456 with WebSocket on 34567
+- **Environment**: Proper JWT_SECRET_KEY and JWT_ENCRYPTION_KEY set
+- **Database**: SQLAlchemy backend operational (v1.1.0 architecture)
+- **Time**: Each test should complete in <60 seconds, total suite <15 minutes
+- **Resources**: Sufficient memory and CPU for concurrent operations testing
+
+### **Test Execution Best Practices**:
+- **Sequential Execution**: Run tests in order 1-10 for proper data dependencies
+- **Clean State**: Each test run should start with a fresh server state
+- **Documentation**: Record all test results with timestamps for trend analysis
+- **Performance Monitoring**: Track response times and compare to baselines
+- **Error Investigation**: Any test failure requires investigation before proceeding
+
+### **Performance Baselines for v1.1.0**:
+- **Authentication**: <100ms (JWT token generation and validation)
+- **Session Operations**: <50ms (creation, retrieval, updates)
+- **Message Operations**: <30ms (add, get with visibility controls)
+- **Memory Operations**: <20ms (set, get, list with TTL handling)
+- **Search Operations**: <3ms (RapidFuzz-optimized fuzzy search)
+- **Admin Tools**: <200ms (performance metrics, usage guidance)
+- **WebSocket Operations**: <5ms additional latency
+
+## Emergency Rollback Criteria for v1.1.0
+
+**🔴 IMMEDIATE ROLLBACK** if any of these occur:
+
+### **Critical System Failures**:
+- **Authentication System Failure**: JWT token generation/validation broken
+- **Database Corruption**: SQLAlchemy backend data integrity issues
+- **Memory Leaks**: Significant memory consumption increase (>50% baseline)
+- **Performance Collapse**: Response times exceed 10x baseline targets
+- **Server Unresponsiveness**: Server stops responding to requests
+
+### **Security Breaches**:
+- **Token Leakage**: JWT tokens visible in error messages or logs
+- **Permission Bypass**: Agents accessing data they shouldn't see
+- **Injection Vulnerabilities**: SQL injection or similar attacks possible
+- **Memory Disclosure**: Cross-agent or cross-session data leakage
+
+### **Data Integrity Issues**:
+- **Message Corruption**: Messages stored incorrectly or content modified
+- **Memory Isolation Failure**: Session/global memory boundaries broken
+- **Search Inaccuracy**: Search results showing wrong or inaccessible data
+- **Agent Identity Confusion**: Messages attributed to wrong agents
+
+### **Multi-Agent Coordination Failures**:
+- **Race Conditions**: Concurrent operations causing data conflicts
+- **Session Isolation Breach**: Agents accessing other agents' sessions
+- **WebSocket Delivery Failure**: Real-time updates not delivered reliably
+
+## v1.1.0 Release Validation Checklist
+
+**Before declaring v1.1.0 ready for release, ensure**:
+
+- [ ] All 10 E2E tests pass without failures
+- [ ] Performance targets met for all operation categories
+- [ ] No security vulnerabilities detected in comprehensive testing
+- [ ] SQLAlchemy backend stable under load testing
+- [ ] ContextVar authentication working correctly
+- [ ] RapidFuzz search optimization providing expected performance gains
+- [ ] WebSocket integration functional and stable
+- [ ] Admin tools accessible and providing accurate metrics
+- [ ] Error handling consistent and security-conscious
+- [ ] Multi-agent workflows operating without conflicts
+
+**This comprehensive E2E testing script ensures the Shared Context MCP Server v1.1.0 maintains reliability, performance, and security standards across all architectural improvements and new features.**
