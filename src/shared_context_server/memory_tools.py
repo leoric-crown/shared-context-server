@@ -102,6 +102,29 @@ def _get_admin_tools() -> dict[str, Any]:
 # ============================================================================
 
 
+def normalize_null_params(**kwargs: Any) -> dict[str, Any]:
+    """
+    Normalize null parameters for better API usability.
+
+    Converts explicit null values to None and removes them from the parameter dict,
+    making the API more forgiving of common JSON null value patterns.
+
+    Args:
+        **kwargs: Input parameters that may contain explicit null values
+
+    Returns:
+        Cleaned parameter dict with null values normalized
+    """
+    normalized = {}
+    for key, value in kwargs.items():
+        # Convert string "null" to None and remove from params
+        if value == "null":
+            continue
+        # Keep all other values, including actual None
+        normalized[key] = value
+    return normalized
+
+
 # Audit logging utility
 async def audit_log(
     _conn: Any,  # SQLAlchemy connection wrapper
@@ -160,6 +183,17 @@ async def set_memory(
     Memory can be session-scoped (isolated to specific session) or global
     (available across all sessions for the agent).
     """
+    # Normalize null parameters for better API usability
+    normalized_params = normalize_null_params(
+        session_id=session_id,
+        expires_in=expires_in,
+        metadata=metadata,
+        auth_token=auth_token,
+    )
+    session_id = normalized_params.get("session_id", None)
+    expires_in = normalized_params.get("expires_in", None)
+    metadata = normalized_params.get("metadata", None)
+    auth_token = normalized_params.get("auth_token", None)
 
     try:
         # Validate and sanitize the key
@@ -470,6 +504,12 @@ async def get_memory(
     """
     Retrieve value from agent's private memory with automatic cleanup.
     """
+    # Normalize null parameters for better API usability
+    normalized_params = normalize_null_params(
+        session_id=session_id, auth_token=auth_token
+    )
+    session_id = normalized_params.get("session_id", None)
+    auth_token = normalized_params.get("auth_token", None)
 
     try:
         # Extract and validate agent context (with token validation error handling)
@@ -568,6 +608,13 @@ async def list_memory(
     """
     List agent's memory entries with filtering options.
     """
+    # Normalize null parameters for better API usability
+    normalized_params = normalize_null_params(
+        session_id=session_id, prefix=prefix, auth_token=auth_token
+    )
+    session_id = normalized_params.get("session_id", None)
+    prefix = normalized_params.get("prefix", None)
+    auth_token = normalized_params.get("auth_token", None)
 
     try:
         # Extract and validate agent context (with token validation error handling)
