@@ -14,8 +14,6 @@ make validate     # Validate development environment
 ```bash
 make test         # Run tests with coverage (target: 84%+)
 make test-quick   # Run tests without coverage (faster)
-make test-backend # Test database backend (SQLAlchemy)
-make test-all     # Run comprehensive test matrix
 ```
 
 ### Code Quality
@@ -37,11 +35,13 @@ make docker       # Full Docker lifecycle: stop → build → up → logs
 ### Core Components
 
 **src/shared_context_server/**
-- `server.py` - FastMCP server with 15+ tools for multi-agent collaboration
-- `database.py` & `database_sqlalchemy.py` - Dual backend system (aiosqlite/SQLAlchemy)
+- `server.py` - FastMCP server with comprehensive MCP tools for multi-agent collaboration
+- `database.py` & `database_sqlalchemy.py` - SQLAlchemy backend with backward compatibility layer
 - `auth.py` - JWT authentication, role-based access control, audit logging
 - `models.py` - Pydantic models for validation and serialization
 - `tools.py` - MCP tools registry and metadata
+- `resources.py` - MCP resources for capability discovery and documentation
+- `prompts.py` - MCP prompts for workflow automation
 - `websocket_server.py` - WebSocket support for real-time updates
 - `scripts/dev.py` - Development server with hot reload
 
@@ -52,13 +52,19 @@ The system uses SQLAlchemy for all database operations:
 - Provides connection pooling, transaction management, and schema validation
 - Optimized for both development (SQLite) and production (PostgreSQL/MySQL)
 
-### MCP Tools Architecture
+### MCP Architecture
 
-Tools are organized by category:
-- **Session Management**: create_session, get_session, add_message, get_messages
-- **Search**: search_context (RapidFuzz), search_by_sender, search_by_timerange
-- **Agent Memory**: set_memory, get_memory, list_memory (with TTL support)
-- **Admin**: get_performance_metrics, get_usage_guidance
+The server implements full MCP compliance with three primitive types:
+
+**MCP Tools**: Core functionality organized by category for multi-agent operations
+**MCP Resources**: Dynamic capability discovery and documentation access
+**MCP Prompts**: Pre-built workflow templates for common multi-agent patterns
+
+For current tool inventory, categories, and schemas, use the MCP Inspector:
+```bash
+# See docs/mcp-inspector-guide.md for complete discovery workflow
+# Tools, resources, and prompts discovery via MCP Inspector
+```
 
 ### Authentication Flow
 
@@ -94,6 +100,25 @@ pytest -m "not slow" -v                     # Exclude slow tests
 
 ### Database Testing
 Tests automatically use in-memory SQLite with WAL mode for isolation.
+
+## MCP Capability Discovery
+
+For current, always-accurate information about available tools, resources, and prompts, use the MCP Inspector:
+
+```bash
+# Discovery workflow (see docs/mcp-inspector-guide.md for complete commands)
+npx @modelcontextprotocol/inspector --cli --method tools/list [...]
+npx @modelcontextprotocol/inspector --cli --method resources/templates/list [...]
+npx @modelcontextprotocol/inspector --cli --method prompts/list [...]
+```
+
+**Why use MCP Inspector?**
+- Always current (no hardcoded documentation drift)
+- Complete schemas and parameter requirements
+- Discovery of resource URI patterns and prompt templates
+- Validation of server capabilities before integration
+
+See `docs/mcp-inspector-guide.md` for complete LLM agent discovery workflows.
 
 ### Parallel Test Execution
 Tests use pytest-xdist with automatic worker distribution (`-n auto`) for reliable parallel execution:

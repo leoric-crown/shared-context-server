@@ -112,38 +112,31 @@ export DATABASE_TIMEOUT=30              # Connection timeout
 ### Base Installation
 
 ```bash
-# Install base server with SQLite support
-pip install shared-context-server
-
-# Or with uv
-uv add shared-context-server
+# Clone the repository and set up for development
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+uv sync
 ```
 
 ### PostgreSQL Support
 
 ```bash
-# Install PostgreSQL driver
-pip install shared-context-server[postgresql]
-
-# Or manually
-pip install asyncpg>=0.29.0
+# Add PostgreSQL driver to your local setup
+uv add asyncpg>=0.29.0
 ```
 
 ### MySQL Support
 
 ```bash
-# Install MySQL driver
-pip install shared-context-server[mysql]
-
-# Or manually
-pip install aiomysql>=0.2.0
+# Add MySQL driver to your local setup
+uv add aiomysql>=0.2.0
 ```
 
 ### All Database Support
 
 ```bash
-# Install all database drivers
-pip install shared-context-server[all-databases]
+# Add all database drivers for comprehensive support
+uv add asyncpg>=0.29.0 aiomysql>=0.2.0
 ```
 
 ## Production Deployment Examples

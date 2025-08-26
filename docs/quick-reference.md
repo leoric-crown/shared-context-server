@@ -172,6 +172,12 @@ docker run -d --name shared-context-server \
 
 ## Troubleshooting Checklist
 
+### 🔴 Quick Fixes
+
+**Port busy**: `kill $(lsof -t -i :23456)` or `HTTP_PORT=8001 make dev`
+**Bad API keys**: Use the exact commands from README Step 1
+**Docker issues**: Start Docker Desktop or `sudo systemctl start docker`
+
 ### Server Issues
 ```bash
 # Check if port is in use

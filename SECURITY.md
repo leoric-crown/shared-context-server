@@ -1,238 +1,128 @@
 # Security Policy
 
-## Security Best Practices
+## Implemented Security Features
 
 ### Authentication & Authorization
 
-#### JWT Token Security
-- **Secret Key Management**:
-  ```bash
-  # Generate secure JWT secret
-  openssl rand -base64 64 > jwt_secret.key
-  chmod 600 jwt_secret.key
-  ```
-- Rotate JWT secrets every 90 days
-- Use RS256 algorithm for production
-- Set appropriate token expiration (24 hours default)
+**JWT Token Authentication**
+- HS256 algorithm with configurable expiration (24 hours default)
+- Role-based permissions: `read`, `write`, `admin`, `debug`
+- Protected token format (`sct_*`) with automatic refresh
+- Comprehensive audit logging for auth events
 
-#### API Key Management
-- Never commit API keys to version control
-- Use environment variables for all secrets
-- Implement rate limiting per API key
-- Log all authentication attempts
+**API Key Management**
+- Header-based authentication (`X-API-Key`) for MCP client connections
+- Environment variable configuration (never commit keys)
 
 ### Input Validation
 
-All user inputs are validated using Pydantic models with:
-- Type checking
-- Length limits
-- Pattern validation (regex)
-- SQL injection prevention
-- XSS protection
+All inputs validated using Pydantic models:
+- Type checking and length limits
+- Pattern validation with regex
+- SQL injection prevention via parameterized queries
+- XSS protection through proper input sanitization
 
-Example validation:
 ```python
 class SessionModel(BaseModel):
-    id: str = Field(..., regex="^session_[a-f0-9]{16}$")
+    id: str = Field(..., pattern="^session_[a-f0-9]{16}$")
     purpose: str = Field(..., min_length=1, max_length=1000)
 ```
 
 ### Message Visibility Controls
 
-The system implements four visibility levels:
+Four-tier access control system:
 - **public**: Visible to all agents in session
 - **private**: Visible only to sender
 - **agent_only**: Visible to agents of same type
 - **admin_only**: Requires admin permission
 
-### Audit Logging
-
-Comprehensive audit logging tracks:
-- Authentication attempts
-- Permission changes
-- Data access patterns
-- Administrative actions
-- Security-relevant events
-
 ### Database Security
 
-#### SQLite Hardening
+**SQLite Hardening (Implemented)**
 ```sql
-PRAGMA journal_mode = WAL;      -- Prevent corruption
-PRAGMA synchronous  = NORMAL;   -- Balance safety/performance
 PRAGMA foreign_keys = ON;       -- Enforce referential integrity
+PRAGMA journal_mode = WAL;      -- Write-ahead logging for safety
+PRAGMA synchronous = NORMAL;    -- Balance safety/performance
+PRAGMA busy_timeout = 5000;     -- Handle concurrent access
 ```
 
-#### Connection Security
-- Use connection pooling with limits
-- Implement query timeouts
-- Prepared statements only
-- No dynamic SQL construction
+**Connection Security**
+- Connection pooling with configurable limits
+- Prepared statements only (no dynamic SQL)
+- Query timeouts and connection health checks
 
-### Network Security
+### Audit Logging
 
-#### HTTPS Only (Production)
-```python
-# Enforce HTTPS in production
-if ENVIRONMENT == "production":
-    app.add_middleware(HTTPSRedirectMiddleware)
+Tracks security-relevant events:
+- Authentication attempts and token validation
+- Permission changes and admin actions
+- Database access patterns
+- Error conditions and security violations
+
+## Environment Setup
+
+### Required Security Variables
+```bash
+# Authentication (Required)
+API_KEY=your-secure-api-key
+JWT_SECRET_KEY=your-jwt-secret-key
+
+# Optional Security Configuration
+JWT_TOKEN_EXPIRY=86400          # Token lifetime in seconds
+DATABASE_TIMEOUT=30             # Query timeout
+DATABASE_MAX_CONNECTIONS=20     # Connection pool limit
 ```
 
-#### CORS Configuration
-```python
-# Restrict CORS origins in production
-CORS_ORIGINS = [
-    "https://trusted-domain.com",
-    "https://app.trusted-domain.com"
-]
+### Generate Secure Keys
+```bash
+# API key
+API_KEY=$(openssl rand -base64 32)
+
+# JWT secret
+JWT_SECRET_KEY=$(openssl rand -base64 32)
 ```
 
-#### Rate Limiting
-```python
-# Implement rate limiting
-from slowapi import Limiter
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
+## Security Checklist
 
-@app.post("/api/endpoint")
-@limiter.limit("100/minute")
-async def endpoint():
-    pass
-```
+### Development
+- [x] Input validation on all endpoints
+- [x] SQL parameterization
+- [x] Authentication checks
+- [x] Authorization verification
+- [x] Audit logging implementation
+- [x] Error handling without stack traces
 
-## Security Headers
-
-Production deployments should include:
-```python
-security_headers = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "X-XSS-Protection": "1; mode=block",
-    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'"
-}
-```
+### Deployment Recommendations
+- [ ] Use HTTPS in production
+- [ ] Implement rate limiting
+- [ ] Configure firewall rules
+- [ ] Enable log monitoring
+- [ ] Regular security updates
 
 ## Dependency Security
 
-### Regular Updates
 ```bash
-# Check for security vulnerabilities
-pip-audit
+# Check for vulnerabilities
+uv run pip-audit
 
 # Update dependencies
 uv sync --upgrade
 ```
 
-### Supply Chain Security
-- Pin dependency versions
-- Use hash verification
-- Regular security audits
-- Monitor CVE databases
-
 ## Data Protection
 
-### Encryption at Rest
-- Sensitive data encrypted using AES-256
-- Key management via environment variables
-- Automatic key rotation
+### Implemented
+- Input validation and sanitization
+- Secure database connections with timeouts
+- Audit logging with retention policies
+- Session-based access controls
 
-### Encryption in Transit
-- TLS 1.3 minimum
-- Strong cipher suites only
-- Certificate pinning for clients
+### Recommended for Production
+- TLS 1.3 encryption for network traffic
+- Regular key rotation (90 days)
+- Automated dependency updates
+- Security monitoring and alerting
 
-### Data Retention
-- Audit logs: 90 days
-- Session data: 30 days
-- Automatic purging of expired data
+---
 
-## Access Control
-
-### Role-Based Permissions
-```python
-PERMISSION_LEVELS = {
-    "read": ["view_sessions", "view_messages"],
-    "write": ["create_sessions", "add_messages"],
-    "admin": ["all_permissions", "view_audit_logs", "modify_visibility"]
-}
-```
-
-### Principle of Least Privilege
-- Default to minimal permissions
-- Explicit permission grants
-- Regular permission audits
-- Time-bound elevated access
-
-## Incident Response
-
-### Incident Classification
-- **P0 (Critical)**: Data breach, authentication bypass
-- **P1 (High)**: Permission escalation, DoS vulnerability
-- **P2 (Medium)**: Information disclosure, session issues
-- **P3 (Low)**: Minor security improvements
-
-### Response Process
-1. **Detect**: Monitoring, alerts, reports
-2. **Assess**: Severity, impact, scope
-3. **Contain**: Isolate affected systems
-4. **Eradicate**: Remove vulnerability
-5. **Recover**: Restore normal operations
-6. **Review**: Post-incident analysis
-
-## Security Checklist
-
-### Development
-- [ ] Input validation on all endpoints
-- [ ] Output encoding for XSS prevention
-- [ ] SQL parameterization
-- [ ] Authentication checks
-- [ ] Authorization verification
-- [ ] Audit logging implementation
-- [ ] Error handling (no stack traces)
-- [ ] Secure defaults
-
-### Deployment
-- [ ] HTTPS configuration
-- [ ] Security headers
-- [ ] Rate limiting
-- [ ] Firewall rules
-- [ ] Backup encryption
-- [ ] Log monitoring
-- [ ] Intrusion detection
-- [ ] Vulnerability scanning
-
-### Operations
-- [ ] Regular security audits
-- [ ] Dependency updates
-- [ ] Key rotation schedule
-- [ ] Access reviews
-- [ ] Incident drills
-- [ ] Security training
-- [ ] Compliance checks
-- [ ] Penetration testing
-
-## Security Tools
-
-### Recommended Security Tools
-```bash
-# Static analysis
-bandit -r src/
-
-# Dependency scanning
-safety check
-pip-audit
-
-# OWASP dependency check
-dependency-check --scan .
-
-# Secret scanning
-trufflehog filesystem .
-```
-
-### Monitoring & Alerting
-- Failed authentication attempts
-- Privilege escalation attempts
-- Unusual data access patterns
-- System resource anomalies
-- Error rate spikes
+**Security Issues**: Report vulnerabilities by creating a GitHub issue or contacting the maintainers.

@@ -42,29 +42,150 @@ session.add_message("docs_agent", "Documented secure, optimized login implementa
 
 Each agent builds on previous work instead of starting over.
 
+💡 **Uses MCP Protocol**: Model Context Protocol - the standard for AI agent communication (works with Claude Code, Gemini, VS Code, Cursor, and frameworks like CrewAI).
+
 ---
 
 ## 🚀 Try It Now (2 minutes)
 
-### One-Command Docker Setup
+### Prerequisites Check (30 seconds)
+**Choose your path**:
+- ✅ **Docker** (recommended): `docker --version` works
+- ✅ **CLI** (no Docker): `python --version` shows 3.10+ and `uv --version` works
+
+### Environment Configuration Templates
+**Choose your .env template** (for local development):
 
 ```bash
+# 🚀 Quick Start (recommended) - Essential variables only
+cp .env.minimal .env
+
+# 🔧 Full Development - All development features
+cp .env.example .env
+
+# 🐳 Docker Deployment - Container-optimized paths
+cp .env.docker .env
+```
+
+💡 **Most users want `.env.minimal`** - it contains only the 12 essential variables you actually need.
+
+### Step 1: Start Server
+
+**Option A: Docker (recommended)**
+```bash
+# Generate and save your API key
+API_KEY=$(openssl rand -base64 32)
+echo "Your API key: $API_KEY"
+
+# Start server with generated credentials
 docker run -d --name shared-context-server -p 23456:23456 \
-  -e API_KEY="$(openssl rand -base64 32)" \
+  -e API_KEY="$API_KEY" \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
   -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   ghcr.io/leoric-crown/shared-context-server:latest
 ```
 
-### Quick Test
+**Option B: CLI (no Docker)**
 ```bash
-# Connect with Claude Code
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
-claude mcp list  # Should show: ✓ Connected
+# Clone and setup
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+uv sync
 
+# Generate and save your API key
+API_KEY=$(openssl rand -base64 32)
+JWT_SECRET_KEY=$(openssl rand -base64 32)
+JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+
+# Start server
+API_KEY="$API_KEY" JWT_SECRET_KEY="$JWT_SECRET_KEY" JWT_ENCRYPTION_KEY="$JWT_ENCRYPTION_KEY" \
+  uv run python -m shared_context_server.scripts.cli
+echo "Your API key: $API_KEY"
+```
+
+### Step 2: Create .env File (Optional - for local development)
+
+```bash
+# Create .env file with your keys
+cat > .env << EOF
+API_KEY=$API_KEY
+JWT_SECRET_KEY=$(openssl rand -base64 32)
+JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+EOF
+
+# Run with .env file
+docker run -d --name shared-context-server -p 23456:23456 \
+  --env-file .env ghcr.io/leoric-crown/shared-context-server:latest
+```
+
+### Step 3: Connect Your MCP Client
+
+Replace `YOUR_API_KEY_HERE` with the key from Step 1:
+
+```bash
+# Claude Code (simple HTTP transport)
+claude mcp add --transport http scs http://localhost:23456/mcp/ \
+  --header "X-API-Key: YOUR_API_KEY_HERE"
+
+# Gemini CLI
+gemini mcp add scs http://localhost:23456/mcp -t http -H "X-API-Key: YOUR_API_KEY_HERE"
+
+# Test connection
+claude mcp list  # Should show: ✓ Connected
+```
+
+### VS Code Configuration
+
+Add to your existing `.vscode/mcp.json` (create if it doesn't exist):
+
+```json
+{
+  "servers": {
+    "shared-context-server": {
+      "type": "http",
+      "url": "http://localhost:23456/mcp",
+      "headers": {"X-API-Key": "YOUR_API_KEY_HERE"}
+    }
+  }
+}
+```
+
+### Cursor Configuration
+
+Add to your existing `.cursor/mcp.json` (create if it doesn't exist):
+
+```json
+{
+  "mcpServers": {
+    "shared-context-server": {
+      "command": "mcp-proxy",
+      "args": ["--transport=http", "http://localhost:23456/mcp/", "--header", "X-API-Key: YOUR_API_KEY_HERE"]
+    }
+  }
+}
+```
+
+### Step 4: Verify & Monitor
+
+```bash
+# Test your setup (30 seconds)
+curl -X POST http://localhost:23456/mcp/tool/create_session \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"purpose": "test setup"}'
+
+# Expected output: {"success": true, "session_id": "sess_..."}
+```
+
+```bash
 # View the dashboard
 open http://localhost:23456/ui/  # Real-time session monitoring
 ```
+
+✅ **Success indicators**:
+- curl command returns `{"success": true, "session_id": "..."}`
+- Dashboard shows "1 active session"
+- MCP client shows `✓ Connected` status
 
 ### 📊 Web Dashboard (MVP)
 Real-time monitoring interface for agent collaboration:
@@ -134,6 +255,9 @@ session = await client.post("http://localhost:23456/mcp/tool/create_session",
 3. **Developer Agent** implements with full context
 
 **More examples**: [Collaborative Workflows Guide](./docs/integration-guide.md#collaborative-workflows)
+
+**What works**: ✅ MCP clients (Claude Code, Gemini, VS Code, Cursor)
+**What's conceptual**: 🔄 Framework patterns (CrewAI, AutoGen, LangChain) - community contributions welcome
 
 ---
 

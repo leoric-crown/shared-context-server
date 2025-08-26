@@ -2,125 +2,147 @@
 
 ## Quick Start
 
-**Default (Production-like):**
+**Production Setup:**
 ```bash
-git clone <repository-url> && cd shared-context-server
-echo "API_KEY=$(openssl rand -base64 32)" > .env
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+cp .env.minimal .env
+
+# Generate secure keys and update .env:
+API_KEY=$(openssl rand -base64 32)
+JWT_SECRET_KEY=$(openssl rand -base64 32)
+JWT_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# Then manually update .env file with these values
+
 docker compose up -d
-docker exec shared-context-server shared-context-server client-config claude
 ```
 
-**Development (Hot Reload):**
+**Development Setup (Hot Reload):**
 ```bash
-git clone <repository-url> && cd shared-context-server
-echo "API_KEY=$(openssl rand -base64 32)" > .env
-make docker
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+cp .env.minimal .env
+# Generate secure keys (same commands as above)
+
+make docker  # Uses docker-compose.dev.yml
+```
+
+## Environment Setup
+
+**Required**: Copy minimal template and generate keys
+```bash
+# Use minimal template (only essential variables)
+cp .env.minimal .env
+
+# Generate secure keys
+API_KEY=$(openssl rand -base64 32)
+JWT_SECRET_KEY=$(openssl rand -base64 32)
+JWT_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+# Update .env with these values
 ```
 
 ## Commands
 
+### Production
 ```bash
-# Default setup
 docker compose up -d                    # Start
 docker compose down                     # Stop
 docker compose logs -f                  # View logs
-
-# Development setup
-make docker                            # Start with hot reload
-docker compose -f docker-compose.dev.yml down  # Stop
-
-# Health checks
-curl http://localhost:23456/health      # HTTP server
-curl http://localhost:34567/health      # WebSocket server
-docker exec shared-context-server shared-context-server status
 ```
 
-## Client Configuration
-
+### Development
 ```bash
-# Get client-specific config
+make docker                            # Start with hot reload
+docker compose -f docker-compose.dev.yml down  # Stop
+```
+
+### Client Configuration
+```bash
+# Get MCP client setup commands
 docker exec shared-context-server shared-context-server client-config claude
 docker exec shared-context-server shared-context-server client-config cursor
 
-# Manual setup
-# MCP: http://localhost:23456/mcp/
-# WebSocket: ws://localhost:34567
-# Command: mcp-proxy --transport=streamablehttp http://localhost:23456/mcp/
+# Check server status
+docker exec shared-context-server shared-context-server status
+```
+
+## Health Checks
+
+```bash
+curl http://localhost:23456/health      # HTTP server
+curl http://localhost:34567/health      # WebSocket server
+curl http://localhost:23456/mcp/        # MCP endpoint
 ```
 
 ## Configuration
 
-**Required:**
+### Environment Variables (.env file)
 ```bash
-API_KEY=your-secure-32-character-key
-```
+# Required Security
+API_KEY=your-secure-api-key
+JWT_SECRET_KEY=your-jwt-secret
+JWT_ENCRYPTION_KEY=your-fernet-key
 
-**Optional:**
-```bash
+# Optional
 HTTP_PORT=23456
 WEBSOCKET_PORT=34567
 LOG_LEVEL=INFO
-MAX_SESSIONS_PER_AGENT=100
+MCP_CLIENT_HOST=localhost
 ```
 
-**Setup Comparison:**
-- **Default**: Isolated storage, production-ready, `docker compose up -d`
-- **Development**: Hot reload, shared database, source mounting, `make docker`
+### Setup Comparison
+- **Production**: `docker compose up -d` - Isolated storage, production defaults
+- **Development**: `make docker` - Hot reload, shared database, debug logging
 
-## Data Backup
+## Data Management
 
-**Default (Docker volumes):**
+### Backup (Production volumes)
 ```bash
 docker run --rm -v shared-context-server_shared-context-data:/data \
   -v $(pwd):/backup alpine tar czf /backup/db-backup.tar.gz -C /data .
 ```
 
-**Development (Shared file):**
+### Backup (Development shared files)
 ```bash
 cp chat_history.db chat_history.db.backup
 ```
 
-## Development
-
+### Reset Database
 ```bash
-# Hot reload development
-make docker
+# Production
+docker volume rm shared-context-server_shared-context-data
 
-# Build locally
-docker compose build
-docker compose -f docker-compose.dev.yml build
-
-# Multi-architecture build
-docker buildx build --platform linux/amd64,linux/arm64 .
+# Development
+rm chat_history.db
 ```
 
 ## Troubleshooting
 
+### Common Issues
 ```bash
 # Check logs
 docker compose logs shared-context-server
 
-# Common fixes:
-# - Port conflicts: Change HTTP_PORT/WEBSOCKET_PORT in .env
-# - Invalid API_KEY: Generate secure key
-# - Reset database: docker volume rm shared-context-server_shared-context-data
-# - Resource issues: docker stats shared-context-server
+# Port conflicts
+# Solution: Change HTTP_PORT/WEBSOCKET_PORT in .env
 
-# Health checks
-curl http://localhost:23456/health
-curl http://localhost:34567/health
-curl http://localhost:23456/mcp/
+# Invalid API keys
+# Solution: Regenerate using commands from Environment Setup
+
+# Resource issues
+docker stats shared-context-server
 ```
 
-## Advanced
-
+### Multiple Instances
 ```bash
-# Multiple instances (different ports)
+# Run on different ports
 HTTP_PORT=23457 WEBSOCKET_PORT=34568 docker compose up -d
+```
 
-# Container-to-container access
+### Container Networking
+```bash
+# Container-to-container access:
 # MCP: http://shared-context-server:23456/mcp/
 # WebSocket: ws://shared-context-server:34567
-
-# Security: Generate secure API_KEY, use HTTPS proxy in production
 ```
