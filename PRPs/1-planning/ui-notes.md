@@ -1,5 +1,7 @@
 we should think about adding authentication and token refresh events as well as memory setting and getting events to the chat history / logs in our ui
 
+right now, all sessions are active or at least we have no clear way of identifying inactive sessions - we need to think more about session lifecycle management in general.
+
 in dashboard: we are limiting query to 50 results, but we also need to display a total count of sessions (right now if we have more than 50, the ui says 50 sessions)
 
 display all timestamps in webui in local time, not utc
