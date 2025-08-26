@@ -329,12 +329,26 @@ async def search_by_sender(
     session_id: str = Field(description="Session ID to search within"),
     sender: str = Field(description="Sender to search for"),
     limit: int = Field(default=20, ge=1, le=100),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """Search messages by specific sender with agent visibility controls."""
 
     try:
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
 
         async with get_db_connection() as conn:
             conn.row_factory = None  # Use SQLAlchemy row type
@@ -381,12 +395,26 @@ async def search_by_timerange(
     start_time: str = Field(description="Start time (ISO format)"),
     end_time: str = Field(description="End time (ISO format)"),
     limit: int = Field(default=50, ge=1, le=200),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """Search messages within a specific time range."""
 
     try:
-        agent_id = getattr(ctx, "agent_id", f"agent_{ctx.session_id[:8]}")
+        # Extract and validate agent context (with token validation error handling)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
+
+        # If validation failed, return the error response immediately
+        if "error" in agent_context and agent_context.get("code") in [
+            "INVALID_TOKEN_FORMAT",
+            "TOKEN_AUTHENTICATION_FAILED",
+        ]:
+            return agent_context
+
+        agent_id = agent_context["agent_id"]
 
         # Convert ISO datetime strings to Unix timestamps for comparison
         try:

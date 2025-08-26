@@ -233,7 +233,9 @@ async def extract_agent_context(
         "agent_type": auth_info.agent_type,
         "authenticated": api_key_valid,  # Basic auth based on API key
         "auth_method": "api_key",
-        "permissions": ["read", "write"] if api_key_valid else ["read"],
+        "permissions": auth_info.permissions
+        if auth_info.permissions
+        else (["read"] if api_key_valid else []),
         "token_id": None,
         "api_key_authenticated": api_key_valid,
     }

@@ -245,7 +245,7 @@ class TestMCPAuthValidation:
         """Test that agent context is properly validated for authentication."""
         from shared_context_server import server
 
-        # Create context with minimal authentication
+        # Create context with minimal authentication (API key only gives read permission)
         minimal_ctx = MockContext(session_id="auth_test", agent_id="minimal-agent")
         minimal_ctx._auth_info = AuthInfo(
             agent_id="minimal-agent",
@@ -256,17 +256,33 @@ class TestMCPAuthValidation:
         )
 
         with patch_database_connection(test_db_manager):
-            # Agent with read-only permissions can create sessions
-            # (create_session doesn't require write permission in current implementation)
+            # Agent with read-only permissions cannot create sessions (requires write permission)
             session_result = await call_fastmcp_tool(
                 server.create_session, minimal_ctx, purpose="Minimal auth test"
             )
-            # This should succeed as create_session doesn't enforce write permission
-            assert session_result["success"] is True
+            # This should fail due to insufficient permissions
+            assert session_result["success"] is False
+            assert "PERMISSION_DENIED" in session_result.get("code", "")
 
-            session_id = session_result["session_id"]
+            # Test that API-key-only auth properly restricts to read permissions
+            # Create a session using a different context with proper write permissions for testing read access
+            write_ctx = MockContext(session_id="auth_test", agent_id="write-agent")
+            write_ctx._auth_info = AuthInfo(
+                agent_id="write-agent",
+                agent_type="claude",
+                permissions=["read", "write"],
+                authenticated=True,
+                auth_method="jwt",
+                jwt_validated=True,
+            )
 
-            # Agent can retrieve session info (read permission)
+            write_session_result = await call_fastmcp_tool(
+                server.create_session, write_ctx, purpose="Test session for read access"
+            )
+            assert write_session_result["success"] is True
+            session_id = write_session_result["session_id"]
+
+            # Now test that read-only agent can retrieve session info (read permission)
             get_result = await call_fastmcp_tool(
                 server.get_session, minimal_ctx, session_id=session_id
             )

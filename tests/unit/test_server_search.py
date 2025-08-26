@@ -29,6 +29,15 @@ class TestRapidFuzzSearchSystem:
     @pytest.fixture
     async def search_test_session(self, server_with_db, test_db_manager):
         """Create a session with diverse test data for search testing."""
+        import os
+
+        # Ensure authentication environment is set up properly
+        os.environ["API_KEY"] = "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk="
+        os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-jwt-signing-123456"
+        os.environ["JWT_ENCRYPTION_KEY"] = (
+            "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
+        )
+
         ctx = MockContext(agent_id="search_agent")
 
         # Create session

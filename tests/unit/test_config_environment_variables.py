@@ -335,7 +335,7 @@ class TestDefaultValueApplication:
 
             assert config.mcp_server_name == "shared-context-server"
             assert config.mcp_server_version == "1.0.0"
-            assert config.mcp_transport == "stdio"
+            assert config.mcp_transport == "http"
             assert config.http_host == "localhost"
             assert config.http_port == 23456
 
@@ -402,7 +402,7 @@ class TestDefaultValueApplication:
 
             # Check that defaults are applied
             assert config.database.database_timeout == 30
-            assert config.mcp_server.mcp_transport == "stdio"
+            assert config.mcp_server.mcp_transport == "http"
             assert config.operational.log_level == "INFO"
             assert config.development.environment == "development"
 

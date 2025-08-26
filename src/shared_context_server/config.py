@@ -156,7 +156,7 @@ class MCPServerConfig(BaseSettings):
 
     # Transport configuration
     mcp_transport: Literal["stdio", "http"] = Field(
-        default="stdio", json_schema_extra={"env": "MCP_TRANSPORT"}
+        default="http", json_schema_extra={"env": "MCP_TRANSPORT"}
     )
     http_host: str = Field(default="localhost", json_schema_extra={"env": "HTTP_HOST"})
     http_port: int = Field(default=23456, json_schema_extra={"env": "HTTP_PORT"})

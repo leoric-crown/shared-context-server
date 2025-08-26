@@ -122,6 +122,10 @@ async def create_session(
         examples=[{"test": True, "version": 1}, None],
         json_schema_extra={"type": "object", "additionalProperties": True},
     ),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
@@ -135,7 +139,7 @@ async def create_session(
         session_id = f"session_{uuid4().hex[:16]}"
 
         # Extract agent identity from context using the standard auth validation
-        agent_context = await validate_agent_context_or_error(ctx, None)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
 
         # If validation failed, return the error response immediately
         if "error" in agent_context and agent_context.get("code") in [
@@ -213,6 +217,10 @@ async def create_session(
 @mcp.tool(exclude_args=["ctx"])
 async def get_session(
     session_id: str = Field(description="Session ID to retrieve"),
+    auth_token: str | None = Field(
+        default=None,
+        description="Optional JWT token for elevated permissions",
+    ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
@@ -221,7 +229,7 @@ async def get_session(
 
     try:
         # Extract agent identity from context using the standard auth validation
-        agent_context = await validate_agent_context_or_error(ctx, None)
+        agent_context = await validate_agent_context_or_error(ctx, auth_token)
 
         # If validation failed, return the error response immediately
         if "error" in agent_context and agent_context.get("code") in [

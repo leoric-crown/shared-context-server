@@ -992,9 +992,9 @@ def isolate_environment_variables():
     original_auth_values = {var: os.environ.get(var) for var in auth_required_vars}
 
     # Ensure authentication variables are ALWAYS set
+    # Force-set authentication variables to ensure consistency across parallel tests
     for var, default_value in auth_required_vars.items():
-        if not os.environ.get(var):
-            os.environ[var] = default_value
+        os.environ[var] = default_value
 
     yield  # Let the test run
 
@@ -1267,38 +1267,51 @@ async def server_with_db(test_db_manager):
 @pytest.fixture
 async def search_test_session(server_with_db, test_db_manager):
     """Create a test session with sample messages for search testing."""
+    import os
+    from unittest.mock import patch
+
     from shared_context_server.server import add_message, create_session
 
-    ctx = MockContext("test_search_session")
+    # Ensure authentication environment is set up properly
+    with patch.dict(
+        os.environ,
+        {
+            "API_KEY": "T34PEv/IEUoVx18/g+xOIk/zT4S/MaQUm0dlU9jQhXk=",
+            "JWT_SECRET_KEY": "test-secret-key-for-jwt-signing-123456",
+            "JWT_ENCRYPTION_KEY": "3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY=",
+        },
+        clear=False,
+    ):
+        ctx = MockContext("test_search_session")
 
-    # Create session
-    session_result = await call_fastmcp_tool(
-        create_session, ctx, purpose="Search testing session"
-    )
-    session_id = session_result["session_id"]
-
-    # Add test messages for search functionality
-    test_messages = [
-        "FastAPI framework implementation with async/await patterns",
-        "Database connection optimization techniques",
-        "Memory system performance improvements",
-        "Agent authentication workflow patterns",
-        "Fuzzy search performance optimization",
-        "WebSocket real-time communication setup",
-        "Error handling and retry mechanisms",
-        "Session management and state persistence",
-    ]
-
-    for i, content in enumerate(test_messages):
-        await call_fastmcp_tool(
-            add_message,
-            ctx,
-            session_id=session_id,
-            content=content,
-            metadata={"test_index": i, "category": "search_test"},
+        # Create session
+        session_result = await call_fastmcp_tool(
+            create_session, ctx, purpose="Search testing session"
         )
+        session_id = session_result["session_id"]
 
-    yield session_id, ctx
+        # Add test messages for search functionality
+        test_messages = [
+            "FastAPI framework implementation with async/await patterns",
+            "Database connection optimization techniques",
+            "Memory system performance improvements",
+            "Agent authentication workflow patterns",
+            "Fuzzy search performance optimization",
+            "WebSocket real-time communication setup",
+            "Error handling and retry mechanisms",
+            "Session management and state persistence",
+        ]
+
+        for i, content in enumerate(test_messages):
+            await call_fastmcp_tool(
+                add_message,
+                ctx,
+                session_id=session_id,
+                content=content,
+                metadata={"test_index": i, "category": "search_test"},
+            )
+
+        yield session_id, ctx
 
 
 # =============================================================================

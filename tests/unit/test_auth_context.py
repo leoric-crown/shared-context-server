@@ -286,7 +286,8 @@ class TestExtractAgentContext:
             assert context_auth["permissions"] == [
                 "read",
                 "write",
-            ]  # Based on API key auth
+                "admin",
+            ]  # Uses explicit permissions from auth_info
 
         # Unauthenticated agent
         auth_info_unauth = AuthInfo(
