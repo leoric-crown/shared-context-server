@@ -18,7 +18,7 @@ we need to think of edge cases (like very long messages) and how to handle/displ
 apply markdown rendering to agent's responses
 apply code syntax highlighting for fenced code blocks
 
-feature: provide a way to flag a session as important
+feature: provide a way to flag/star a session as important
 feature: building on the above, provide a way to tag sessions
 
 let's get a proper logo / favicon? - to quickly identify SCS WebUI browser tabs

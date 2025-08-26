@@ -21,10 +21,12 @@ Transform your AI agents from independent workers into collaborative teams. This
 # Start the server
 docker run -d --name shared-context-server -p 23456:23456 \
   -e API_KEY="test-key" -e JWT_SECRET_KEY="test-secret" \
+  -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   ghcr.io/leoric-crown/shared-context-server:latest
 
 # Connect with Claude Code
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+claude mcp add --transport http shared-context-server http://localhost:23456/mcp/ \
+  --header "X-API-Key: test-key"
 ```
 
 ### 3-Line Collaboration Test
@@ -176,7 +178,7 @@ class AgentHandoffManager:
 
 ⚠️ **Important**: The following framework integrations are conceptual designs that have not been tested. They represent potential integration patterns that could be developed by the community.
 
-### CrewAI: Conceptual Team Collaboration
+### CrewAI: Team Collaboration
 
 <details>
 <summary>🟢 Conceptual CrewAI Integration (untested)</summary>
@@ -292,9 +294,7 @@ async def create_development_crew():
 
 </details>
 
-### AutoGen: Conceptual Multi-Agent Conversations
-
-⚠️ **Status**: Conceptual integration pattern - not tested with actual AutoGen framework.
+### AutoGen: Multi-Agent Conversations
 
 <details>
 <summary>🟢 Conceptual AutoGen Integration (untested)</summary>
@@ -421,9 +421,7 @@ async def run_collaborative_research():
 
 </details>
 
-### LangChain: Conceptual Workflow Continuity
-
-⚠️ **Status**: Conceptual integration pattern - not tested with actual LangChain framework.
+### LangChain: Workflow Continuity
 
 <details>
 <summary>🟢 Conceptual LangChain Integration (untested)</summary>

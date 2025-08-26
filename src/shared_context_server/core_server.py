@@ -136,8 +136,8 @@ def _register_web_routes() -> None:
         logger.warning(f"Failed to register web UI routes: {e}")
 
 
-def _register_mcp_tools() -> None:
-    """Register MCP tools by importing all tool modules."""
+def _register_mcp_components() -> None:
+    """Register all MCP components including tools, resources, and prompts."""
     try:
         # Import all tool modules to register their @mcp.tool() decorated functions
         from . import (
@@ -152,7 +152,19 @@ def _register_mcp_tools() -> None:
     except ImportError as e:
         logger.warning(f"Failed to register MCP tools: {e}")
 
+    try:
+        # Import resource and prompt modules to register their decorators
+        from . import (
+            admin_resources,  # noqa: F401
+            prompts,  # noqa: F401
+            resources,  # noqa: F401
+        )
 
-# Register web routes and MCP tools at module initialization
+        logger.debug("MCP resources and prompts registered successfully")
+    except ImportError as e:
+        logger.warning(f"Failed to register MCP resources and prompts: {e}")
+
+
+# Register web routes and MCP components at module initialization
 _register_web_routes()
-_register_mcp_tools()
+_register_mcp_components()
