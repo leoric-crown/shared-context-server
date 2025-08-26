@@ -142,6 +142,10 @@ docker compose down
 
 # Full lifecycle (stop → build → up → logs)
 make docker
+# ⚠️ Shows live logs - press Ctrl+C to exit log mode
+
+# Alternative: Start without following logs
+docker compose up -d  # Runs in background
 ```
 
 ### Production Docker
@@ -244,18 +248,19 @@ openssl rand -base64 32
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### JWT Token Usage
+### JWT Token Usage via MCP Tools
 ```bash
-# Get authentication token
-TOKEN=$(curl -X POST http://localhost:23456/authenticate \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id": "my-agent", "agent_type": "claude", "api_key": "your-api-key"}' \
-  | jq -r '.token')
+# Get authentication token (MCP tool call)
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-api-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name authenticate_agent \
+  --tool-arg agent_id="my-agent" \
+  --tool-arg agent_type="claude"
 
-# Use token in requests
-curl http://localhost:23456/mcp/tool/add_message \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"session_id": "session_123", "content": "Hello"}'
+# Note: Direct HTTP REST endpoints like /mcp/tool/* do not exist
+# Use MCP Inspector CLI or proper MCP clients for tool calls
 ```
 
 ## File Locations

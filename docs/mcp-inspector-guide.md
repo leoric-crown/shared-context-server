@@ -233,11 +233,12 @@ For reliable tool testing, use direct server API calls or the development server
 # Start development server for testing
 make dev
 
-# Or use curl for direct testing
-curl -X POST http://localhost:23456/mcp/tool/create_session \
-  -H "X-API-Key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"purpose": "test session"}'
+# Or use MCP Inspector CLI for direct testing
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=$API_KEY \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name get_usage_guidance
 ```
 
 ---

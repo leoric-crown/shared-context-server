@@ -574,17 +574,16 @@ Real-time session data with message history and statistics.
 }
 ```
 
-**Resource Subscription Example:**
-```python
-import httpx
+**Resource Subscription:**
+```bash
+# List available resources
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-api-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method resources/list
 
-# Subscribe to session updates
-async with httpx.AsyncClient() as client:
-    response = await client.post(
-        "http://localhost:23456/mcp/resource/subscribe",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"uri": "session://session_a1b2c3d4e5f6g7h8"}
-    )
+# Note: Resource subscription requires proper MCP client implementation
+# HTTP endpoints like /mcp/resource/* do not exist
 ```
 
 ### Agent Memory Resource: `agent://{agent_id}/memory`
@@ -831,58 +830,51 @@ All errors include actionable guidance and recovery suggestions:
 
 ### Basic Agent Integration
 
-```python
-import httpx
-import json
+**Important:** This server uses MCP protocol, not REST endpoints. Use proper MCP clients.
 
-# Authenticate and get token
-auth_response = httpx.post("http://localhost:23456/mcp/tool/authenticate_agent", json={
-    "agent_id": "my-agent",
-    "agent_type": "claude",
-    "api_key": "your-api-key"
-})
-token = auth_response.json()["token"]
+```bash
+# CLI example using MCP Inspector
+# 1. Authenticate agent
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-api-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name authenticate_agent \
+  --tool-arg agent_id="my-agent" \
+  --tool-arg agent_type="claude"
 
-# Create session
-session_response = httpx.post("http://localhost:23456/mcp/tool/create_session",
-    headers={"Authorization": f"Bearer {token}"},
-    json={"purpose": "Multi-agent collaboration"}
-)
-session_id = session_response.json()["session_id"]
-
-# Add message
-message_response = httpx.post("http://localhost:23456/mcp/tool/add_message",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "session_id": session_id,
-        "content": "Hello from my agent!",
-        "visibility": "public"
-    }
-)
+# 2. For session creation, use proper MCP clients or mcp-proxy
+# Note: HTTP endpoints like /mcp/tool/* do not exist
 ```
+
+**For Python integration, use:**
+- Official MCP Python client libraries
+- mcp-proxy for REST-like access
+- Direct MCP protocol implementation
 
 ### Search and Memory Usage
 
-```python
-# Search context
-search_response = httpx.post("http://localhost:23456/mcp/tool/search_context",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "session_id": session_id,
-        "query": "collaboration",
-        "fuzzy_threshold": 70.0
-    }
-)
+Use MCP Inspector CLI for testing tools:
 
-# Store in memory
-memory_response = httpx.post("http://localhost:23456/mcp/tool/set_memory",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "key": "agent_state",
-        "value": {"status": "active", "session": session_id},
-        "expires_in": 3600
-    }
-)
+```bash
+# Search context in a session
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-api-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name search_context \
+  --tool-arg session_id="session_123" \
+  --tool-arg query="collaboration" \
+  --tool-arg fuzzy_threshold="70"
+
+# Store in agent memory
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-api-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name set_memory \
+  --tool-arg key="agent_state" \
+  --tool-arg expires_in="3600"
 ```
 
 ---

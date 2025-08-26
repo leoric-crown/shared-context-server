@@ -24,51 +24,47 @@ This guide provides patterns for integrating with the Shared Context Server for 
 
 ```python
 # Agent workflow: Start shared session for task coordination
-session = await client.post("/mcp/tool/create_session",
-                          json={"purpose": "feature implementation: user authentication"})
+session = await mcp_client.call_tool("create_session",
+                                   {"purpose": "feature implementation: user authentication"})
 
 # Add findings to shared context
-await client.post("/mcp/tool/add_message",
-                 json={
-                     "session_id": session["session_id"],
-                     "content": "Security analysis complete: Found SQL injection vulnerability in auth.py:42",
-                     "visibility": "public"
-                 })
+await mcp_client.call_tool("add_message", {
+    "session_id": session["session_id"],
+    "content": "Security analysis complete: Found SQL injection vulnerability in auth.py:42",
+    "visibility": "public"
+})
 ```
 
 ### Agent Handoff Coordination
 
 ```python
 # Previous agent shares context
-await client.post("/mcp/tool/add_message",
-                 json={
-                     "session_id": session_id,
-                     "content": "Developer agent findings: Implemented secure authentication with bcrypt hashing. Tests passing. Code ready for optimization review.",
-                     "visibility": "agent_only"
-                 })
+await mcp_client.call_tool("add_message", {
+    "session_id": session_id,
+    "content": "Developer agent findings: Implemented secure authentication with bcrypt hashing. Tests passing. Code ready for optimization review.",
+    "visibility": "agent_only"
+})
 
 # Next agent searches context before starting
-search_results = await client.post("/mcp/tool/search_context",
-                                 json={
-                                     "session_id": session_id,
-                                     "query": "authentication security implementation"
-                                 })
+search_results = await mcp_client.call_tool("search_context", {
+    "session_id": session_id,
+    "query": "authentication security implementation"
+})
 ```
 
 ### Memory Persistence Patterns
 
 ```python
 # Store structured findings for complex coordination
-await client.post("/mcp/tool/set_memory",
-                 json={
-                     "key": "architecture_decisions",
-                     "value": {
-                         "auth_pattern": "JWT with refresh tokens",
-                         "security_measures": ["bcrypt", "rate_limiting", "CSRF_protection"],
-                         "performance_optimizations": ["connection_pooling", "query_caching"]
-                     },
-                     "session_id": session_id
-                 })
+await mcp_client.call_tool("set_memory", {
+    "key": "architecture_decisions",
+    "value": {
+        "auth_pattern": "JWT with refresh tokens",
+        "security_measures": ["bcrypt", "rate_limiting", "CSRF_protection"],
+        "performance_optimizations": ["connection_pooling", "query_caching"]
+    },
+    "session_id": session_id
+})
 ```
 
 ## Agent Integration Workflows

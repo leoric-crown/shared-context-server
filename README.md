@@ -104,7 +104,8 @@ git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
 cp .env.minimal .env
 # Edit .env with your secure keys (see Step 2 below)
-make docker-prod
+make docker
+# ⚠️ This will show live logs - press Ctrl+C to exit log mode and continue
 
 # OR manual Docker run:
 API_KEY=$(openssl rand -base64 32)
@@ -245,14 +246,26 @@ Have not tested in Windows.
 
 ### Step 4: Verify & Monitor
 
+**📝 Note**: If you used `make docker-prod`, press Ctrl+C to exit the log viewer first, then run these commands in the same terminal.
+
 ```bash
 # Test your setup (30 seconds)
-curl -X POST http://localhost:23456/mcp/tool/create_session \
-  -H "X-API-Key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"purpose": "test setup"}'
+# Method 1: Quick health check
+curl http://localhost:23456/health
 
-# Expected output: {"success": true, "session_id": "sess_..."}
+# Method 2: Create actual test session (see it in web UI!)
+# If you have Claude Code with shared-context-server MCP tools:
+# Run this in Claude: Create a session with purpose "README test setup"
+# Expected: {"success": true, "session_id": "session_...", ...}
+
+# Method 3: Test MCP tools with parameters
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=$API_KEY \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name get_usage_guidance
+
+# Expected: {"success": true, "access_level": "READ_ONLY", ...} (proves MCP tools work)
 ```
 
 ```bash
@@ -261,8 +274,9 @@ open http://localhost:23456/ui/  # Real-time session monitoring
 ```
 
 ✅ **Success indicators**:
-- curl command returns `{"success": true, "session_id": "..."}`
-- Dashboard shows "1 active session"
+- Health endpoint returns `{"status": "healthy", ...}`
+- Dashboard loads at http://localhost:23456/ui/ and shows active sessions
+- MCP Inspector validation error (proves MCP protocol is working)
 - MCP client shows `✓ Connected` status
 
 ### 📊 Web Dashboard (MVP)
@@ -305,11 +319,14 @@ Works with existing tools you already use:
 # Via Claude Code or any MCP client
 claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
 
-# Direct API usage
-import httpx
-client = httpx.AsyncClient()
-session = await client.post("http://localhost:23456/mcp/tool/create_session",
-                           json={"purpose": "agent collaboration"})
+# Direct MCP usage (use proper MCP client in production)
+# Example shows concept - use mcp-proxy or MCP client libraries
+import asyncio
+from mcp_client import MCPClient  # Conceptual - use actual MCP client
+
+async def create_session():
+    client = MCPClient("http://localhost:23456/mcp/")
+    return await client.call_tool("create_session", {"purpose": "agent collaboration"})
 ```
 
 ⚠️ **Framework Integration Status**: Direct MCP protocol tested. CrewAI, AutoGen, and LangChain integrations are conceptual - we welcome community contributions to develop and test these patterns.
@@ -536,8 +553,9 @@ make help        # Show all available commands
 make dev         # Start development server with hot reload
 make test        # Run tests with coverage
 make quality     # Run all quality checks
-make docker-prod # Production Docker (GHCR image)
-make docker      # Development Docker (local build + hot reload)
+make docker      # Production Docker (GHCR image) → shows logs
+make dev-docker  # Development Docker (local build + hot reload) → shows logs
+# ⚠️ Both commands show live logs - press Ctrl+C to exit and continue setup
 ```
 
 <details>

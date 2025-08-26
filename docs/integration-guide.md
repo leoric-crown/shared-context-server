@@ -66,20 +66,20 @@ await client.call_tool("add_message", {
 })
 ```
 
-### Direct HTTP API
-```python
-import httpx
-client = httpx.AsyncClient()
+### Direct MCP Protocol
+**⚠️ Important**: This server uses MCP protocol, not REST endpoints.
 
-# Create collaborative session
-session = await client.post("http://localhost:23456/mcp/tool/create_session",
-                           json={"purpose": "agent collaboration"})
+```bash
+# For testing - Use MCP Inspector CLI
+npx @modelcontextprotocol/inspector --cli \
+  -e API_KEY=your-key \
+  -- uv run python -m shared_context_server.scripts.cli \
+  --method tools/call \
+  --tool-name create_session \
+  --tool-arg purpose="agent collaboration"
 
-# Share findings between agents
-await client.post("http://localhost:23456/mcp/tool/add_message", json={
-    "session_id": session_id,
-    "content": "Agent 1: Found root cause in authentication"
-})
+# For production - Use proper MCP clients or mcp-proxy
+# HTTP endpoints like /mcp/tool/* do not exist
 ```
 
 **➡️ Next**: [Conceptual Framework Patterns](#-conceptual-framework-patterns) (untested)
@@ -635,75 +635,51 @@ class AgentCollaborationSDK:
         self.token = None
 
     async def authenticate(self):
-        """Authenticate agent with shared context server."""
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/authenticate_agent",
-            json={
-                "agent_id": self.agent_name.lower().replace(" ", "-"),
-                "agent_type": "custom",
-                "api_key": self.api_key,
-                "requested_permissions": ["read", "write"]
-            }
-        )
-        result = response.json()
-        if result.get("success"):
-            self.token = result["token"]
-        else:
-            raise Exception(f"Authentication failed: {result}")
+        """Authenticate agent with shared context server.
+
+        This is a conceptual example. In production, use a proper MCP client
+        like mcp-proxy or implement the MCP protocol directly.
+        """
+        # Simulate authentication for demonstration
+        self.token = f"jwt_token_for_{self.agent_name}"
+        print(f"✅ Authenticated: {self.agent_name}")
 
     async def start_collaboration(self, purpose: str):
-        """Start new collaboration session."""
+        """Start new collaboration session.
+
+        This is a conceptual example. In production, use MCP tools
+        through proper MCP clients like mcp-proxy.
+        """
         if not self.token:
             await self.authenticate()
 
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/create_session",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={"purpose": purpose}
-        )
-        result = response.json()
-        if result.get("success"):
-            self.session_id = result["session_id"]
-            return self.session_id
-        else:
-            raise Exception(f"Session creation failed: {result}")
+        # Simulate session creation for demonstration
+        import uuid
+        self.session_id = str(uuid.uuid4())
+        print(f"📋 Session created: {purpose}")
+        return self.session_id
 
     async def share_finding(self, finding: str, metadata: dict = None):
-        """Share finding with collaborating agents."""
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/add_message",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "session_id": self.session_id,
-                "content": f"[{self.agent_name}] {finding}",
-                "visibility": "public",
-                "metadata": metadata or {"agent": self.agent_name}
-            }
-        )
-        return response.json()
+        """Share finding with collaborating agents.
+
+        This is a conceptual example. In production, use MCP tools
+        through proper MCP clients.
+        """
+        # Simulate message sharing
+        print(f"💡 [{self.agent_name}] {finding}")
+        return {"success": True, "message": "Finding shared"}
 
     async def get_collaboration_context(self, focus_area: str = None):
-        """Get relevant context from other collaborating agents."""
+        """Get relevant context from other collaborating agents.
+
+        This is a conceptual example. In production, use MCP tools
+        through proper MCP clients.
+        """
         query = focus_area or "findings recommendations insights"
-        response = await self.client.post(
-            f"{self.base_url}/mcp/tool/search_context",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json={
-                "session_id": self.session_id,
-                "query": query,
-                "fuzzy_threshold": 65.0
-            }
-        )
-        result = response.json()
-        if result.get("success"):
-            # Filter out own messages
-            relevant_findings = []
-            for item in result.get("results", []):
-                content = item["message"]["content"]
-                if not content.startswith(f"[{self.agent_name}]"):
-                    relevant_findings.append(content)
-            return relevant_findings
-        return []
+
+        # Simulate context retrieval
+        print(f"🔍 Searching context for: {query}")
+        return [f"Previous finding about {query}", f"Related insight on {query}"]
 
 # Example usage
 async def custom_collaboration_example():
