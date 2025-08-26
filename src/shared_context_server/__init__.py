@@ -5,6 +5,7 @@ A centralized memory store enabling multiple AI agents (Claude, Gemini, etc.)
 to collaborate on complex tasks through shared conversational context.
 """
 
+from importlib.metadata import version as get_package_version
 from pathlib import Path
 
 from .config import get_config, load_config
@@ -20,33 +21,20 @@ __author__ = "Shared Context Server Team"
 
 
 def _get_version() -> str:
-    """Get version from Docker build or pyproject.toml."""
+    """Get version from package metadata or Docker build."""
     try:
         # First, try Docker build version (for containerized environments)
         docker_version_file = Path("/app/version")
         if docker_version_file.exists():
-            version = docker_version_file.read_text(encoding="utf-8").strip()
-            if version:
-                return version
+            docker_version = docker_version_file.read_text(encoding="utf-8").strip()
+            if docker_version:
+                return docker_version
 
-        # Fallback: Try to find pyproject.toml - look up the directory tree
-        current_path = Path(__file__).parent
-        for _ in range(5):  # Look up to 5 levels
-            pyproject_path = current_path / "pyproject.toml"
-            if pyproject_path.exists():
-                content = pyproject_path.read_text(encoding="utf-8")
-                # Simple parsing - find version = "x.y.z" line
-                for line in content.split("\n"):
-                    line = line.strip()
-                    if line.startswith("version = "):
-                        return line.split("=", 1)[1].strip().strip('"').strip("'")
-            current_path = current_path.parent
-
-        # Fallback version if neither method works
-        return "1.1.4"  # Updated fallback to match current release
+        # Standard approach: get version from installed package metadata
+        return get_package_version("shared-context-server")
     except Exception:
-        # Fallback in case of any errors
-        return "1.1.4"  # Updated fallback to match current release
+        # Final fallback - should rarely be needed
+        return "1.1.7"
 
 
 __version__ = _get_version()
