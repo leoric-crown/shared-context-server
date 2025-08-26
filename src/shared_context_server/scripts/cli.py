@@ -173,7 +173,7 @@ def parse_arguments() -> Any:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Transport Options:
-  STDIO (default):  Direct process communication (recommended for Claude Desktop)
+  STDIO (default):  Direct process communication (recommended for Claude Code)
   HTTP:            Web server for team/remote access
 
 Examples:
@@ -181,7 +181,7 @@ Examples:
   shared-context-server --transport http        # Start HTTP server on localhost:23456
   shared-context-server --transport http --host 0.0.0.0 --port 9000  # Custom HTTP config
 
-Claude Desktop Integration:
+Claude Code Integration:
   claude mcp add shared-context-server shared-context-server
         """,
     )

@@ -220,9 +220,26 @@ Add to your existing `.cursor/mcp.json` (create if it doesn't exist):
   "mcpServers": {
     "shared-context-server": {
       "command": "mcp-proxy",
-      "args": ["--transport=http", "http://localhost:23456/mcp/", "--header", "X-API-Key: YOUR_API_KEY_HERE"]
+      "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/", "--headers", "X-API-Key", "YOUR_API_KEY_HERE"]
     }
   }
+}
+```
+
+### Claude Desktop Configuration
+
+Add to your existing `claude_desktop_config.json`:
+
+On MacOS, you may have to provide explicity path to mcp-proxy.
+
+Have not tested in Windows.
+
+```json
+{
+    "scs": {
+      "command": "/Users/YOUR_USER/.local/bin/mcp-proxy",
+      "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/", "--headers", "X-API-Key", "YOUR_API_KEY_HERE"]
+    }
 }
 ```
 
