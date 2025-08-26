@@ -129,6 +129,7 @@ async def set_memory(
     key: str = Field(description="Memory key", min_length=1, max_length=255),
     value: Any = Field(
         description="Value to store (JSON serializable - objects will be auto-converted)",
+        json_schema_extra={"type": "object", "additionalProperties": True},
     ),
     session_id: str | None = Field(
         default=None,
