@@ -2311,6 +2311,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "toml" },
     { name = "types-requests" },
 ]
 test = [
@@ -2377,6 +2378,7 @@ dev = [
     { name = "pytest-timeout", specifier = ">=2.3.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.12.8" },
+    { name = "toml", specifier = ">=0.10.2" },
     { name = "types-requests", specifier = ">=2.32.4.20250809" },
 ]
 test = [

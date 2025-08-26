@@ -29,6 +29,14 @@ repos:
         entry: uv
         args: ["run", "mypy", "src"]
 
+      - id: version-consistency
+        name: Version consistency check
+        language: system
+        pass_filenames: false
+        entry: uv
+        args: ["run", "python", "scripts/validate-version-consistency.py"]
+        description: "Ensure pyproject.toml version matches git tags"
+
   # Essential file hygiene (fast, prevents diff noise)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

@@ -16,6 +16,15 @@ make test         # Run tests with coverage (target: 84%+)
 make test-quick   # Run tests without coverage (faster)
 ```
 
+### Version Management
+```bash
+make version-check         # Check version consistency
+make version-bump BUMP=patch    # Bump patch version (1.1.5 -> 1.1.6)
+make version-bump BUMP=minor    # Bump minor version (1.1.5 -> 1.2.0)
+make version-bump BUMP=major    # Bump major version (1.1.5 -> 2.0.0)
+make version-bump BUMP=1.2.3    # Set explicit version
+```
+
 ### Code Quality
 ```bash
 make lint         # Run ruff linting with auto-fix

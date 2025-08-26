@@ -1,0 +1,72 @@
+name: Release Validation
+
+# Validate that releases have consistent versions before Docker builds
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+jobs:
+  validate-release:
+    name: Validate Release Version Consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for tag comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install toml
+
+      - name: Validate version consistency
+        run: |
+          # Extract tag version
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "🏷️  Git tag version: $TAG_VERSION"
+
+          # Extract pyproject.toml version
+          PYPROJECT_VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          echo "📦 pyproject.toml version: $PYPROJECT_VERSION"
+
+          # Compare versions
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "❌ VERSION MISMATCH!"
+            echo "   Tag: v$TAG_VERSION"
+            echo "   pyproject.toml: $PYPROJECT_VERSION"
+            echo ""
+            echo "💡 This will cause Docker images to have incorrect version labels."
+            echo "   The Docker build extracts version from pyproject.toml, not git tags."
+            echo ""
+            echo "🔧 To fix:"
+            echo "   1. Update pyproject.toml to version $TAG_VERSION"
+            echo "   2. Commit the change"
+            echo "   3. Move the tag to the new commit"
+            exit 1
+          fi
+
+          echo "✅ Version consistency validated: $TAG_VERSION"
+
+      - name: Validate Docker version extraction
+        run: |
+          # Test the exact command used in Dockerfile
+          EXTRACTED_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+
+          echo "🐳 Docker would extract version: $EXTRACTED_VERSION"
+
+          if [ "$EXTRACTED_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Docker version extraction mismatch!"
+            exit 1
+          fi
+
+          echo "✅ Docker version extraction validated"

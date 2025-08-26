@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick format lint type pre-commit quality clean dev-docker docker docker-local docker-fresh
+.PHONY: help install dev test test-quick format lint type pre-commit quality clean dev-docker docker docker-local docker-fresh version-bump version-check
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -123,3 +123,19 @@ docker-fresh: ## Force fresh pull bypassing all Docker cache
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml up -d --pull always --force-recreate
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml logs -f
+
+version-check: ## Check version consistency across pyproject.toml and git tags
+	@echo "🔍 Checking version consistency..."
+	uv run python scripts/validate-version-consistency.py
+
+version-bump: ## Bump version (usage: make version-bump BUMP=patch|minor|major|x.y.z)
+	@if [ -z "$(BUMP)" ]; then \
+		echo "❌ Please specify version bump type:"; \
+		echo "   make version-bump BUMP=patch   # 1.1.5 -> 1.1.6"; \
+		echo "   make version-bump BUMP=minor   # 1.1.5 -> 1.2.0"; \
+		echo "   make version-bump BUMP=major   # 1.1.5 -> 2.0.0"; \
+		echo "   make version-bump BUMP=1.2.3   # Set explicit version"; \
+		exit 1; \
+	fi
+	@echo "🚀 Bumping version ($(BUMP))..."
+	uv run python scripts/bump-version.py $(BUMP)
