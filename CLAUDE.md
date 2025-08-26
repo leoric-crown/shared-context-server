@@ -23,6 +23,11 @@ make version-bump BUMP=patch    # Bump patch version (1.1.5 -> 1.1.6)
 make version-bump BUMP=minor    # Bump minor version (1.1.5 -> 1.2.0)
 make version-bump BUMP=major    # Bump major version (1.1.5 -> 2.0.0)
 make version-bump BUMP=1.2.3    # Set explicit version
+
+# Streamlined Release Process:
+# 1. make version-bump BUMP=patch
+# 2. git push && git push origin v1.x.x
+# 3. gh release create v1.x.x  # Triggers single Docker build
 ```
 
 ### Code Quality

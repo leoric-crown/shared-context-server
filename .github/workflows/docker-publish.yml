@@ -1,14 +1,10 @@
 name: Build and Publish Docker Image
 
 # Trigger the workflow on:
-# - Git tags starting with 'v' (e.g., v1.0.0, v1.2.3-beta)
-# - GitHub releases
-# - Manual dispatch
-# Note: Removed main branch trigger to avoid publishing on every commit
+# - GitHub releases (recommended approach - intentional releases with notes)
+# - Manual dispatch for testing
+# Note: Removed push tags trigger to avoid duplicate builds when creating releases
 on:
-  push:
-    tags:
-      - 'v*'
   release:
     types: [published]
   workflow_dispatch:

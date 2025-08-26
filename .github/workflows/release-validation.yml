@@ -2,9 +2,6 @@ name: Release Validation
 
 # Validate that releases have consistent versions before Docker builds
 on:
-  push:
-    tags:
-      - 'v*'
   release:
     types: [published]
 

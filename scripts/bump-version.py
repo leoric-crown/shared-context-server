@@ -128,7 +128,7 @@ def main():
             print(f"✅ Created commit and tag: {tag_name}")
             print("\n🔧 Next steps:")
             print(f"   git push && git push origin {tag_name}")
-            print(f"   gh release create {tag_name}")
+            print(f"   gh release create {tag_name}  # Triggers single Docker build")
         else:
             print("✅ Version updated (no commit created)")
 
