@@ -20,9 +20,16 @@ __author__ = "Shared Context Server Team"
 
 
 def _get_version() -> str:
-    """Get version from pyproject.toml."""
+    """Get version from Docker build or pyproject.toml."""
     try:
-        # Try to find pyproject.toml - look up the directory tree
+        # First, try Docker build version (for containerized environments)
+        docker_version_file = Path("/app/version")
+        if docker_version_file.exists():
+            version = docker_version_file.read_text(encoding="utf-8").strip()
+            if version:
+                return version
+
+        # Fallback: Try to find pyproject.toml - look up the directory tree
         current_path = Path(__file__).parent
         for _ in range(5):  # Look up to 5 levels
             pyproject_path = current_path / "pyproject.toml"
@@ -35,11 +42,11 @@ def _get_version() -> str:
                         return line.split("=", 1)[1].strip().strip('"').strip("'")
             current_path = current_path.parent
 
-        # Fallback version if pyproject.toml not found
-        return "1.0.2"
+        # Fallback version if neither method works
+        return "1.1.4"  # Updated fallback to match current release
     except Exception:
         # Fallback in case of any errors
-        return "1.0.2"
+        return "1.1.4"  # Updated fallback to match current release
 
 
 __version__ = _get_version()

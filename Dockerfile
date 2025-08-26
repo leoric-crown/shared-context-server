@@ -25,6 +25,10 @@ WORKDIR /build
 COPY pyproject.toml README.md LICENSE database_*.sql ./
 COPY src/ ./src/
 
+# Extract version from pyproject.toml for build metadata
+RUN VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2) && \
+    echo "Building version: $VERSION" && echo "$VERSION" > /tmp/app_version
+
 # Install build tools and create wheel
 RUN pip install build && \
     python -m build --wheel && \
@@ -57,8 +61,9 @@ WORKDIR /app
 RUN mkdir -p /app/data /app/logs && \
     chown -R appuser:appuser /app
 
-# Copy wheel from build stage and install
+# Copy wheel and version from build stage and install
 COPY --from=builder /build/dist/*.whl /tmp/
+COPY --from=builder /tmp/app_version /app/version
 RUN pip install /tmp/*.whl && \
     rm -rf /tmp/*.whl
 

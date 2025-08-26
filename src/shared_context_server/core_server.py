@@ -20,6 +20,8 @@ from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from starlette.templating import Jinja2Templates
 
+from . import __version__
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastMCP server according to Phase 1 specification
 mcp = FastMCP(
     name=os.getenv("MCP_SERVER_NAME", "shared-context-server"),
-    version=os.getenv("MCP_SERVER_VERSION", "1.0.0"),
+    version=__version__,
     instructions="Centralized memory store for multi-agent collaboration",
 )
 
@@ -88,7 +90,7 @@ async def health_check(_request: Request) -> JSONResponse:
                 "timestamp": db_status["timestamp"],
                 "database": db_status,
                 "server": "shared-context-server",
-                "version": os.getenv("MCP_SERVER_VERSION", "1.0.0"),
+                "version": __version__,
             }
         )
     except Exception as e:

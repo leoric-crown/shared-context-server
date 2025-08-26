@@ -80,6 +80,11 @@ class ProductionServer:
             # Initialize server components
             await initialize_server()
 
+            # Log version information just before starting MCP server
+            logger.info(
+                f"✅ Shared Context MCP Server v{__version__} initialized successfully"
+            )
+
             # Run server with STDIO transport
             await server.run_stdio_async()
         except Exception:
@@ -130,6 +135,11 @@ class ProductionServer:
             # Configure uvicorn to use the modern websockets-sansio implementation
             # to avoid deprecation warnings from the legacy websockets API
             uvicorn_config = {"ws": "websockets-sansio"}
+
+            # Log version information just before starting MCP server
+            logger.info(
+                f"✅ Shared Context MCP Server v{__version__} initialized successfully"
+            )
 
             # Run HTTP server (this will block)
             try:

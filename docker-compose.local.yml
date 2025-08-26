@@ -1,0 +1,11 @@
+# Docker Compose override for local production builds
+# Used by: make docker-local
+
+services:
+  shared-context-server:
+    # Override image with local build
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Remove image reference to force local build
+    image: shared-context-server:local

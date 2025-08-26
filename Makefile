@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick format lint type pre-commit quality clean docker docker-prod
+.PHONY: help install dev test test-quick format lint type pre-commit quality clean dev-docker docker docker-local docker-fresh
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -80,7 +80,7 @@ clean: ## Clean caches and temporary files
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Cleanup complete"
 
-docker: ## Development environment with hot reload (builds locally)
+dev-docker: ## Development environment with hot reload (builds locally)
 	@echo "🐳 Starting Docker development environment..."
 	@echo "🔥 Hot reload enabled - server will restart on file changes"
 	@echo "1/4 Stopping containers..."
@@ -92,7 +92,7 @@ docker: ## Development environment with hot reload (builds locally)
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.dev.yml logs -f
 
-docker-prod: ## Production deployment using pre-built GHCR image
+docker: ## Production deployment using pre-built GHCR image
 	@echo "🐳 Starting production Docker environment..."
 	@echo "📦 Using pre-built image from GitHub Container Registry"
 	@echo "1/3 Stopping containers..."
@@ -100,4 +100,26 @@ docker-prod: ## Production deployment using pre-built GHCR image
 	@echo "2/3 Pulling latest image and starting..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") up -d --pull always
 	@echo "3/3 Following logs (Ctrl+C to exit)..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
+
+docker-local: ## Production deployment building locally
+	@echo "🐳 Starting production Docker environment (local build)..."
+	@echo "🔧 Building production image locally"
+	@echo "1/3 Stopping containers..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
+	@echo "2/3 Building and starting..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml -f docker-compose.local.yml up -d --build
+	@echo "3/3 Following logs (Ctrl+C to exit)..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
+
+docker-fresh: ## Force fresh pull bypassing all Docker cache
+	@echo "🐳 Starting production Docker environment with fresh image pull..."
+	@echo "🔄 Bypassing all Docker cache layers"
+	@echo "1/4 Stopping containers..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
+	@echo "2/4 Removing cached images..."
+	@docker rmi ghcr.io/leoric-crown/shared-context-server:latest || true
+	@echo "3/4 Force pulling latest image and starting..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") up -d --pull always --force-recreate
+	@echo "4/4 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
