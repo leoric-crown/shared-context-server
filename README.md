@@ -3,6 +3,8 @@
 [![CI](https://github.com/leoric-crown/shared-context-server/workflows/CI/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
 [![Docker](https://github.com/leoric-crown/shared-context-server/workflows/Build%20and%20Publish%20Docker%20Image/badge.svg)](https://github.com/leoric-crown/shared-context-server/actions)
 [![GHCR](https://img.shields.io/badge/ghcr.io-leoric--crown%2Fshared--context--server-blue?logo=docker)](https://github.com/leoric-crown/shared-context-server/pkgs/container/shared-context-server)
+[![PyPI version](https://badge.fury.io/py/shared-context-server.svg)](https://pypi.org/project/shared-context-server/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/shared-context-server)](https://pypi.org/project/shared-context-server/)
 [![codecov](https://codecov.io/gh/leoric-crown/shared-context-server/graph/badge.svg?token=07ZITBOAZ7)](https://codecov.io/gh/leoric-crown/shared-context-server)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
