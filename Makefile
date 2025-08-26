@@ -98,9 +98,9 @@ docker: ## Production deployment using pre-built GHCR image
 	@echo "1/3 Stopping containers..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
 	@echo "2/3 Pulling latest image and starting..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") up -d --pull always
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml up -d --pull always
 	@echo "3/3 Following logs (Ctrl+C to exit)..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml logs -f
 
 docker-local: ## Production deployment building locally
 	@echo "🐳 Starting production Docker environment (local build)..."
@@ -120,6 +120,6 @@ docker-fresh: ## Force fresh pull bypassing all Docker cache
 	@echo "2/4 Removing cached images..."
 	@docker rmi ghcr.io/leoric-crown/shared-context-server:latest || true
 	@echo "3/4 Force pulling latest image and starting..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") up -d --pull always --force-recreate
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml up -d --pull always --force-recreate
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml logs -f
