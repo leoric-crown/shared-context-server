@@ -3,13 +3,8 @@
 
 services:
   shared-context-server:
-    # Option 1: Use pre-built image from GitHub Container Registry (recommended)
-    # image: ghcr.io/leoric-crown/shared-context-server:latest
-
-    # Option 2: Build locally from source (development)
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Production deployment using pre-built image
+    image: ghcr.io/leoric-crown/shared-context-server:latest
     container_name: shared-context-server
     restart: unless-stopped
     ports:
@@ -23,10 +18,10 @@ services:
       - DATABASE_PATH=/app/data/chat_history.db
 
       # Security configuration
-      - API_KEY=${API_KEY:-dev-key-please-change}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-please-change}
-      - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY:-dev-fernet-key-please-change}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - API_KEY=${API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
 
       # Server configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

@@ -73,11 +73,16 @@ cp .env.docker .env
 
 **Option A: Docker (recommended)**
 ```bash
-# Generate and save your API key
+# Quick start with make command (uses GHCR image)
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+cp .env.minimal .env
+# Edit .env with your secure keys (see Step 2 below)
+make docker-prod
+
+# OR manual Docker run:
 API_KEY=$(openssl rand -base64 32)
 echo "Your API key: $API_KEY"
-
-# Start server with generated credentials
 docker run -d --name shared-context-server -p 23456:23456 \
   -e API_KEY="$API_KEY" \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
@@ -416,10 +421,12 @@ session = await client.post("http://localhost:23456/mcp/tool/create_session",
 ## 🚀 Development Commands
 
 ```bash
-make help    # Show all available commands
-make dev     # Start development server with hot reload
-make test    # Run tests with coverage
-make quality # Run all quality checks
+make help        # Show all available commands
+make dev         # Start development server with hot reload
+make test        # Run tests with coverage
+make quality     # Run all quality checks
+make docker-prod # Production Docker (GHCR image)
+make docker      # Development Docker (local build + hot reload)
 ```
 
 <details>

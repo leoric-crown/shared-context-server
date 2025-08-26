@@ -26,7 +26,8 @@ make quality      # Run all quality checks (format, lint, type, pip-audit)
 
 ### Docker
 ```bash
-make docker       # Full Docker lifecycle: stop → build → up → logs
+make docker-prod  # Production: GHCR image → up → logs
+make docker       # Development: build → up → logs (hot reload)
 ```
 
 

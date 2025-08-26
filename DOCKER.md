@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-**Production Setup:**
+**Production Setup (Recommended):**
 ```bash
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
@@ -14,7 +14,7 @@ JWT_SECRET_KEY=$(openssl rand -base64 32)
 JWT_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 # Then manually update .env file with these values
 
-docker compose up -d
+make docker-prod  # Uses GHCR pre-built image
 ```
 
 **Development Setup (Hot Reload):**
@@ -24,7 +24,7 @@ cd shared-context-server
 cp .env.minimal .env
 # Generate secure keys (same commands as above)
 
-make docker  # Uses docker-compose.dev.yml
+make docker  # Builds locally + hot reload
 ```
 
 ## Environment Setup
@@ -44,17 +44,28 @@ JWT_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fe
 
 ## Commands
 
-### Production
+### Production (GHCR Image)
 ```bash
-docker compose up -d                    # Start
+make docker-prod                       # Start production deployment
 docker compose down                     # Stop
-docker compose logs -f                  # View logs
+docker compose logs -f                 # View logs
 ```
 
-### Development
+### Development (Local Build + Hot Reload)
 ```bash
-make docker                            # Start with hot reload
+make docker                            # Start development environment
 docker compose -f docker-compose.dev.yml down  # Stop
+```
+
+### Manual Docker Compose
+```bash
+# Production (uses GHCR image)
+docker compose up -d                   # Start
+docker compose down                    # Stop
+
+# Development (local build)
+docker compose -f docker-compose.dev.yml up -d  # Start
+docker compose -f docker-compose.dev.yml down   # Stop
 ```
 
 ### Client Configuration
@@ -92,8 +103,8 @@ MCP_CLIENT_HOST=localhost
 ```
 
 ### Setup Comparison
-- **Production**: `docker compose up -d` - Isolated storage, production defaults
-- **Development**: `make docker` - Hot reload, shared database, debug logging
+- **Production**: `make docker-prod` - GHCR image, isolated storage, production defaults
+- **Development**: `make docker` - Local build, hot reload, shared database, debug logging
 
 ## Data Management
 
