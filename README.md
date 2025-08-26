@@ -48,10 +48,34 @@ Each agent builds on previous work instead of starting over.
 
 ## 🚀 Try It Now (2 minutes)
 
+### ⚠️ **Important: Choose Your Deployment Method**
+
+**Docker (Recommended for Multi-Client Collaboration):**
+- ✅ **Shared context across all MCP clients** (Claude Code + Cursor + Windsurf)
+- ✅ **Persistent service** - single server instance on port 23456
+- ✅ **True multi-agent collaboration** - agents share sessions and memory
+- 🎯 **Use when**: You want multiple tools to collaborate on the same tasks
+
+**uvx (Quick Trial & Testing Only):**
+- ⚠️ **Isolated per-client** - each MCP client gets its own separate instance
+- ⚠️ **No shared context** - Claude Code and Cursor can't see each other's work
+- ✅ **Quick testing** - perfect for trying features without Docker setup
+- 🎯 **Use when**: Quick feature testing or learning the MCP tools in isolation
+
+```bash
+# 🐳 Docker: Multi-client shared collaboration (RECOMMENDED)
+docker run -d -p 23456:23456 ghcr.io/leoric-crown/shared-context-server:latest
+
+# 📦 uvx: Isolated single-client testing only
+uvx shared-context-server --help
+```
+
+💡 **TL;DR**: Use Docker for real multi-agent work, uvx for quick testing only.
+
 ### Prerequisites Check (30 seconds)
 **Choose your path**:
 - ✅ **Docker** (recommended): `docker --version` works
-- ✅ **CLI** (no Docker): `python --version` shows 3.10+ and `uv --version` works
+- ✅ **uvx Trial**: `uvx --version` works (testing only)
 
 ### Environment Configuration Templates
 **Choose your .env template** (for local development):
@@ -90,9 +114,25 @@ docker run -d --name shared-context-server -p 23456:23456 \
   ghcr.io/leoric-crown/shared-context-server:latest
 ```
 
-**Option B: CLI (no Docker)**
+**Option B: uvx Trial (Isolated Testing Only)**
 ```bash
-# Clone and setup
+# 📦 Quick trial - each MCP client gets its own isolated instance
+uvx shared-context-server --version  # Test installation
+
+# Start server for single-client testing
+uvx shared-context-server --transport http --host localhost --port 23456
+# Each `uvx shared-context-server` call creates a NEW isolated instance
+
+# ⚠️ IMPORTANT: This creates isolated servers per MCP client
+# - Claude Code → gets its own database and sessions
+# - Cursor → gets its own separate database and sessions
+# - Windsurf → gets its own separate database and sessions
+# = NO shared context between tools
+```
+
+**Option C: Local Development (Clone & Build)**
+```bash
+# Clone and setup for development
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
 uv sync
@@ -102,9 +142,9 @@ API_KEY=$(openssl rand -base64 32)
 JWT_SECRET_KEY=$(openssl rand -base64 32)
 JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
 
-# Start server
+# Start shared HTTP server (like Docker)
 API_KEY="$API_KEY" JWT_SECRET_KEY="$JWT_SECRET_KEY" JWT_ENCRYPTION_KEY="$JWT_ENCRYPTION_KEY" \
-  uv run python -m shared_context_server.scripts.cli
+  uv run python -m shared_context_server.scripts.cli --transport http
 echo "Your API key: $API_KEY"
 ```
 
@@ -122,6 +162,20 @@ EOF
 docker run -d --name shared-context-server -p 23456:23456 \
   --env-file .env ghcr.io/leoric-crown/shared-context-server:latest
 ```
+
+### PyPI Installation (Alternative to Docker)
+
+The shared-context-server is also available on PyPI for quick testing:
+
+```bash
+# 📦 Install and try (creates isolated instances per client)
+uvx shared-context-server --help
+uvx shared-context-server --version
+
+# ⚠️ For multi-client collaboration, use Docker instead
+```
+
+💡 **When to use PyPI/uvx**: Quick feature testing, learning MCP tools, single-client workflows only.
 
 ### Step 3: Connect Your MCP Client
 
@@ -332,6 +386,44 @@ session = await client.post("http://localhost:23456/mcp/tool/create_session",
 ---
 
 ## 🔧 Technical Architecture
+
+<details>
+<summary>🔄 Deployment Architecture: Docker vs uvx</summary>
+
+### Docker Deployment (Multi-Client Shared Context)
+```
+┌─────────────────┐    ┌──────────────────────┐
+│   Claude Code   │───▶│                      │
+├─────────────────┤    │  Shared HTTP Server  │
+│     Cursor      │───▶│   (port 23456)       │
+├─────────────────┤    │                      │
+│    Windsurf     │───▶│  • Single database   │
+└─────────────────┘    │  • Shared sessions   │
+                       │  • Cross-tool memory │
+                       └──────────────────────┘
+```
+**✅ Enables**: True multi-agent collaboration, session sharing, persistent context
+
+### uvx Deployment (Isolated Per-Client)
+```
+┌─────────────────┐    ┌─────────────────┐
+│   Claude Code   │───▶│ Isolated Server │
+└─────────────────┘    │ + Database #1   │
+                       └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐
+│     Cursor      │───▶│ Isolated Server │
+└─────────────────┘    │ + Database #2   │
+                       └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐
+│    Windsurf     │───▶│ Isolated Server │
+└─────────────────┘    │ + Database #3   │
+                       └─────────────────┘
+```
+**⚠️ Limitation**: No cross-tool collaboration, separate contexts, testing only
+
+💡 **Key Insight**: Docker provides the "shared" in shared-context-server, while uvx creates isolated silos.
+
+</details>
 
 <details>
 <summary>Core Design Principles</summary>
