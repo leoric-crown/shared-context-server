@@ -70,7 +70,6 @@ __all__ = [
     "_raise_journal_mode_check_error",
     "_raise_table_not_found_error",
     "_raise_no_schema_version_error",
-    "_get_sqlalchemy_manager",
     "_is_testing_environment",
 ]
 
@@ -99,11 +98,6 @@ def _raise_table_not_found_error(table: str) -> None:
 def _raise_no_schema_version_error() -> None:
     """Raise no schema version error."""
     raise DatabaseSchemaError("No schema version found")
-
-
-def _get_sqlalchemy_manager() -> Any:
-    """Get SQLAlchemy manager (backward compatibility)."""
-    return get_sqlalchemy_manager()
 
 
 def _is_testing_environment() -> bool:
