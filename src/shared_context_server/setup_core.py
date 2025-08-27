@@ -55,6 +55,7 @@ def _check_docker_conflicts(
 ) -> tuple[str, bool, dict[int, int]]:
     """
     Check for Docker container/volume conflicts and resolve them if found.
+    Uses iterative conflict resolution to ensure all conflicts are resolved.
 
     Returns (potentially_modified_content, conflicts_found, port_mappings)
     Only modifies names if actual conflicts are detected.
@@ -84,46 +85,88 @@ def _check_docker_conflicts(
     # Extract container, volume names, and ports from compose content
     container_names = _extract_container_names(docker_compose_content)
     volume_names = _extract_volume_names(docker_compose_content)
-    port_mappings = _extract_port_mappings(docker_compose_content)
 
-    # Check for conflicts
-    container_conflicts = _check_container_conflicts(container_names)
-    volume_conflicts = _check_volume_conflicts(volume_names)
-    port_conflicts = _check_port_conflicts(port_mappings)
+    # Iterative conflict resolution loop
+    content = docker_compose_content
+    all_port_mappings: dict[int, int] = {}
+    max_iterations = 5
+    iteration = 0
 
-    if not container_conflicts and not volume_conflicts and not port_conflicts:
-        print_color(Colors.GREEN, "   ✅ No Docker conflicts detected")
-        return docker_compose_content, False, {}
+    while iteration < max_iterations:
+        iteration += 1
 
+        # Check for conflicts in current iteration
+        container_conflicts = _check_container_conflicts(container_names)
+        volume_conflicts = _check_volume_conflicts(volume_names)
+        current_ports = _extract_port_mappings(content)
+        port_conflicts = _check_port_conflicts(current_ports)
+
+        if not container_conflicts and not volume_conflicts and not port_conflicts:
+            if iteration == 1:
+                print_color(Colors.GREEN, "   ✅ No Docker conflicts detected")
+            else:
+                print_color(
+                    Colors.GREEN,
+                    f"   ✅ All conflicts resolved after {iteration - 1} iteration(s)",
+                )
+            return content, iteration > 1, all_port_mappings
+
+        if iteration == 1:
+            print_color(
+                Colors.YELLOW,
+                "   ⚠️  Docker conflicts detected, resolving iteratively...",
+            )
+            if container_conflicts:
+                print_color(
+                    Colors.YELLOW,
+                    f"     • Conflicting containers: {', '.join(container_conflicts)}",
+                )
+            if volume_conflicts:
+                print_color(
+                    Colors.YELLOW,
+                    f"     • Conflicting volumes: {', '.join(volume_conflicts)}",
+                )
+            if port_conflicts:
+                conflict_ports = [str(port) for port in port_conflicts]
+                print_color(
+                    Colors.YELLOW,
+                    f"     • Conflicting ports: {', '.join(conflict_ports)}",
+                )
+        elif port_conflicts:
+            print_color(
+                Colors.YELLOW,
+                f"   🔄 Iteration {iteration}: Additional port conflicts found: {', '.join(map(str, port_conflicts))}",
+            )
+
+        # Generate unique suffix and resolve conflicts
+        unique_suffix = str(int(time.time()))[-6:]
+        content, resolved_ports = _resolve_conflicts_smart(
+            content,
+            container_conflicts,
+            volume_conflicts,
+            port_conflicts,
+            unique_suffix,
+        )
+
+        # Track all port mappings across iterations
+        all_port_mappings.update(resolved_ports)
+
+        # Update container and volume names for next iteration if they were modified
+        if container_conflicts or volume_conflicts:
+            container_names = _extract_container_names(content)
+            volume_names = _extract_volume_names(content)
+
+    # If we reach here, we've exhausted max iterations
     print_color(
-        Colors.YELLOW, "   ⚠️  Docker conflicts detected, generating unique names..."
+        Colors.RED,
+        f"   ❌ Unable to resolve all conflicts after {max_iterations} iterations",
     )
-    if container_conflicts:
-        print_color(
-            Colors.YELLOW,
-            f"     • Conflicting containers: {', '.join(container_conflicts)}",
-        )
-    if volume_conflicts:
-        print_color(
-            Colors.YELLOW, f"     • Conflicting volumes: {', '.join(volume_conflicts)}"
-        )
-    if port_conflicts:
-        conflict_ports = [str(port) for port in port_conflicts]
-        print_color(
-            Colors.YELLOW, f"     • Conflicting ports: {', '.join(conflict_ports)}"
-        )
-
-    # Generate unique suffix and resolve conflicts
-    unique_suffix = str(int(time.time()))[-6:]
-    content, resolved_ports = _resolve_conflicts(
-        docker_compose_content,
-        container_conflicts,
-        volume_conflicts,
-        port_conflicts,
-        unique_suffix,
+    print_color(
+        Colors.YELLOW,
+        "   💡 Some ports may still be in conflict. Consider manually stopping conflicting services.",
     )
 
-    return content, True, resolved_ports
+    return content, True, all_port_mappings
 
 
 def _extract_container_names(compose_content: str) -> list[str]:
@@ -220,19 +263,26 @@ def _check_port_conflicts(port_list: list[int]) -> list[int]:
     conflicting_ports = []
 
     for port in port_list:
-        # Check both TCP and UDP (most services use TCP)
-        for protocol in [socket.SOCK_STREAM, socket.SOCK_DGRAM]:
-            try:
-                # Try to bind to the port
-                sock = socket.socket(socket.AF_INET, protocol)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.bind(("0.0.0.0", port))
-                sock.close()
-            except OSError:  # noqa: PERF203
-                # Port is in use or permission denied
-                if port not in conflicting_ports:
-                    conflicting_ports.append(port)
-                break  # Don't check UDP if TCP failed
+        # Check both localhost and all interfaces since Docker needs both to be free
+        port_is_free = True
+        for interface in ["127.0.0.1", "0.0.0.0"]:
+            # Check both TCP and UDP (most services use TCP)
+            for protocol in [socket.SOCK_STREAM, socket.SOCK_DGRAM]:
+                try:
+                    # Try to bind to the port
+                    sock = socket.socket(socket.AF_INET, protocol)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    sock.bind((interface, port))
+                    sock.close()
+                except OSError:  # noqa: PERF203
+                    # Port is in use on this interface/protocol
+                    port_is_free = False
+                    break  # Don't check UDP if TCP failed
+            if not port_is_free:
+                break  # Don't check other interfaces if one failed
+
+        if not port_is_free and port not in conflicting_ports:
+            conflicting_ports.append(port)
 
     return conflicting_ports
 
@@ -252,6 +302,50 @@ def _find_available_port(start_port: int, max_attempts: int = 100) -> int:
 
     # Fallback if no port found
     return start_port
+
+
+def _is_port_available(port: int) -> bool:
+    """Check if a specific port is available on both localhost and all interfaces"""
+    # Test both localhost and all interfaces since Docker needs both to be free
+    for interface in ["127.0.0.1", "0.0.0.0"]:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((interface, port))
+        except OSError:
+            return False  # Port is occupied on this interface
+        finally:
+            sock.close()
+    return True
+
+
+def _find_available_port_smart(
+    original_port: int, max_iterations: int = 10
+) -> int | None:
+    """Find available port using binary search pattern: +1000, -500, +250, -125..."""
+    base_offset = 1000
+    attempted_ports = set()
+
+    for _iteration in range(max_iterations):
+        if base_offset < 1:
+            break
+
+        for sign in [1, -1]:  # Try positive then negative offset
+            candidate = original_port + (sign * base_offset)
+
+            # Skip invalid ports and already attempted ones
+            if candidate <= 0 or candidate > 65535 or candidate in attempted_ports:
+                continue
+
+            attempted_ports.add(candidate)
+
+            if _is_port_available(candidate):
+                return candidate
+
+        # Halve the offset for next iteration
+        base_offset //= 2
+
+    return None  # Algorithm exhausted
 
 
 def _check_container_conflicts(container_names: list[str]) -> list[str]:
@@ -302,17 +396,17 @@ def _check_volume_conflicts(volume_names: list[str]) -> list[str]:
         return []
 
 
-def _resolve_conflicts(
+def _resolve_conflicts_smart(
     compose_content: str,
     container_conflicts: list[str],
     volume_conflicts: list[str],
     port_conflicts: list[int],
     unique_suffix: str,
 ) -> tuple[str, dict[int, int]]:
-    """Resolve conflicts by adding unique suffixes to conflicting names"""
+    """Resolve conflicts using smart port resolution algorithm"""
     content = compose_content
 
-    # Resolve container name conflicts
+    # Resolve container name conflicts (same as before)
     for container_name in container_conflicts:
         container_pattern = (
             rf'(\s+container_name:\s+)(["\']?)({re.escape(container_name)})(["\']?)'
@@ -328,7 +422,7 @@ def _resolve_conflicts(
 
         content = re.sub(container_pattern, replace_container, content)
 
-    # Resolve volume conflicts
+    # Resolve volume conflicts (same as before)
     for volume_name in volume_conflicts:
         # Replace in volumes section
         volume_def_pattern = rf"^(\s+)({re.escape(volume_name)})(:)"
@@ -345,39 +439,66 @@ def _resolve_conflicts(
             volume_ref_pattern, rf"\1{volume_name}_scs_{unique_suffix}\3", content
         )
 
-    # Resolve port conflicts by shifting to alternative ports
+    # Resolve port conflicts using smart algorithm
     port_mappings = {}
+    failed_ports = []
+
     for port in port_conflicts:
-        # Find available port starting from conflicting port + 1000
-        new_port = _find_available_port(port + 1000)
+        new_port = _find_available_port_smart(port)
+
+        if new_port is None:
+            # Smart algorithm failed, try fallback
+            new_port = _find_available_port(port + 1000)
+            if new_port == port + 1000 and not _is_port_available(new_port):
+                # Even fallback failed
+                failed_ports.append(port)
+                continue
+
         port_mappings[port] = new_port
         print_color(Colors.GREEN, f"     → Port {port} → {new_port}")
 
-        # Replace port mappings in various formats
+        # Replace port mappings in ALL Docker compose locations (comprehensive patterns)
         port_patterns = [
             # ${VAR:-PORT}:${VAR:-PORT} format - replace both occurrences
             (
                 rf'(\s*-\s*["\']?\$\{{[^}}]+:-){port}(\}}:\$\{{[^}}]+:-){port}(\}}["\']?\s*)',
                 rf"\g<1>{new_port}\g<2>{new_port}\g<3>",
             ),
-            # ${VAR:-PORT}:PORT format
+            # ${VAR:-PORT}:PORT format in ports section
             (
                 rf'(\s*-\s*["\']?\$\{{[^}}]+:-){port}(\}}:\d+["\']?\s*)',
                 rf"\g<1>{new_port}\g<2>",
             ),
-            # ${VAR:-PORT} format
+            # ${VAR:-PORT} format in environment variables and other contexts
             (
-                rf'(\s*-\s*["\']?\$\{{[^}}]+:-){port}(\}}["\']?\s*)',
+                rf"(\$\{{[^}}]+:-){port}(\}})",
                 rf"\g<1>{new_port}\g<2>",
             ),
-            # Direct "PORT:PORT" format
+            # Direct "PORT:PORT" format in ports section
             (rf'(\s*-\s*["\']?){port}(:\d+["\']?\s*)', rf"\g<1>{new_port}\g<2>"),
-            # Direct "PORT" format
+            # Direct "PORT" format in ports section
             (rf'(\s*-\s*["\']?){port}(["\']?\s*)$', rf"\g<1>{new_port}\g<2>"),
+            # Environment variable assignments: HTTP_PORT=PORT, WEBSOCKET_PORT=PORT
+            (rf"(^[^#]*[A-Z_]+_PORT=){port}(\s*$)", rf"\g<1>{new_port}\g<2>"),
+            # URLs in healthcheck and comments: localhost:PORT
+            (rf"(localhost:){port}(\b)", rf"\g<1>{new_port}\g<2>"),
+            # Container internal port references in healthcheck commands
+            (rf"(http://[^:]+:){port}(/)", rf"\g<1>{new_port}\g<2>"),
         ]
 
         for pattern, replacement in port_patterns:
             content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+
+    # Report any failed port resolutions
+    if failed_ports:
+        print_color(
+            Colors.RED,
+            f"     ⚠️  Could not resolve ports: {', '.join(map(str, failed_ports))}",
+        )
+        print_color(
+            Colors.YELLOW,
+            "     💡 Port search algorithm exhausted. Consider stopping conflicting services.",
+        )
 
     return content, port_mappings
 
@@ -859,14 +980,26 @@ def _update_env_with_resolved_ports(
 ) -> None:
     """Update .env file with resolved port mappings from conflict resolution"""
     if not port_mappings:
+        print_color(
+            Colors.YELLOW, "   ⚠️  No port mappings provided to update .env file"
+        )
         return
 
-    # Default to .env if no specific file provided
+    # Default to .env in current working directory if no specific file provided
     if env_file is None:
-        env_file = Path(".env")
+        env_file = Path.cwd() / ".env"
+
+    print_color(Colors.BLUE, f"   🔍 Looking for .env file at: {env_file.absolute()}")
 
     if not env_file.exists():
+        print_color(
+            Colors.YELLOW, f"   ⚠️  .env file not found at {env_file.absolute()}"
+        )
         return
+
+    print_color(
+        Colors.BLUE, f"   📝 Updating .env file with port mappings: {port_mappings}"
+    )
 
     try:
         content = env_file.read_text()
@@ -1059,18 +1192,28 @@ def show_uvx_commands(keys: dict[str, str], demo: bool = False) -> None:
             Colors.YELLOW, "   ⚠️  Port conflicts detected, finding alternative ports..."
         )
 
-        # Resolve HTTP port conflict
+        # Resolve HTTP port conflict using smart algorithm
         if default_http_port in conflicting_ports:
-            resolved_http_port = _find_available_port(default_http_port + 1000)
+            smart_port = _find_available_port_smart(default_http_port)
+            resolved_http_port = (
+                smart_port
+                if smart_port is not None
+                else _find_available_port(default_http_port + 1000)
+            )
             port_mappings[default_http_port] = resolved_http_port
             print_color(
                 Colors.GREEN,
                 f"     → HTTP Port {default_http_port} → {resolved_http_port}",
             )
 
-        # Resolve WebSocket port conflict
+        # Resolve WebSocket port conflict using smart algorithm
         if default_ws_port in conflicting_ports:
-            resolved_ws_port = _find_available_port(default_ws_port + 1000)
+            smart_port = _find_available_port_smart(default_ws_port)
+            resolved_ws_port = (
+                smart_port
+                if smart_port is not None
+                else _find_available_port(default_ws_port + 1000)
+            )
             port_mappings[default_ws_port] = resolved_ws_port
             print_color(
                 Colors.GREEN,
