@@ -220,16 +220,6 @@ def get_auth_manager() -> JWTAuthenticationManager:
     return get_jwt_auth_manager()
 
 
-def reset_auth_manager() -> None:
-    """
-    DEPRECATED: No-op for backward compatibility.
-
-    ContextVar provides automatic isolation, making manual resets unnecessary.
-    This function is retained for backward compatibility but does nothing.
-    """
-    pass  # No-op - ContextVar provides automatic isolation
-
-
 def require_permission(permission: str) -> Callable[[Callable], Callable]:
     """Decorator to require specific permission for tool access."""
 

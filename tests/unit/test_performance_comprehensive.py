@@ -55,7 +55,7 @@ class TestPerformanceMonitoring:
         # Should return success even in deprecated mode
         assert metrics["success"] is True
         assert metrics["database_backend"] == "sqlalchemy"
-        assert metrics["migration_status"] == "aiosqlite_removed"
+        assert metrics["migration_status"] == "complete"
 
         # Should contain expected structure
         assert "database_performance" in metrics

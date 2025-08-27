@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from typing import Any
@@ -148,17 +147,11 @@ async def lifespan() -> Any:
 
     # Phase 4: Initialize performance optimization system
     from .utils.caching import start_cache_maintenance
-    from .utils.performance import db_pool, start_performance_monitoring
+    from .utils.performance import start_performance_monitoring
 
-    try:
-        # Initialize connection pool
-        database_url = os.getenv("DATABASE_URL", "chat_history.db")
-        await db_pool.initialize_pool(database_url, min_size=5, max_size=50)
-        print("Database connection pool initialized")
-
-    except Exception:
-        logger.exception("Failed to initialize connection pool")
-        print("Warning: Running without connection pooling")
+    # Note: Connection pooling removed as part of SQLAlchemy-only migration
+    # SQLAlchemy handles connection management internally
+    print("Database connection management handled by SQLAlchemy")
 
     # Start background tasks
     cleanup_tasks = []
@@ -193,12 +186,9 @@ async def lifespan() -> Any:
     # Shutdown
     print("Shutting down...")
 
-    # Phase 4: Shutdown performance system
-    try:
-        await db_pool.shutdown_pool()
-        print("Connection pool shutdown complete")
-    except Exception as e:
-        logger.warning(f"Error shutting down connection pool: {e}")
+    # Note: Connection pool shutdown removed as part of SQLAlchemy-only migration
+    # SQLAlchemy handles connection cleanup automatically
+    print("Database connection cleanup handled by SQLAlchemy")
 
     # Cancel background tasks
     for task in cleanup_tasks:

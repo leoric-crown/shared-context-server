@@ -32,7 +32,6 @@ from .auth_core import (
     get_auth_info,
     get_auth_manager,
     require_permission,
-    reset_auth_manager,
     set_auth_info,
 )
 
@@ -60,7 +59,6 @@ __all__ = [
     "get_auth_info",
     "get_auth_manager",
     "require_permission",
-    "reset_auth_manager",
     "set_auth_info",
     # Secure token classes and functions
     "SecureTokenManager",

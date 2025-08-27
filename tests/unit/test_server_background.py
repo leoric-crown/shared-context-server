@@ -164,8 +164,11 @@ class TestBackgroundTaskSystem:
         )
 
         # Test server lifecycle using proper lifespan context manager with background task mocking
-        # Mock just the background tasks, not all asyncio.create_task calls
+        # Mock database initialization and background tasks
         with (
+            patch(
+                "shared_context_server.database_sqlalchemy.SimpleSQLAlchemyManager"
+            ) as mock_manager_class,
             patch(
                 "shared_context_server.server.cleanup_subscriptions_task",
                 return_value=AsyncMock(),
@@ -175,6 +178,10 @@ class TestBackgroundTaskSystem:
                 return_value=AsyncMock(),
             ),
         ):
+            # Mock the SQLAlchemy manager to avoid actual database operations
+            mock_manager = mock_manager_class.return_value
+            mock_manager.initialize = AsyncMock()
+
             async with lifespan():
                 # Test that server is available during lifespan
                 assert server is not None
@@ -426,13 +433,13 @@ class TestBackgroundTaskSystem:
         with (
             patch_database_for_test(isolated_db),
             patch(
-                "shared_context_server.database_manager.get_sqlalchemy_manager"
-            ) as mock_manager,
+                "shared_context_server.database_sqlalchemy.SimpleSQLAlchemyManager"
+            ) as mock_manager_class,
         ):
             # Test that the server can handle database connection issues
             # by checking error messages from actual connection failures
             # Mock a real SQLAlchemy connection failure
-            mock_manager.side_effect = Exception("unable to open database file")
+            mock_manager_class.side_effect = Exception("unable to open database file")
 
             from shared_context_server.server import lifespan
 

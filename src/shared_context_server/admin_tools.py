@@ -50,13 +50,12 @@ from .admin_resources import (
 
 # Import auth functions that were previously available in admin_tools
 from .auth import validate_agent_context_or_error
-from .database import get_db_connection, initialize_database
+from .database import get_db_connection
 
 # Export all public items for backward compatibility
 __all__ = [
     # Database functions (previously available in admin_tools)
     "get_db_connection",
-    "initialize_database",
     # Auth functions (previously available in admin_tools)
     "validate_agent_context_or_error",
     # Guidance system

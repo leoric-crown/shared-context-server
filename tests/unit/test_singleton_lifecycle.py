@@ -31,17 +31,15 @@ class TestContextVarAuthentication:
         assert manager2 is not None
         # With ContextVar, they can be the same or different - the key is isolation
 
-    def test_legacy_stubs_work(self):
-        """Test that legacy stub functions don't break existing code."""
-        from shared_context_server.auth_secure import (
-            reset_secure_token_manager,
-            set_test_mode,
-        )
+    def test_contextvar_authentication_works(self):
+        """Test that ContextVar authentication works without manual resets."""
+        # ContextVar provides automatic isolation, no manual cleanup needed
+        # This test verifies the migration is complete and working
+        from shared_context_server.auth_context import get_secure_token_manager
 
-        # These should work without errors (they're no-ops now)
-        reset_secure_token_manager()
-        set_test_mode(True)
-        set_test_mode(False)
+        # ContextVar provides clean state automatically
+        manager = get_secure_token_manager()
+        assert manager is not None
 
     def test_contextvar_manager_creation(self):
         """Test that ContextVar manager creation works."""

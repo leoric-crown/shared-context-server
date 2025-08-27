@@ -646,20 +646,6 @@ class SecureTokenManager:
 # This provides better thread safety and eliminates the need for test reset patterns
 
 
-# Backward compatibility stubs for tests during migration
-def reset_secure_token_manager() -> None:
-    """Legacy function - no longer needed with ContextVar approach."""
-    # With ContextVar, each context automatically gets fresh instances
-    # No global state to reset
-    pass
-
-
-def set_test_mode(enabled: bool) -> None:
-    """Legacy function - no longer needed with ContextVar approach."""
-    # ContextVar provides perfect test isolation automatically
-    pass
-
-
 def get_secure_token_manager(_force_recreate: bool = False) -> SecureTokenManager:
     """Legacy function - redirects to ContextVar implementation."""
     from .auth_context import get_secure_token_manager as get_context_manager

@@ -1315,29 +1315,22 @@ async def search_test_session(server_with_db, test_db_manager):
 
 
 # =============================================================================
-# SINGLETON ISOLATION FOR TEST STABILITY
+# CONTEXTVAR ISOLATION FOR TEST STABILITY
 # =============================================================================
 
 
 @pytest.fixture(autouse=True)
-def singleton_isolation():
+def contextvar_isolation():
     """
-    Ensure clean singleton state for each test.
+    Ensure clean environment for each test.
 
-    Prevents authentication service state pollution between tests by:
-    1. Setting required environment variables for SecureTokenManager
-    2. Enabling test mode for proper singleton lifecycle management
-    3. Resetting ALL singleton state (auth_manager and secure_token_manager)
-
-    This fixture resolves the "authentication_service temporarily unavailable"
-    errors caused by singleton state corruption across multiple managers.
+    ContextVar provides automatic isolation between tests, eliminating the need
+    for manual singleton resets. This fixture only sets required environment
+    variables for authentication services.
     """
     from unittest.mock import patch
 
-    from shared_context_server.auth_core import reset_auth_manager
-
-    # Set required environment variables before resetting singletons
-    # This ensures that when SecureTokenManager is recreated, it has proper config
+    # Set required environment variables for authentication services
     with patch.dict(
         os.environ,
         {
@@ -1346,10 +1339,5 @@ def singleton_isolation():
         },
         clear=False,
     ):
-        # Reset auth manager (token manager is automatically isolated via ContextVar)
-        reset_auth_manager()
-
+        # ContextVar provides automatic isolation - no manual resets needed
         yield
-
-        # Reset auth manager after test for cleanup
-        reset_auth_manager()

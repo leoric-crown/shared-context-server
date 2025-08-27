@@ -98,7 +98,7 @@ class TestPerformanceTargets:
         assert metrics.get("database_backend") == "sqlalchemy", (
             "Should indicate SQLAlchemy backend"
         )
-        assert metrics.get("migration_status") == "aiosqlite_removed", (
+        assert metrics.get("migration_status") == "complete", (
             "Should indicate migration complete"
         )
 

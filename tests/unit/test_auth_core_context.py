@@ -315,8 +315,8 @@ class TestBackwardCompatibility:
             assert manager1 is manager2
 
     def test_legacy_reset_is_noop(self):
-        """Test that legacy reset functions are no-ops."""
-        from shared_context_server.auth_core import auth_manager, reset_auth_manager
+        """Test that legacy reset method is no-op."""
+        from shared_context_server.auth_core import auth_manager
 
         with patch.dict(
             os.environ,
@@ -329,9 +329,8 @@ class TestBackwardCompatibility:
             # Get manager
             manager1 = auth_manager._get_instance()
 
-            # Reset (should be no-op)
+            # Reset (should be no-op with ContextVar)
             auth_manager.reset()
-            reset_auth_manager()
 
             # Should get same instance (ContextVar maintains state)
             manager2 = auth_manager._get_instance()
