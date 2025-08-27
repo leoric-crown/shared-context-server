@@ -528,17 +528,29 @@ class SimpleSQLAlchemyManager:
 
     def _get_schema_file_path(self) -> Path:
         """Get the appropriate schema file path for the database type."""
-        # Get the project root directory (where schema files are located)
+        # Get the directory where schema files are located
+        # For installed packages, schema files are in site-packages/
         current_dir = Path(__file__).parent
-        project_root = current_dir.parent.parent
-
-        if self.db_type == "sqlite":
-            return project_root / "database_sqlite.sql"
-        if self.db_type == "postgresql":
-            return project_root / "database_postgresql.sql"
-        if self.db_type == "mysql":
-            return project_root / "database_mysql.sql"
-        raise ValueError(f"No schema file for database type: {self.db_type}")
+        
+        # Try multiple locations to handle both development and installed packages
+        possible_roots = [
+            current_dir.parent.parent,  # Development: project root
+            current_dir.parent.parent / "site-packages",  # Some installations
+            Path("/usr/local/lib/python3.11/site-packages"),  # Docker installations
+        ]
+        
+        schema_filename = f"database_{self.db_type}.sql"
+        
+        for root in possible_roots:
+            schema_path = root / schema_filename
+            if schema_path.exists():
+                return schema_path
+        
+        # If not found in standard locations, raise informative error
+        searched_paths = [str(root / schema_filename) for root in possible_roots]
+        raise FileNotFoundError(
+            f"Schema file '{schema_filename}' not found in any of these locations: {searched_paths}"
+        )
 
     def _load_schema_file(self) -> str:
         """Load the appropriate schema file for the database type."""
@@ -591,12 +603,41 @@ class SimpleSQLAlchemyManager:
                                 )
                                 # Continue with other statements, some might be idempotent
             else:
-                # Use existing DatabaseManager for file-based SQLite to preserve all optimizations
-                db_path = self.database_url[len("sqlite+aiosqlite:///") :]
-                from .database import DatabaseManager
+                # Initialize file-based SQLite with schema (same as PostgreSQL/MySQL logic)
+                try:
+                    schema_sql = self._load_schema_file()
+                    async with self.engine.connect() as conn, conn.begin():
+                        # Split schema into individual statements for execution
+                        statements = []
+                        current_statement = []
+                        for line in schema_sql.split("\n"):
+                            line = line.strip()
+                            if not line or line.startswith("--"):
+                                continue
+                            current_statement.append(line)
+                            # Check for statement endings (semicolon not inside function/trigger)
+                            if line.endswith(
+                                ";"
+                            ) and not self._is_inside_function_block(current_statement):
+                                statements.append("\n".join(current_statement))
+                                current_statement = []
+                        # Execute each statement
+                        for statement in statements:
+                            if statement.strip():
+                                try:
+                                    await conn.execute(text(statement))
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Failed to execute statement (continuing): {e}"
+                                    )
+                                    # Continue with other statements, some might be idempotent
 
-                temp_manager = DatabaseManager(db_path)
-                await temp_manager.initialize()
+                    logger.info(
+                        f"Initialized {self.db_type} database with {len(statements)} statements"
+                    )
+                except Exception as e:
+                    logger.exception(f"Failed to initialize {self.db_type} database")
+                    raise RuntimeError(f"Database initialization failed: {e}") from e
         else:
             # Initialize PostgreSQL/MySQL with database-specific schema
             try:

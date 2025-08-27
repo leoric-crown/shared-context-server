@@ -61,6 +61,58 @@ except ImportError:
     logger.exception("Server components not available")
 
 
+async def ensure_database_initialized() -> None:
+    """
+    Ensure database is properly initialized with all required tables.
+    
+    This function is idempotent - it checks if critical tables exist
+    and only runs initialization if they're missing. This ensures
+    fresh deployments work without requiring manual intervention.
+    """
+    try:
+        from ..database import get_db_connection
+        
+        # Check if critical tables exist by trying to query them
+        async with get_db_connection() as conn:
+            # Try to query critical tables that must exist for the server to function
+            critical_tables = ['sessions', 'messages', 'audit_log', 'secure_tokens']
+            missing_tables = []
+            
+            for table in critical_tables:
+                try:
+                    # Use a simple query to check if table exists and is accessible
+                    cursor = await conn.execute(f"SELECT COUNT(*) FROM {table} LIMIT 0")
+                    await cursor.close()
+                except Exception:
+                    missing_tables.append(table)
+            
+            if missing_tables:
+                logger.info(f"Missing database tables detected: {missing_tables}")
+                logger.info("Initializing database schema...")
+                
+                # Import and run database initialization using the WORKING SQLAlchemy manager
+                # The database_manager version has broken schema path resolution in Docker
+                from ..database_sqlalchemy import SimpleSQLAlchemyManager  
+                from ..config import get_database_url
+                
+                # Convert database URL to format expected by working manager
+                database_url = get_database_url()
+                if database_url.startswith("sqlite://"):
+                    database_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+                
+                sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+                await sqlalchemy_manager.initialize()
+                
+                logger.info("✅ Database schema initialized successfully")
+            else:
+                logger.debug("Database schema is already initialized")
+                
+    except Exception as e:
+        logger.error(f"Database initialization check failed: {e}")
+        # Re-raise the exception to fail fast if database setup is broken
+        raise RuntimeError(f"Database initialization failed: {e}") from e
+
+
 class ProductionServer:
     """Production MCP server with transport selection."""
 
@@ -472,6 +524,14 @@ def main() -> None:
         logger.info("Configuration loaded successfully")
     except Exception:
         logger.exception("Failed to load configuration")
+        sys.exit(1)
+
+    # Ensure database is initialized before starting server
+    try:
+        run_with_optimal_loop(ensure_database_initialized())
+        logger.info("Database initialization check completed")
+    except Exception:
+        logger.exception("Database initialization failed")
         sys.exit(1)
 
     # Start server based on transport with optimal event loop
