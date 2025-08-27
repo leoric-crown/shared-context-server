@@ -1,10 +1,10 @@
 # E2E Regression Testing Script for Shared Context Server v1.1.0
 
-This comprehensive script is designed to be executed by an LLM to automatically validate all server functionality before the 1.1.0 release. Execute each step in order and verify the expected results.
+This comprehensive script is designed to be executed by an LLM to automatically validate all server functionality before a release. Execute each step in order and verify the expected results.
 
 ## Prerequisites
 - Server is running and accessible (http://localhost:23456 or production URL)
-- LLM has access to shared-context-server MCP tools
+- LLM has access to shared-context-server (a.k.a scs) MCP tools
 - Authentication environment properly configured
 - SQLAlchemy database backend operational (v1.1.0 uses SQLAlchemy exclusively)
 

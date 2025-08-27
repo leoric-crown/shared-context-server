@@ -219,8 +219,8 @@ class TestConfigurationConflictDetection:
         issues = config.validate_production_settings()
         assert "DEBUG should be False in production" in issues
 
-    def test_production_validation_log_level_conflict(self):
-        """Test production validation detects log level conflicts."""
+    def test_production_validation_log_level_no_conflict(self):
+        """Test production validation no longer reports LOG_LEVEL conflicts (handled by override)."""
         config = SharedContextServerConfig(
             database=DatabaseConfig(),
             mcp_server=MCPServerConfig(),
@@ -232,7 +232,57 @@ class TestConfigurationConflictDetection:
         )
 
         issues = config.validate_production_settings()
-        assert "LOG_LEVEL should not be DEBUG in production" in issues
+        # LOG_LEVEL=DEBUG is handled gracefully via override, not validation error
+        assert "LOG_LEVEL should not be DEBUG in production" not in issues
+
+    def test_production_log_level_debug_override(self):
+        """Test that LOG_LEVEL=DEBUG is forced to INFO in production with warning."""
+        import logging
+        import os
+        from io import StringIO
+        from unittest.mock import patch
+
+        from shared_context_server.config import load_config
+
+        # Capture log output
+        log_capture = StringIO()
+        handler = logging.StreamHandler(log_capture)
+        logger = logging.getLogger("shared_context_server.config")
+        original_level = logger.level
+        logger.setLevel(logging.WARNING)
+        logger.addHandler(handler)
+
+        try:
+            # Test with production environment and DEBUG log level
+            with patch.dict(
+                os.environ,
+                {
+                    "ENVIRONMENT": "production",
+                    "LOG_LEVEL": "DEBUG",
+                    "API_KEY": "secure-production-key",
+                    "CORS_ORIGINS": "https://example.com",
+                    "DEBUG": "false",
+                },
+                clear=True,
+            ):
+                config = load_config()
+
+                # Verify LOG_LEVEL was forced to INFO
+                assert config.operational.log_level == "INFO"
+                assert config.is_production()
+
+                # Verify warning was logged
+                log_output = log_capture.getvalue()
+                assert (
+                    "WARNING: LOG_LEVEL forced from DEBUG to INFO in production"
+                    in log_output
+                )
+                assert "for security" in log_output
+
+        finally:
+            # Cleanup
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
 
     def test_production_validation_no_conflicts(self):
         """Test production validation with no conflicts."""

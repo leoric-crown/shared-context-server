@@ -16,6 +16,7 @@ Key features:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool, StaticPool
+from sqlalchemy.pool import StaticPool
 
 sqlite3.register_adapter(dt, lambda dt_obj: dt_obj.isoformat())
 sqlite3.register_converter("TIMESTAMP", lambda b: dt.fromisoformat(b.decode()))
@@ -209,11 +210,17 @@ class SQLAlchemyCursorWrapper:
 class SimpleSQLAlchemyManager:
     """Simplified SQLAlchemy connection manager for single-backend architecture."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, eager_init: bool = True) -> None:
         self.database_url = database_url
         self.engine: AsyncEngine | None = None
         self._initialized = False
         self._init_lock = asyncio.Lock()
+        self._eager_init = eager_init
+        self._initialization_task: asyncio.Task | None = None
+
+        # Start eager initialization if requested (default behavior)
+        if self._eager_init:
+            self._start_eager_initialization()
 
     def _get_process_safe_database_path(self, original_url: str) -> str:
         """Generate process-specific database path for pytest-xdist isolation."""
@@ -232,6 +239,40 @@ class SimpleSQLAlchemyManager:
             return f"sqlite+aiosqlite:///{unique_path}"
 
         return original_url  # Non-SQLite URLs pass through unchanged
+
+    def _start_eager_initialization(self) -> None:
+        """Start eager initialization in a background task."""
+        with contextlib.suppress(RuntimeError):
+            # Create initialization task without awaiting it
+            self._initialization_task = asyncio.create_task(self._eager_initialize())
+            # If RuntimeError: No event loop available, will initialize synchronously later
+
+    async def _eager_initialize(self) -> None:
+        """Perform eager initialization in background."""
+        try:
+            await self.initialize()
+        except Exception as e:
+            logger.debug(
+                f"Eager SQLAlchemy engine initialization failed: {e}, will retry during first connection"
+            )
+            # Will retry during first connection
+
+    async def _ensure_initialized(self) -> None:
+        """Ensure the manager is initialized, waiting for eager init if needed."""
+        if self._initialized:
+            return
+
+        # Wait for eager initialization to complete if it's running
+        if self._initialization_task and not self._initialization_task.done():
+            try:
+                await self._initialization_task
+                return
+            except Exception:
+                # Eager init failed, fall back to synchronous init
+                pass
+
+        # Fall back to synchronous initialization
+        await self.initialize()
 
     async def initialize(self) -> None:
         """Initialize database engine with process-aware configuration."""
@@ -269,26 +310,29 @@ class SimpleSQLAlchemyManager:
                         },
                     )
                 else:
-                    # Production configuration with NullPool
+                    # Production configuration with StaticPool for better performance
                     self.engine = create_async_engine(
                         self.database_url,
                         echo=False,
-                        poolclass=NullPool,
+                        poolclass=StaticPool,
+                        pool_recycle=3600,  # Recycle connections every hour
+                        pool_pre_ping=True,  # Health check connections
                         connect_args={
                             "check_same_thread": False,
                             "timeout": connection_timeout,
                         },
                     )
             else:
-                # PostgreSQL/MySQL with connection pooling
+                # PostgreSQL/MySQL with optimized connection pooling
                 self.engine = create_async_engine(
                     self.database_url,
                     echo=False,
-                    pool_size=10,
-                    max_overflow=20,
+                    pool_size=5,  # Reduced from 10 for better resource usage
+                    max_overflow=15,  # Reduced from 20
                     pool_timeout=pool_timeout_val,
-                    pool_recycle=3600,
+                    pool_recycle=1800,  # 30 minutes instead of 1 hour for fresher connections
                     pool_pre_ping=True,  # Enable connection health checks
+                    pool_reset_on_return="commit",  # Reset connection state on return
                 )
 
             # Apply SQLite PRAGMA settings if using SQLite
@@ -306,7 +350,27 @@ class SimpleSQLAlchemyManager:
             # Initialize schema
             await self._initialize_schema()
             self._initialized = True
-            logger.info("SQLAlchemy engine initialized successfully")
+
+            # Log initialization with more context and reduced frequency for production
+            init_type = "eager" if self._eager_init else "lazy"
+            db_type = (
+                "SQLite"
+                if "sqlite" in self.database_url.lower()
+                else "PostgreSQL/MySQL"
+            )
+
+            if _is_testing_environment():
+                # Detailed logging for tests
+                logger.info(
+                    f"SQLAlchemy {db_type} engine initialized successfully ({init_type} mode)"
+                )
+            else:
+                # Reduced logging for production - only log once per process/session
+                if not hasattr(logger, "_engine_init_logged"):
+                    logger.info(
+                        f"SQLAlchemy {db_type} engine initialized ({init_type} mode)"
+                    )
+                    logger._engine_init_logged = True  # type: ignore
 
     async def _initialize_schema(self) -> None:
         """Initialize database schema if needed."""
@@ -400,8 +464,8 @@ class SimpleSQLAlchemyManager:
         Args:
             autocommit: If True, use autocommit mode for read-only operations
         """
-        if not self.engine:
-            await self.initialize()
+        # Ensure initialization (will wait for eager init or fall back to sync init)
+        await self._ensure_initialized()
 
         if not self.engine:
             raise DatabaseConnectionError("Failed to initialize engine")
@@ -461,6 +525,53 @@ class SimpleSQLAlchemyManager:
                 await self.engine.dispose()
             self.engine = None
             self._initialized = False
+
+    async def health_check(self) -> bool:
+        """Perform engine health check.
+
+        Returns:
+            bool: True if engine is healthy, False otherwise
+        """
+        if not self.engine or not self._initialized:
+            return False
+
+        try:
+            async with self.engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+                return True
+        except Exception as e:
+            logger.warning(f"Engine health check failed: {e}")
+            return False
+
+    def get_engine_metrics(self) -> dict[str, Any]:
+        """Get engine connection pool metrics.
+
+        Returns:
+            dict: Engine metrics including pool status
+        """
+        if not self.engine:
+            return {"status": "not_initialized", "pool": None}
+
+        metrics: dict[str, Any] = {
+            "status": "initialized" if self._initialized else "initializing",
+            "database_url": self.database_url,
+            "eager_init": self._eager_init,
+        }
+
+        # Add pool metrics if available
+        if hasattr(self.engine, "pool"):
+            pool = self.engine.pool
+            metrics["pool"] = {
+                "size": getattr(pool, "size", lambda: 0)(),
+                "checked_in": getattr(pool, "checkedin", lambda: 0)(),
+                "checked_out": getattr(pool, "checkedout", lambda: 0)(),
+                "overflow": getattr(pool, "overflow", lambda: 0)(),
+                "invalid": getattr(pool, "invalid", lambda: 0)(),
+            }
+        else:
+            metrics["pool"] = {"type": "no_pool_info"}
+
+        return metrics
 
 
 # ContextVar-based manager for thread-safe database access

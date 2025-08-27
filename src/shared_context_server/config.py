@@ -629,8 +629,8 @@ class SharedContextServerConfig(BaseSettings):
                 issues.append("DEBUG should be False in production")
 
             # Performance checks
-            if self.operational.log_level == "DEBUG":
-                issues.append("LOG_LEVEL should not be DEBUG in production")
+            # Note: LOG_LEVEL=DEBUG is handled gracefully via override in load_config()
+            # No validation needed here as it's automatically forced to INFO
 
         return issues
 
@@ -681,6 +681,33 @@ def load_config(env_file: str | None = None) -> SharedContextServerConfig:
             config = SharedContextServerConfig(_env_file=env_file)
         else:
             config = SharedContextServerConfig()
+
+        # Handle LOG_LEVEL override for production safety
+        if config.is_production() and config.operational.log_level == "DEBUG":
+            # Force LOG_LEVEL to INFO in production for security
+            # Create a new config with the overridden value
+            import os
+
+            original_log_level = os.environ.get("LOG_LEVEL")
+            os.environ["LOG_LEVEL"] = "INFO"
+
+            # Reload config with the forced LOG_LEVEL
+            if env_file:
+                config = SharedContextServerConfig(_env_file=env_file)
+            else:
+                config = SharedContextServerConfig()
+
+            # Log prominent warning about the override
+            logger.warning(
+                "⚠️  WARNING: LOG_LEVEL forced from DEBUG to INFO in production environment for security. "
+                "Use development environment (ENVIRONMENT=development) for DEBUG logging."
+            )
+
+            # Restore original environment value for transparency
+            if original_log_level is not None:
+                os.environ["LOG_LEVEL"] = original_log_level
+            else:
+                os.environ.pop("LOG_LEVEL", None)
 
         # Configure logging
         config.configure_logging()
