@@ -70,17 +70,67 @@ def display_keys(keys: dict[str, str]) -> None:
     print()
 
 
+def has_sensitive_keys(file_path: Path) -> bool:
+    """Check if file contains sensitive keys or tokens"""
+    if not file_path.exists():
+        return False
+
+    try:
+        content = file_path.read_text()
+        sensitive_patterns = [
+            "API_KEY=",
+            "JWT_SECRET_KEY=",
+            "JWT_ENCRYPTION_KEY=",
+            "SECRET=",
+            "TOKEN=",
+            "_KEY=",
+            "_SECRET=",
+            "_TOKEN=",
+        ]
+        return any(
+            pattern in content
+            and not content.split(pattern, 1)[1]
+            .strip()
+            .startswith(("your-", "replace-", "change-"))
+            for pattern in sensitive_patterns
+        )
+    except Exception:
+        return False
+
+
 def create_env_file(keys: dict[str, str], force: bool = False) -> Optional[str]:
     """Create .env file with generated keys"""
     env_file = Path(".env")
     target_file = env_file
 
-    if env_file.exists() and not force:
-        target_file = Path(".env.generated")
-        print_color(
-            Colors.YELLOW,
-            f"⚠️  .env file already exists. Creating {target_file.name} instead.",
-        )
+    if env_file.exists():
+        if force and has_sensitive_keys(env_file):
+            print_color(
+                Colors.RED, "🚨 OVERWRITING: .env contains existing API keys/tokens!"
+            )
+            print_color(Colors.YELLOW, "   Previous keys will be permanently replaced.")
+            print()
+        elif not force:
+            if has_sensitive_keys(env_file):
+                print_color(
+                    Colors.RED,
+                    "🚨 WARNING: .env contains API keys/tokens that would be overwritten!",
+                )
+                print_color(
+                    Colors.YELLOW,
+                    "   Use --force to overwrite, or backup your existing .env file first.",
+                )
+                print_color(
+                    Colors.YELLOW,
+                    f"   Creating {Path('.env.generated').name} instead for safety.",
+                )
+                print()
+
+            target_file = Path(".env.generated")
+            print_color(
+                Colors.YELLOW,
+                f"⚠️  .env file already exists. Creating {target_file.name} instead.",
+            )
 
     env_content = f"""# Shared Context MCP Server - Generated Configuration
 # Generated on {datetime.now().isoformat()}
