@@ -66,9 +66,10 @@ Each agent builds on previous work instead of starting over.
 
 ```bash
 # 🐳 Docker: Multi-client shared collaboration (RECOMMENDED)
-docker run -d -p 23456:23456 ghcr.io/leoric-crown/shared-context-server:latest
+# ⚠️ Requires environment variables - see Step 1 below
 
-# 📦 uvx: Isolated single-client testing only
+# 📦 uvx: Isolated single-client testing only  
+# ⚠️ Requires API key - see Step 1 below
 uvx shared-context-server --help
 ```
 
@@ -95,94 +96,73 @@ cp .env.docker .env
 
 💡 **Most users want `.env.minimal`** - it contains only the 12 essential variables you actually need.
 
-### Step 1: Start Server
+### Step 1: Generate Keys & Start Server
 
-**Option A: Docker (recommended)**
+**🚀 One-Command Setup (Recommended)**
 ```bash
-# Quick start with make command (uses GHCR image)
+# Clone and generate everything automatically
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
-cp .env.minimal .env
-# Edit .env with your secure keys (see Step 2 below)
-make docker
-# ⚠️ This will show live logs - press Ctrl+C to exit log mode and continue
+python scripts/generate_keys.py --docker-only
+# ↳ Generates keys, shows Docker commands, creates .env file
+```
 
-# OR manual Docker run:
-API_KEY=$(openssl rand -base64 32)
-echo "Your API key: $API_KEY"
+**Option A: Docker Compose (Recommended)**
+```bash
+# After running the key generator above, choose your deployment:
+
+# 🚀 Production (pre-built image from GHCR):
+make docker
+# OR: docker compose up -d
+
+# 🔧 Development (with hot reload):
+make dev-docker  
+# OR: docker compose -f docker-compose.dev.yml up -d
+
+# 🏗️ Production (build locally):  
+make docker-local
+# OR: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+```
+
+**Alternative: Raw Docker Commands**
+```bash
+# If you prefer docker run over docker compose:
 docker run -d --name shared-context-server -p 23456:23456 \
-  -e API_KEY="$API_KEY" \
-  -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
-  -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
+  -e API_KEY="your-generated-api-key" \
+  -e JWT_SECRET_KEY="your-generated-jwt-secret" \
+  -e JWT_ENCRYPTION_KEY="your-generated-jwt-encryption-key" \
   ghcr.io/leoric-crown/shared-context-server:latest
 ```
 
 **Option B: uvx Trial (Isolated Testing Only)**
 ```bash
-# 📦 Quick trial - each MCP client gets its own isolated instance
-uvx shared-context-server --version  # Test installation
+# Generate keys first
+python scripts/generate_keys.py --uvx --no-file
+# ↳ Shows the exact uvx command with generated keys
 
-# Start server for single-client testing
-uvx shared-context-server --transport http --host localhost --port 23456
-# Each `uvx shared-context-server` call creates a NEW isolated instance
+# Example output command to run:
+API_KEY="generated-key" JWT_SECRET_KEY="generated-secret" \
+  uvx shared-context-server --transport http
 
-# ⚠️ IMPORTANT: This creates isolated servers per MCP client
-# - Claude Code → gets its own database and sessions
-# - Cursor → gets its own separate database and sessions
-# - Windsurf → gets its own separate database and sessions
-# = NO shared context between tools
+# ⚠️ IMPORTANT: Each MCP client gets isolated instances
+# No shared context between Claude Code, Cursor, Windsurf
 ```
 
-**Option C: Local Development (Clone & Build)**
+**Option C: Local Development**
 ```bash
-# Clone and setup for development
+# Full development setup
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
 uv sync
+python scripts/generate_keys.py --local
+# ↳ Creates .env file and shows make dev command
 
-# Generate and save your API key
-API_KEY=$(openssl rand -base64 32)
-JWT_SECRET_KEY=$(openssl rand -base64 32)
-JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
-
-# Start shared HTTP server (like Docker)
-API_KEY="$API_KEY" JWT_SECRET_KEY="$JWT_SECRET_KEY" JWT_ENCRYPTION_KEY="$JWT_ENCRYPTION_KEY" \
-  uv run python -m shared_context_server.scripts.cli --transport http
-echo "Your API key: $API_KEY"
+make dev  # Starts with hot reload
 ```
 
-### Step 2: Create .env File (Optional - for local development)
+### Step 2: Connect Your MCP Client
 
-```bash
-# Create .env file with your keys
-cat > .env << EOF
-API_KEY=$API_KEY
-JWT_SECRET_KEY=$(openssl rand -base64 32)
-JWT_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
-EOF
-
-# Run with .env file
-docker run -d --name shared-context-server -p 23456:23456 \
-  --env-file .env ghcr.io/leoric-crown/shared-context-server:latest
-```
-
-### PyPI Installation (Alternative to Docker)
-
-The shared-context-server is also available on PyPI for quick testing:
-
-```bash
-# 📦 Install and try (creates isolated instances per client)
-uvx shared-context-server --help
-uvx shared-context-server --version
-
-# ⚠️ For multi-client collaboration, use Docker instead
-```
-
-💡 **When to use PyPI/uvx**: Quick feature testing, learning MCP tools, single-client workflows only.
-
-### Step 3: Connect Your MCP Client
-
-Replace `YOUR_API_KEY_HERE` with the key from Step 1:
+The key generation script shows the exact commands with your API key. Replace `YOUR_API_KEY_HERE` with your generated key:
 
 ```bash
 # Claude Code (simple HTTP transport)
@@ -244,7 +224,7 @@ Have not tested in Windows.
 }
 ```
 
-### Step 4: Verify & Monitor
+### Step 3: Verify & Monitor
 
 **📝 Note**: If you used `make docker-prod`, press Ctrl+C to exit the log viewer first, then run these commands in the same terminal.
 
@@ -287,6 +267,20 @@ Real-time monitoring interface for agent collaboration:
 - **Performance monitoring** for collaboration efficiency
 
 💡 **Perfect for**: Monitoring agent handoffs, debugging collaboration flows, and demonstrating multi-agent coordination to stakeholders.
+
+### 📦 PyPI Installation (Alternative Method)
+
+The shared-context-server is also available on PyPI for quick testing:
+
+```bash
+# 📦 Install and try (creates isolated instances per client)
+uvx shared-context-server --help
+uvx shared-context-server --version
+
+# ⚠️ For multi-client collaboration, use Docker instead
+```
+
+💡 **When to use PyPI/uvx**: Quick feature testing, learning MCP tools, single-client workflows only.
 
 ---
 

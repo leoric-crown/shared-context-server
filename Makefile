@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick format lint type pre-commit quality clean dev-docker docker docker-local docker-fresh version-bump version-check
+.PHONY: help install dev test test-quick format lint type pre-commit quality clean run dev-docker docker docker-local docker-fresh version-bump version-check
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -15,6 +15,11 @@ validate: ## Validate development environment
 dev: ## Start development server with hot reload
 	@echo "Starting development server with hot reload..."
 	uv run python -m shared_context_server.scripts.dev
+
+run: ## Start production server (CLI entry point) with HTTP transport
+	@echo "Starting production server with HTTP transport..."
+	@echo "Using CLI entry point with database initialization..."
+	uv run shared-context-server --transport http
 
 test: ## Run tests with coverage
 	@echo "🧪 Running tests with coverage..."
@@ -111,6 +116,7 @@ docker-local: ## Production deployment building locally
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml -f docker-compose.local.yml up -d --build
 	@echo "3/3 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") logs -f
+
 
 docker-fresh: ## Force fresh pull bypassing all Docker cache
 	@echo "🐳 Starting production Docker environment with fresh image pull..."
