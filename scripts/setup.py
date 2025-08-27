@@ -117,13 +117,32 @@ def create_env_file(
     target_file = env_file
 
     if env_file.exists():
-        if force and has_sensitive_keys(env_file):
+        if (force or demo) and has_sensitive_keys(env_file):
             print_color(
-                Colors.RED, "🚨 OVERWRITING: .env contains existing API keys/tokens!"
+                Colors.RED, "🚨 WARNING: .env contains existing API keys/tokens!"
             )
             print_color(Colors.YELLOW, "   Previous keys will be permanently replaced.")
             print()
-        elif not force:
+
+            # Ask for confirmation in all cases
+            try:
+                response = (
+                    input("Continue and replace existing keys? [y/N]: ").strip().lower()
+                )
+                if response not in ["y", "yes"]:
+                    print_color(
+                        Colors.YELLOW,
+                        "Operation cancelled. Your existing keys are safe.",
+                    )
+                    return None
+                print()
+            except (KeyboardInterrupt, EOFError):
+                print()
+                print_color(
+                    Colors.YELLOW, "Operation cancelled. Your existing keys are safe."
+                )
+                return None
+        elif not force and not demo:
             if has_sensitive_keys(env_file):
                 print_color(
                     Colors.RED,
@@ -139,10 +158,10 @@ def create_env_file(
                 )
                 print()
 
-            target_file = Path(".env.generated")
+            target_file = env_file.parent / ".env.generated"
             print_color(
                 Colors.YELLOW,
-                f"⚠️  .env file already exists. Creating {target_file.name} instead.",
+                f"⚠️  .env file already exists. Creating {target_file} instead.",
             )
 
     # Configure ports based on demo mode
@@ -192,44 +211,63 @@ WEBSOCKET_PORT={websocket_port}
 """
 
     target_file.write_text(env_content)
-    print_color(Colors.GREEN, f"✅ Configuration saved to {target_file.name}")
+    print_color(Colors.GREEN, f"✅ Configuration saved to {target_file}")
+
+    # Create MCP JSON configuration for demo mode
+    if demo:
+        create_mcp_json_file(keys, http_port)
+
     print()
-    return str(target_file)
+
+    # Return info about whether we used a fallback filename
+    generated_fallback = target_file.name.endswith(".generated")
+    return str(target_file), generated_fallback
 
 
-def show_docker_commands(keys: dict[str, str]) -> None:
+def create_mcp_json_file(keys: dict[str, str], http_port: str) -> None:
+    """Create MCP JSON configuration file for Claude Code"""
+    demo_dir = Path("examples/demos/multi-expert-optimization")
+    if not demo_dir.exists():
+        print_color(Colors.RED, f"❌ Demo directory not found: {demo_dir}")
+        return
+
+    mcp_json_file = demo_dir / ".mcp.json"
+
+    mcp_config = {
+        "mcpServers": {
+            "scs-demo": {
+                "type": "http",
+                "url": f"http://localhost:{http_port}/mcp/",
+                "headers": {"X-API-Key": keys["API_KEY"]},
+            },
+            "octocode": {"command": "npx", "args": ["-y", "octocode-mcp"]},
+        }
+    }
+
+    import json
+
+    mcp_json_file.write_text(json.dumps(mcp_config, indent=2))
+    print_color(Colors.GREEN, f"✅ MCP configuration saved to {mcp_json_file}")
+
+
+def show_docker_commands(_keys: dict[str, str], demo: bool = False) -> None:
     """Display Docker deployment commands"""
-    print_color(Colors.BLUE, "🐳 Docker Compose Commands (Recommended):")
+    print_color(Colors.BLUE, "🐳 Docker Commands:")
     print()
-    print_color(Colors.YELLOW, "# 🚀 Production (pre-built image from GHCR):")
-    print("make docker")
-    print("# OR: docker compose up -d")
+    print_color(Colors.YELLOW, "Production (recommended):")
+    print_color(Colors.GREEN, "   docker compose up -d")
+    if not demo:
+        print_color(Colors.GREEN, "   # OR: make docker")
     print()
-    print_color(Colors.YELLOW, "# 🔧 Development (with hot reload):")
-    print("make dev-docker")
-    print("# OR: docker compose -f docker-compose.dev.yml up -d")
+    print_color(Colors.YELLOW, "Development with hot reload:")
+    print_color(Colors.GREEN, "   docker compose -f docker-compose.dev.yml up -d")
+    if not demo:
+        print_color(Colors.GREEN, "   # OR: make dev")
     print()
-    print_color(Colors.YELLOW, "# 🏗️ Production (build locally):")
-    print("make docker-local")
-    print(
-        "# OR: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d"
-    )
-    print()
-    print_color(Colors.BLUE, "🐳 Raw Docker Commands:")
-    print()
-    print_color(Colors.YELLOW, "# Quick start with environment variables:")
-    print("docker run -d --name shared-context-server \\")
-    print("  -p 23456:23456 \\")
-    print(f'  -e API_KEY="{keys["API_KEY"]}" \\')
-    print(f'  -e JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\')
-    print(f'  -e JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\')
-    print("  ghcr.io/leoric-crown/shared-context-server:latest")
-    print()
-    print_color(Colors.YELLOW, "# Or with .env file:")
-    print("docker run -d --name shared-context-server \\")
-    print("  -p 23456:23456 --env-file .env \\")
-    print("  ghcr.io/leoric-crown/shared-context-server:latest")
-    print()
+    if not demo:
+        print_color(Colors.YELLOW, "More options:")
+        print_color(Colors.GREEN, "   make help")
+        print()
 
 
 def show_mcp_commands(keys: dict[str, str], demo: bool = False) -> None:
@@ -237,13 +275,18 @@ def show_mcp_commands(keys: dict[str, str], demo: bool = False) -> None:
     port = "23432" if demo else "23456"
     print_color(Colors.BLUE, "🔗 MCP Client Connection:")
     print()
-    print_color(Colors.YELLOW, "# Claude Code:")
-    print(f"claude mcp add --transport http scs http://localhost:{port}/mcp/ \\")
-    print(f'  --header "X-API-Key: {keys["API_KEY"]}"')
+    print_color(Colors.YELLOW, "Claude Code:")
+    print_color(
+        Colors.GREEN,
+        f"   claude mcp add --transport http scs http://localhost:{port}/mcp/ \\",
+    )
+    print_color(Colors.GREEN, f'   --header "X-API-Key: {keys["API_KEY"]}"')
     print()
-    print_color(Colors.YELLOW, "# Gemini CLI:")
-    print(f"gemini mcp add scs http://localhost:{port}/mcp -t http \\")
-    print(f'  -H "X-API-Key: {keys["API_KEY"]}"')
+    print_color(Colors.YELLOW, "Gemini CLI:")
+    print_color(
+        Colors.GREEN, f"   gemini mcp add scs http://localhost:{port}/mcp -t http \\"
+    )
+    print_color(Colors.GREEN, f'   -H "X-API-Key: {keys["API_KEY"]}"')
     print()
 
 
@@ -252,11 +295,26 @@ def show_uvx_commands(keys: dict[str, str], demo: bool = False) -> None:
     port = "23432" if demo else "23456"
     print_color(Colors.BLUE, "📦 uvx Commands:")
     print()
-    print_color(Colors.YELLOW, "# Start server with generated API key:")
-    print(f'API_KEY="{keys["API_KEY"]}" \\')
-    print(f'JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\')
-    print(f'JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\')
-    print(f"uvx shared-context-server --transport http --port {port}")
+    print_color(Colors.YELLOW, "Start server:")
+    print()
+
+    if demo:
+        # Demo mode: needs env vars since running from subdirectory
+        print_color(Colors.GREEN, f'   API_KEY="{keys["API_KEY"]}" \\')
+        print_color(Colors.GREEN, f'   JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\')
+        print_color(
+            Colors.GREEN, f'   JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\'
+        )
+        print_color(
+            Colors.GREEN, f"   uvx shared-context-server --transport http --port {port}"
+        )
+    else:
+        # Regular mode: reads from .env automatically
+        print_color(
+            Colors.GREEN, f"   uvx shared-context-server --transport http --port {port}"
+        )
+        print_color(Colors.GREEN, "   # OR: make run")
+
     print()
 
 
@@ -264,22 +322,18 @@ def show_local_commands(_keys: dict[str, str]) -> None:
     """Display local development commands"""
     print_color(Colors.BLUE, "💻 Local Development:")
     print()
-    print_color(Colors.YELLOW, "# Using make (recommended):")
-    print("make dev")
-    print()
-    print_color(Colors.YELLOW, "# Or directly with uv:")
-    print("uv run python -m shared_context_server.scripts.dev")
+    print_color(Colors.YELLOW, "Start development server:")
+    print_color(Colors.GREEN, "   make dev")
     print()
 
 
 def show_security_notes() -> None:
     """Display security best practices"""
-    print_color(Colors.BLUE, "🔒 Security Notes:")
-    print()
-    print_color(Colors.YELLOW, "• Keep these keys secure and private")
-    print_color(Colors.YELLOW, "• Don't commit .env files to version control")
-    print_color(Colors.YELLOW, "• Regenerate keys for production deployments")
-    print_color(Colors.YELLOW, "• Use different keys for different environments")
+    print_color(Colors.BLUE, "🔒 Security Reminders:")
+    print_color(
+        Colors.YELLOW,
+        "• Keep keys secure • Don't commit .env files • Use different keys per environment",
+    )
     print()
 
 
@@ -307,24 +361,21 @@ def export_keys(keys: dict[str, str], format_type: str) -> None:
 def main() -> None:
     """Main execution function"""
     parser = argparse.ArgumentParser(
-        description="Generate secure keys for Shared Context MCP Server",
+        description="Setup and configure Shared Context MCP Server",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/generate_keys.py                    # Full interactive setup
-  python scripts/generate_keys.py --docker-only      # Show only Docker commands
-  python scripts/generate_keys.py --demo --uvx       # Demo setup with uvx commands
-  python scripts/generate_keys.py --mcp-only        # Show only MCP client commands
-  python scripts/generate_keys.py --export json     # Export as JSON
-  python scripts/generate_keys.py --no-file         # Don't create .env file
+  python scripts/setup.py                    # Generate keys and show Docker setup
+  python scripts/setup.py --docker-only      # Show only Docker commands
+  python scripts/setup.py --demo --uvx       # Demo setup with uvx commands
+  python scripts/setup.py --uvx              # Show only uvx commands
+  python scripts/setup.py --export json      # Export as JSON
+  python scripts/setup.py --no-file          # Don't create .env file
         """,
     )
 
     parser.add_argument(
         "--docker-only", action="store_true", help="Show only Docker commands"
-    )
-    parser.add_argument(
-        "--mcp-only", action="store_true", help="Show only MCP client commands"
     )
     parser.add_argument("--uvx", action="store_true", help="Include uvx commands")
     parser.add_argument(
@@ -342,7 +393,7 @@ Examples:
     parser.add_argument(
         "--demo",
         action="store_true",
-        help="Save .env file to examples/demos/multi-expert-optimization/ directory for demo setup",
+        help="Configure demo setup in examples/demos/multi-expert-optimization/ directory",
     )
     parser.add_argument(
         "--quiet",
@@ -367,44 +418,74 @@ Examples:
         export_keys(keys, args.export)
         return
 
-    if not args.quiet:
+    if not args.quiet and not args.demo:
         display_keys(keys)
 
     # Create .env file unless disabled
+    env_file_created = None
+    used_fallback = False
     if not args.no_file:
-        create_env_file(keys, args.force, args.demo)
+        result = create_env_file(keys, args.force, args.demo)
+        if result:
+            env_file_created, used_fallback = result
 
-    # Show commands based on arguments
-    show_docker = not (args.mcp_only or args.export)
-    show_mcp = not (args.docker_only or args.export)
+    # Handle demo mode with focused output
+    if args.demo:
+        # Demo mode: show only relevant commands and concise next steps
+        print_color(Colors.BLUE, "🎪 Multi-Expert Collaboration Demo Setup:")
+        print()
+        print_color(Colors.YELLOW, "Next steps:")
+        print_color(Colors.YELLOW, "1. Navigate to demo directory:")
+        print_color(Colors.GREEN, "   cd examples/demos/multi-expert-optimization/")
 
-    if args.docker_only or show_docker:
-        show_docker_commands(keys)
+        if args.uvx:
+            print_color(Colors.YELLOW, "2. Run the uvx command:")
+            print()
+            print_color(Colors.GREEN, f'   API_KEY="{keys["API_KEY"]}" \\')
+            print_color(
+                Colors.GREEN, f'   JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\'
+            )
+            print_color(
+                Colors.GREEN, f'   JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\'
+            )
+            print_color(
+                Colors.GREEN,
+                "   uvx shared-context-server --transport http --port 23432",
+            )
+            print()
+        else:
+            print_color(Colors.YELLOW, "2. Start the server:")
+            print_color(Colors.GREEN, "   uvx: Copy keys from .env and run uvx command")
+            print_color(Colors.GREEN, "   Docker: docker compose up -d")
 
-    if args.mcp_only or show_mcp:
-        show_mcp_commands(keys, args.demo)
+        print_color(Colors.YELLOW, "3. Start Claude Code:")
+        print_color(Colors.GREEN, "   claude --mcp-config .mcp.json")
+        print_color(Colors.YELLOW, "4. Follow demo instructions in README.md")
+        print()
+        print_color(Colors.GREEN, "✅ Demo setup ready!")
+        return
 
-    if args.uvx:
+    # Show commands based on arguments (non-demo mode)
+    # Only show what was specifically requested
+    if args.docker_only:
+        show_docker_commands(keys, args.demo)
+    elif args.uvx:
         show_uvx_commands(keys, args.demo)
-
-    if args.local:
+    elif args.local:
         show_local_commands(keys)
+    else:
+        # Default: show both main deployment methods
+        show_docker_commands(keys, args.demo)
+        show_uvx_commands(keys, args.demo)
 
     if not args.quiet and not args.export:
         show_security_notes()
 
-        if args.demo:
-            print_color(Colors.BLUE, "🎪 Multi-Expert Collaboration Demo Setup:")
-            print()
-            print_color(Colors.YELLOW, "Next steps:")
-            print("1. cd examples/demos/multi-expert-optimization/")
-            if args.uvx or not (args.docker_only):
-                print("2. Run the uvx command shown above")
-            if args.docker_only or not (args.uvx):
-                print("2. docker compose up -d")
-            print("3. Configure Claude Code with the API key shown above")
-            print(
-                "4. Follow the demo instructions in examples/demos/multi-expert-optimization/README.md"
+        # Show manual intervention notice if needed
+        if used_fallback:
+            print_color(
+                Colors.YELLOW,
+                f"⚠️  Manual step: Copy {env_file_created} to .env when ready",
             )
             print()
 

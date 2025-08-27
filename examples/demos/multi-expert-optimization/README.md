@@ -38,7 +38,7 @@ Agent 3: "Designing tests for both your findings - comprehensive strategy comple
 # Clone and generate keys directly for demo
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
-python scripts/generate_keys.py --demo --uvx
+python scripts/setup.py --demo --uvx
 # ↳ Generates secure keys, saves to demo directory, shows next steps
 ```
 
@@ -48,9 +48,10 @@ python scripts/generate_keys.py --demo --uvx
 cd examples/demos/multi-expert-optimization/
 
 # For uvx (recommended):
-API_KEY="your-generated-key" JWT_SECRET_KEY="your-generated-secret" \
-JWT_ENCRYPTION_KEY="your-generated-encryption-key" \
-uvx shared-context-server --transport http
+# Copy the 3 keys from .env file and run:
+API_KEY="your-api-key-from-env" JWT_SECRET_KEY="your-jwt-secret-from-env" JWT_ENCRYPTION_KEY="your-jwt-encryption-from-env" uvx shared-context-server --transport http --port 23432 --host localhost
+
+# Or use the output from setup.py script which shows the exact command
 
 # For Docker:
 docker compose up -d
@@ -60,30 +61,23 @@ docker compose up -d
 
 ```bash
 # Use the API key from Step 1 key generation
-# For uvx (port 23456):
-claude mcp add --transport http scs http://localhost:23456/mcp/ \
-  --header "X-API-Key: YOUR_GENERATED_API_KEY"
-
-# For Docker demo (port 23432):
+# Both uvx and Docker use demo port 23432:
 claude mcp add --transport http scs http://localhost:23432/mcp/ \
   --header "X-API-Key: YOUR_GENERATED_API_KEY"
 
-# Alternative: Copy examples/demos/multi-expert-optimization/demo.mcp.json
-# to your Claude Code settings and update the API key
+# Alternative: Claude Code will auto-detect the generated .mcp.json file
+# (API key is automatically configured by the setup script)
+# Just ensure you're working from the demo directory
 ```
 
 ### Step 3: Verify Setup
 ```bash
 # Health check
-# For uvx:
-curl http://localhost:23456/health
-# For Docker demo:
+# Both uvx and Docker demo:
 curl http://localhost:23432/health
 
 # View dashboard (optional)
-# For uvx:
-open http://localhost:23456/ui/
-# For Docker demo:
+# Both uvx and Docker demo:
 open http://localhost:23432/ui/
 ```
 
@@ -204,7 +198,7 @@ python --version  # Requires Python 3.10+
 ### Server Connection Issues
 ```bash
 # Health check
-curl http://localhost:23456/health
+curl http://localhost:23432/health
 # Expected: {"status": "healthy", ...}
 
 # For uvx (recommended) - server logs appear in terminal where you ran uvx

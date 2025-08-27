@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__scs-demo__get_usage_guidance",
+      "mcp__scs-demo__authenticate_agent",
+      "mcp__scs-demo__create_session",
+      "mcp__scs-demo__add_message",
+      "mcp__scs-demo__refresh_token",
+      "mcp__scs-demo__add_message",
+      "mcp__scs-demo__get_session",
+      "mcp__scs-demo__get_performance_metrics",
+
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
