@@ -431,5 +431,5 @@ class TestMainConfigurationPaths:
 
             main()
 
-            # Should call run_with_optimal_loop with HTTP server coroutine
-            mock_run.assert_called_once()
+            # Should call run_with_optimal_loop twice - once for db init, once for server
+            assert mock_run.call_count == 2

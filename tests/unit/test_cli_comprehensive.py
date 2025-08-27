@@ -316,8 +316,8 @@ class TestMainFunction:
         ):
             main()
 
-            # run_with_optimal_loop should be called once - the exact argument is a coroutine
-            mock_run_loop.assert_called_once()
+            # run_with_optimal_loop should be called twice - once for db init, once for server
+            assert mock_run_loop.call_count == 2
 
     def test_main_http_transport(self):
         """Test main function with HTTP transport."""
@@ -343,8 +343,8 @@ class TestMainFunction:
         ):
             main()
 
-            # Check that run_with_optimal_loop was called with run_server_http coroutine
-            mock_run_loop.assert_called_once()
+            # Check that run_with_optimal_loop was called twice - once for db init, once for server
+            assert mock_run_loop.call_count == 2
 
     def test_main_debug_logging(self):
         """Test main function with debug logging."""
@@ -376,11 +376,19 @@ class TestMainFunction:
         if not SERVER_AVAILABLE:
             pytest.skip("Server not available")
 
+        call_count = 0
         def mock_run_with_optimal_loop(coro):
-            # Close the coroutine before raising KeyboardInterrupt
+            nonlocal call_count
+            call_count += 1
+            
+            # Close the coroutine before handling the interrupt
             if asyncio.iscoroutine(coro):
                 coro.close()
-            raise KeyboardInterrupt()
+            
+            # Raise KeyboardInterrupt on the second call (server startup)
+            # Let database initialization succeed
+            if call_count == 2:
+                raise KeyboardInterrupt()
 
         with (
             patch(
@@ -503,7 +511,7 @@ class TestCLIEdgeCases:
         ):
             main()
 
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
     def test_import_error_handling(self):
         """Test handling of import errors."""
@@ -535,7 +543,7 @@ class TestCLIEdgeCases:
         ):
             # Should not raise any exceptions
             main()
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
     def test_stderr_logging_configuration(self):
         """Test that logging is configured to use stderr."""
@@ -574,7 +582,7 @@ class TestCLIEdgeCases:
             main()
 
             # Should use run_with_optimal_loop for async server functions
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
 
 class TestRealWorldScenarios:
@@ -606,7 +614,7 @@ class TestRealWorldScenarios:
         ):
             main()
 
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
     def test_production_server_scenario(self):
         """Test typical production server scenario."""
@@ -624,7 +632,7 @@ class TestRealWorldScenarios:
             ) as mock_run_loop,
         ):
             main()
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
     def test_isolated_installation_scenario(self):
         """Test scenario where CLI is installed in isolated environment."""
@@ -652,7 +660,7 @@ class TestRealWorldScenarios:
             ) as mock_run_loop,
         ):
             main()
-            mock_run_loop.assert_called_once()
+            assert mock_run_loop.call_count == 2
 
 
 class TestClientConfigGeneration:
