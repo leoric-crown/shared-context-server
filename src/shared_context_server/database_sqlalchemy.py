@@ -585,10 +585,10 @@ class SimpleSQLAlchemyManager:
 
                         current_statement.append(line)
 
-                        # Check for statement endings (semicolon not inside function/trigger)
-                        if line.endswith(";") and not self._is_inside_function_block(
-                            current_statement
-                        ):
+                        # Check for statement endings (semicolon anywhere in line, accounting for comments)
+                        if self._has_statement_terminator(
+                            line
+                        ) and not self._is_inside_function_block(current_statement):
                             statements.append("\n".join(current_statement))
                             current_statement = []
 
@@ -656,10 +656,10 @@ class SimpleSQLAlchemyManager:
 
                         current_statement.append(line)
 
-                        # Check for statement endings (semicolon not inside function/trigger)
-                        if line.endswith(";") and not self._is_inside_function_block(
-                            current_statement
-                        ):
+                        # Check for statement endings (semicolon anywhere in line, accounting for comments)
+                        if self._has_statement_terminator(
+                            line
+                        ) and not self._is_inside_function_block(current_statement):
                             statements.append("\n".join(current_statement))
                             current_statement = []
 
@@ -683,6 +683,25 @@ class SimpleSQLAlchemyManager:
                 raise RuntimeError(f"Database initialization failed: {e}") from e
 
         self.is_initialized = True
+
+    def _has_statement_terminator(self, line: str) -> bool:
+        """
+        Check if a line contains a statement terminator (semicolon), accounting for inline comments.
+
+        Args:
+            line: SQL line to check
+
+        Returns:
+            True if the line contains a semicolon that terminates a statement
+        """
+        # Remove inline comments (-- comments) to check for semicolons
+        comment_pos = line.find("--")
+        if comment_pos != -1:
+            # Check for semicolon before the comment
+            line_before_comment = line[:comment_pos].strip()
+            return line_before_comment.endswith(";")
+        # No comment, check if line ends with semicolon
+        return line.endswith(";")
 
     def _is_inside_function_block(self, statement_lines: list[str]) -> bool:
         """Check if we're inside a PostgreSQL function or MySQL procedure block."""
