@@ -145,6 +145,16 @@ def create_env_file(
                 f"⚠️  .env file already exists. Creating {target_file.name} instead.",
             )
 
+    # Configure ports based on demo mode
+    if demo:
+        http_port = "23432"
+        websocket_port = "34543"
+        database_path = "./demo_chat_history.db"
+    else:
+        http_port = "23456"
+        websocket_port = "34567"
+        database_path = "./chat_history.db"
+
     env_content = f"""# Shared Context MCP Server - Generated Configuration
 # Generated on {datetime.now().isoformat()}
 
@@ -161,10 +171,10 @@ JWT_ENCRYPTION_KEY={keys["JWT_ENCRYPTION_KEY"]}
 # ============================================================================
 
 # Database location
-DATABASE_PATH=./chat_history.db
+DATABASE_PATH={database_path}
 
 # Server configuration
-HTTP_PORT=23456
+HTTP_PORT={http_port}
 LOG_LEVEL=INFO
 ENVIRONMENT=development
 DEBUG=false
@@ -178,7 +188,7 @@ MCP_TRANSPORT=http
 CORS_ORIGINS=*
 
 # WebSocket port (for real-time updates)
-WEBSOCKET_PORT=34567
+WEBSOCKET_PORT={websocket_port}
 """
 
     target_file.write_text(env_content)
@@ -222,29 +232,31 @@ def show_docker_commands(keys: dict[str, str]) -> None:
     print()
 
 
-def show_mcp_commands(keys: dict[str, str]) -> None:
+def show_mcp_commands(keys: dict[str, str], demo: bool = False) -> None:
     """Display MCP client connection commands"""
+    port = "23432" if demo else "23456"
     print_color(Colors.BLUE, "🔗 MCP Client Connection:")
     print()
     print_color(Colors.YELLOW, "# Claude Code:")
-    print("claude mcp add --transport http scs http://localhost:23456/mcp/ \\")
+    print(f"claude mcp add --transport http scs http://localhost:{port}/mcp/ \\")
     print(f'  --header "X-API-Key: {keys["API_KEY"]}"')
     print()
     print_color(Colors.YELLOW, "# Gemini CLI:")
-    print("gemini mcp add scs http://localhost:23456/mcp -t http \\")
+    print(f"gemini mcp add scs http://localhost:{port}/mcp -t http \\")
     print(f'  -H "X-API-Key: {keys["API_KEY"]}"')
     print()
 
 
-def show_uvx_commands(keys: dict[str, str]) -> None:
+def show_uvx_commands(keys: dict[str, str], demo: bool = False) -> None:
     """Display uvx testing commands"""
-    print_color(Colors.BLUE, "📦 uvx Commands (Testing Only):")
+    port = "23432" if demo else "23456"
+    print_color(Colors.BLUE, "📦 uvx Commands:")
     print()
     print_color(Colors.YELLOW, "# Start server with generated API key:")
     print(f'API_KEY="{keys["API_KEY"]}" \\')
     print(f'JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\')
     print(f'JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\')
-    print("uvx shared-context-server --transport http")
+    print(f"uvx shared-context-server --transport http --port {port}")
     print()
 
 
@@ -370,10 +382,10 @@ Examples:
         show_docker_commands(keys)
 
     if args.mcp_only or show_mcp:
-        show_mcp_commands(keys)
+        show_mcp_commands(keys, args.demo)
 
     if args.uvx:
-        show_uvx_commands(keys)
+        show_uvx_commands(keys, args.demo)
 
     if args.local:
         show_local_commands(keys)
