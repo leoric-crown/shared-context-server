@@ -254,6 +254,35 @@ class SecurityConfig(BaseSettings):
             )
         return v
 
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def validate_jwt_secret_key(cls, v: str | None) -> str | None:
+        """Ensure JWT secret key is provided when authentication is needed."""
+        if v is None:
+            # This is acceptable during initialization - the key will be validated at runtime
+            return v
+
+        if not v:
+            raise ValueError(
+                "🔐 JWT_SECRET_KEY cannot be empty!\n\n"
+                "The server needs this key for JWT token signing.\n"
+                "Quick fixes:\n\n"
+                "  1. Generate secure keys:\n"
+                "     uv run python scripts/generate_keys.py\n\n"
+                "  2. Copy the generated configuration:\n"
+                "     cp .env.generated .env\n\n"
+                "  3. Or set the environment variable directly:\n"
+                "     export JWT_SECRET_KEY=$(openssl rand -base64 32)\n"
+            )
+
+        if len(v) < 32:
+            logger.warning(
+                "⚠️ JWT_SECRET_KEY should be at least 32 characters for security. "
+                "Generate with: uv run python scripts/generate_keys.py"
+            )
+
+        return v
+
 
 class AgentPermissionsConfig(BaseSettings):
     """Agent permissions and authentication configuration."""

@@ -327,7 +327,17 @@ class SecureTokenManager:
         # Get encryption key from environment
         key = os.getenv("JWT_ENCRYPTION_KEY")
         if not key:
-            raise ValueError("JWT_ENCRYPTION_KEY environment variable required")
+            raise ValueError(
+                "🔐 JWT_ENCRYPTION_KEY environment variable is required!\n\n"
+                "The server needs this key for secure token encryption.\n"
+                "Quick fixes:\n\n"
+                "  1. Generate secure keys:\n"
+                "     uv run python scripts/generate_keys.py\n\n"
+                "  2. Copy the generated configuration:\n"
+                "     cp .env.generated .env\n\n"
+                "  3. Or set the environment variable directly:\n"
+                "     export JWT_ENCRYPTION_KEY='your-fernet-key-here'\n"
+            )
 
         # Initialize Fernet cipher
         self.fernet = self._fernet_cls(key.encode())

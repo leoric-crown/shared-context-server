@@ -6,6 +6,7 @@ This module provides the main CLI entry point for production use,
 supporting both STDIO and HTTP transports with proper configuration
 management for system deployment.
 """
+# ruff: noqa: TRY400 - Using logger.error in exception handlers for clean user-facing messages
 
 from __future__ import annotations
 
@@ -59,6 +60,61 @@ try:
 except ImportError:
     SERVER_AVAILABLE = False
     logger.exception("Server components not available")
+
+
+async def validate_startup_configuration() -> None:
+    """
+    Validate critical configuration requirements at startup.
+
+    This ensures the server fails fast with helpful error messages
+    if essential configuration is missing, rather than waiting for
+    the first authentication request to fail.
+    """
+    import os
+
+    logger.info("Validating startup configuration...")
+
+    # Check JWT encryption key (required for authentication)
+    jwt_encryption_key = os.getenv("JWT_ENCRYPTION_KEY")
+    if not jwt_encryption_key:
+        logger.error("")
+        logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
+        logger.error("")
+        logger.error("JWT_ENCRYPTION_KEY is required for secure authentication.")
+        logger.error("The server cannot start without this key.")
+        logger.error("")
+        logger.error("Quick fixes:")
+        logger.error("  1. Generate secure keys:")
+        logger.error("     uv run python scripts/generate_keys.py")
+        logger.error("")
+        logger.error("  2. Copy the generated configuration:")
+        logger.error("     cp .env.generated .env")
+        logger.error("")
+        logger.error("  3. Or set the environment variable:")
+        logger.error("     export JWT_ENCRYPTION_KEY='your-fernet-key-here'")
+        logger.error("")
+        sys.exit(1)
+
+    # Validate JWT encryption key format (should be a valid Fernet key)
+    try:
+        from cryptography.fernet import Fernet
+
+        Fernet(jwt_encryption_key.encode())
+    except Exception:
+        # Intentionally using logger.error() for clean user-facing messages
+        # without technical stack traces
+        logger.error("")
+        logger.error("🔐 CONFIGURATION ERROR: Invalid JWT encryption key format")
+        logger.error("")
+        logger.error("JWT_ENCRYPTION_KEY must be a valid Fernet key.")
+        logger.error("")
+        logger.error("Quick fix:")
+        logger.error("  uv run python scripts/generate_keys.py")
+        logger.error("  cp .env.generated .env")
+        logger.error("")
+        sys.exit(1)
+
+    logger.info("✅ Startup configuration validation completed")
 
 
 async def ensure_database_initialized() -> None:
@@ -118,8 +174,87 @@ async def ensure_database_initialized() -> None:
 
     except Exception as e:
         logger.exception("Database initialization check failed")
-        # Re-raise the exception to fail fast if database setup is broken
-        raise RuntimeError(f"Database initialization failed: {e}") from e
+
+        # Check for common configuration issues and provide helpful guidance
+        # Note: Using logger.error() below for user-facing messages without stack traces
+        error_message = str(e)
+
+        # JWT/Authentication configuration issues
+        if "JWT_ENCRYPTION_KEY" in error_message:
+            logger.error("")
+            logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
+            logger.error("")
+            logger.error(
+                "The server requires JWT_ENCRYPTION_KEY for secure token management."
+            )
+            logger.error("Quick fixes:")
+            logger.error("")
+            logger.error("  1. Generate secure keys:")
+            logger.error("     uv run python scripts/generate_keys.py")
+            logger.error("")
+            logger.error("  2. Copy the generated configuration:")
+            logger.error("     cp .env.generated .env")
+            logger.error("")
+            logger.error("  3. Or set the environment variable directly:")
+            logger.error("     export JWT_ENCRYPTION_KEY='your-generated-key'")
+            logger.error("")
+            sys.exit(1)
+
+        # JWT Secret Key issues
+        if "JWT_SECRET_KEY" in error_message:
+            logger.error("")
+            logger.error("🔐 CONFIGURATION ERROR: Missing JWT secret key")
+            logger.error("")
+            logger.error("The server requires JWT_SECRET_KEY for token signing.")
+            logger.error("Quick fix:")
+            logger.error("  uv run python scripts/generate_keys.py")
+            logger.error("")
+            sys.exit(1)
+
+        # Database permission/lock issues
+        if (
+            "database is locked" in error_message.lower()
+            or "permission denied" in error_message.lower()
+        ):
+            logger.error("")
+            logger.error("💾 DATABASE ERROR: Unable to access database file")
+            logger.error("")
+            logger.error("Common causes and fixes:")
+            logger.error("  • Another server instance running:")
+            logger.error("    → Check: lsof -i :23456")
+            logger.error("    → Kill: pkill -f shared-context-server")
+            logger.error("")
+            logger.error("  • File permissions issue:")
+            logger.error("    → Check: ls -la chat_history.db*")
+            logger.error("    → Fix: chmod 664 chat_history.db*")
+            logger.error("")
+            logger.error("  • Stale lock files:")
+            logger.error("    → Clean: rm chat_history.db-wal chat_history.db-shm")
+            logger.error("")
+            sys.exit(1)
+
+        # Generic database initialization failure with helpful guidance
+        logger.error("")
+        logger.error("💥 DATABASE INITIALIZATION FAILED")
+        logger.error("")
+        logger.error("Common fixes (try in order):")
+        logger.error("")
+        logger.error("  1. Ensure authentication keys are configured:")
+        logger.error("     uv run python scripts/generate_keys.py")
+        logger.error("     cp .env.generated .env")
+        logger.error("")
+        logger.error("  2. Check database file permissions:")
+        logger.error("     ls -la chat_history.db*")
+        logger.error("")
+        logger.error("  3. Verify no other server instances are running:")
+        logger.error("     lsof -i :23456")
+        logger.error("")
+        logger.error("  4. Clean up stale database locks:")
+        logger.error("     rm -f chat_history.db-wal chat_history.db-shm")
+        logger.error("")
+        logger.error(f"Technical details: {e}")
+        logger.error("")
+        sys.exit(1)
 
 
 class ProductionServer:
@@ -533,6 +668,13 @@ def main() -> None:
         logger.info("Configuration loaded successfully")
     except Exception:
         logger.exception("Failed to load configuration")
+        sys.exit(1)
+
+    # Validate critical configuration before starting server
+    try:
+        run_with_optimal_loop(validate_startup_configuration())
+    except Exception:
+        logger.exception("Configuration validation failed")
         sys.exit(1)
 
     # Ensure database is initialized before starting server

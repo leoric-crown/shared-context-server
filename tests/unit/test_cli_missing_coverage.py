@@ -431,5 +431,5 @@ class TestMainConfigurationPaths:
 
             main()
 
-            # Should call run_with_optimal_loop twice - once for db init, once for server
-            assert mock_run.call_count == 2
+            # Should call run_with_optimal_loop thrice - config validation, db init, server start
+            assert mock_run.call_count == 3

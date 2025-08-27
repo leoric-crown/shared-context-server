@@ -205,7 +205,8 @@ class TestSecureTokenManagerErrorScenarios:
         with (
             patch.dict("os.environ", {}, clear=True),
             pytest.raises(
-                ValueError, match="JWT_ENCRYPTION_KEY environment variable required"
+                ValueError,
+                match="🔐 JWT_ENCRYPTION_KEY environment variable is required!",
             ),
         ):
             # Remove JWT_ENCRYPTION_KEY from environment

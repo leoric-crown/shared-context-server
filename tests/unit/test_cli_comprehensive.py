@@ -317,7 +317,7 @@ class TestMainFunction:
             main()
 
             # run_with_optimal_loop should be called twice - once for db init, once for server
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_main_http_transport(self):
         """Test main function with HTTP transport."""
@@ -344,7 +344,7 @@ class TestMainFunction:
             main()
 
             # Check that run_with_optimal_loop was called twice - once for db init, once for server
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_main_debug_logging(self):
         """Test main function with debug logging."""
@@ -386,9 +386,9 @@ class TestMainFunction:
             if asyncio.iscoroutine(coro):
                 coro.close()
 
-            # Raise KeyboardInterrupt on the second call (server startup)
-            # Let database initialization succeed
-            if call_count == 2:
+            # Raise KeyboardInterrupt on the third call (server startup)
+            # Let configuration validation and database initialization succeed
+            if call_count == 3:
                 raise KeyboardInterrupt()
 
         with (
@@ -512,7 +512,7 @@ class TestCLIEdgeCases:
         ):
             main()
 
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_import_error_handling(self):
         """Test handling of import errors."""
@@ -544,7 +544,7 @@ class TestCLIEdgeCases:
         ):
             # Should not raise any exceptions
             main()
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_stderr_logging_configuration(self):
         """Test that logging is configured to use stderr."""
@@ -583,7 +583,7 @@ class TestCLIEdgeCases:
             main()
 
             # Should use run_with_optimal_loop for async server functions
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
 
 class TestRealWorldScenarios:
@@ -615,7 +615,7 @@ class TestRealWorldScenarios:
         ):
             main()
 
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_production_server_scenario(self):
         """Test typical production server scenario."""
@@ -633,7 +633,7 @@ class TestRealWorldScenarios:
             ) as mock_run_loop,
         ):
             main()
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
     def test_isolated_installation_scenario(self):
         """Test scenario where CLI is installed in isolated environment."""
@@ -661,7 +661,7 @@ class TestRealWorldScenarios:
             ) as mock_run_loop,
         ):
             main()
-            assert mock_run_loop.call_count == 2
+            assert mock_run_loop.call_count == 3
 
 
 class TestClientConfigGeneration:

@@ -468,7 +468,21 @@ class SimpleSQLAlchemyManager:
         await self._ensure_initialized()
 
         if not self.engine:
-            raise DatabaseConnectionError("Failed to initialize engine")
+            raise DatabaseConnectionError(
+                "💾 Database engine initialization failed!\n\n"
+                "This is usually caused by configuration issues.\n"
+                "Common fixes:\n\n"
+                "  • Missing authentication keys (most common):\n"
+                "    → uv run python scripts/generate_keys.py\n"
+                "    → cp .env.generated .env\n\n"
+                "  • Database file permissions:\n"
+                "    → ls -la chat_history.db*\n"
+                "    → chmod 664 chat_history.db*\n\n"
+                "  • Database file locked by another process:\n"
+                "    → lsof -i :23456\n"
+                "    → rm -f chat_history.db-wal chat_history.db-shm\n\n"
+                "Check the logs above for specific error details."
+            )
 
         # Retry logic for SQLite "database is locked" errors
         max_retries = 3 if _is_testing_environment() else 5
