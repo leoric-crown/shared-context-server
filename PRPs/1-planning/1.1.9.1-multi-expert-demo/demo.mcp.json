@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "shared-context-server": {
+      "type": "http",
+      "url": "http://localhost:23456/mcp/",
+      "headers": {
+        "X-API-Key": "${API_KEY}"
+      },
+      "autoApprove": [
+        "authenticate_agent",
+        "create_session",
+        "add_message",
+        "search_context",
+        "set_memory",
+        "get_memory",
+        "get_messages",
+        "refresh_token"
+      ]
+    },
+    "octocode": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "octocode-mcp"
+      ],
+      "autoApprove": [
+        "githubSearchCode",
+        "githubGetFileContent",
+        "githubViewRepoStructure"
+      ]
+    }
+  }
+}
