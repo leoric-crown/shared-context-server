@@ -10,7 +10,7 @@ import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 try:
     from cryptography.fernet import Fernet
@@ -36,7 +36,7 @@ def print_color(color: str, *args, **kwargs) -> None:
     print(f"{color}{message}{Colors.NC}", **kwargs)
 
 
-def generate_keys() -> Dict[str, str]:
+def generate_keys() -> dict[str, str]:
     """Generate secure keys for the application"""
     print_color(Colors.YELLOW, "🔑 Generating secure keys...")
     print()
@@ -61,7 +61,7 @@ def generate_keys() -> Dict[str, str]:
     }
 
 
-def display_keys(keys: Dict[str, str]) -> None:
+def display_keys(keys: dict[str, str]) -> None:
     """Display generated keys"""
     print_color(Colors.BLUE, "📋 Generated Keys:")
     print()
@@ -70,7 +70,7 @@ def display_keys(keys: Dict[str, str]) -> None:
     print()
 
 
-def create_env_file(keys: Dict[str, str], force: bool = False) -> Optional[str]:
+def create_env_file(keys: dict[str, str], force: bool = False) -> Optional[str]:
     """Create .env file with generated keys"""
     env_file = Path(".env")
     target_file = env_file
@@ -124,7 +124,7 @@ WEBSOCKET_PORT=34567
     return str(target_file)
 
 
-def show_docker_commands(keys: Dict[str, str]) -> None:
+def show_docker_commands(keys: dict[str, str]) -> None:
     """Display Docker deployment commands"""
     print_color(Colors.BLUE, "🐳 Docker Compose Commands (Recommended):")
     print()
@@ -159,7 +159,7 @@ def show_docker_commands(keys: Dict[str, str]) -> None:
     print()
 
 
-def show_mcp_commands(keys: Dict[str, str]) -> None:
+def show_mcp_commands(keys: dict[str, str]) -> None:
     """Display MCP client connection commands"""
     print_color(Colors.BLUE, "🔗 MCP Client Connection:")
     print()
@@ -173,7 +173,7 @@ def show_mcp_commands(keys: Dict[str, str]) -> None:
     print()
 
 
-def show_uvx_commands(keys: Dict[str, str]) -> None:
+def show_uvx_commands(keys: dict[str, str]) -> None:
     """Display uvx testing commands"""
     print_color(Colors.BLUE, "📦 uvx Commands (Testing Only):")
     print()
@@ -185,7 +185,7 @@ def show_uvx_commands(keys: Dict[str, str]) -> None:
     print()
 
 
-def show_local_commands(keys: Dict[str, str]) -> None:
+def show_local_commands(_keys: dict[str, str]) -> None:
     """Display local development commands"""
     print_color(Colors.BLUE, "💻 Local Development:")
     print()
@@ -208,7 +208,7 @@ def show_security_notes() -> None:
     print()
 
 
-def export_keys(keys: Dict[str, str], format_type: str) -> None:
+def export_keys(keys: dict[str, str], format_type: str) -> None:
     """Export keys in various formats"""
     if format_type == "json":
         import json
@@ -291,7 +291,7 @@ Examples:
 
     # Create .env file unless disabled
     if not args.no_file:
-        env_file = create_env_file(keys, args.force)
+        create_env_file(keys, args.force)
 
     # Show commands based on arguments
     show_docker = not (args.mcp_only or args.export)
