@@ -8,7 +8,6 @@ verifying parameter validation and generated instructions.
 from unittest.mock import AsyncMock, patch
 
 from mcp.types import PromptMessage, TextContent
-
 from shared_context_server.prompts import (
     debug_session_prompt,
     setup_collaboration_prompt,

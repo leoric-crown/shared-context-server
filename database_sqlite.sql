@@ -145,7 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id) 
 -- Agent memory uniqueness constraints (SQLite partial index approach)
 -- Global memory: enforce unique (agent_id, key) when session_id IS NULL
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_unique_global ON agent_memory(agent_id, key) WHERE session_id IS NULL;
--- Session memory: enforce unique (agent_id, session_id, key) when session_id IS NOT NULL  
+-- Session memory: enforce unique (agent_id, session_id, key) when session_id IS NOT NULL
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_unique_session ON agent_memory(agent_id, session_id, key) WHERE session_id IS NOT NULL;
 
 -- Audit log access patterns

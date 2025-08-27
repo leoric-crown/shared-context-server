@@ -6,8 +6,9 @@
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
 
-install: ## Install dependencies
+install: ## Install dependencies and setup pre-commit hooks
 	uv sync --dev
+	uv run pre-commit install
 
 validate: ## Validate development environment
 	uv run python -m shared_context_server.scripts.dev --validate

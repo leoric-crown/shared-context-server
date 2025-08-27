@@ -531,21 +531,21 @@ class SimpleSQLAlchemyManager:
         # Get the directory where schema files are located
         # For installed packages, schema files are in site-packages/
         current_dir = Path(__file__).parent
-        
+
         # Try multiple locations to handle both development and installed packages
         possible_roots = [
             current_dir.parent.parent,  # Development: project root
             current_dir.parent.parent / "site-packages",  # Some installations
             Path("/usr/local/lib/python3.11/site-packages"),  # Docker installations
         ]
-        
+
         schema_filename = f"database_{self.db_type}.sql"
-        
+
         for root in possible_roots:
             schema_path = root / schema_filename
             if schema_path.exists():
                 return schema_path
-        
+
         # If not found in standard locations, raise informative error
         searched_paths = [str(root / schema_filename) for root in possible_roots]
         raise FileNotFoundError(

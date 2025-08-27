@@ -377,14 +377,15 @@ class TestMainFunction:
             pytest.skip("Server not available")
 
         call_count = 0
+
         def mock_run_with_optimal_loop(coro):
             nonlocal call_count
             call_count += 1
-            
+
             # Close the coroutine before handling the interrupt
             if asyncio.iscoroutine(coro):
                 coro.close()
-            
+
             # Raise KeyboardInterrupt on the second call (server startup)
             # Let database initialization succeed
             if call_count == 2:

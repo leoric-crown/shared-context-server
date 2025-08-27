@@ -68,7 +68,7 @@ Each agent builds on previous work instead of starting over.
 # 🐳 Docker: Multi-client shared collaboration (RECOMMENDED)
 # ⚠️ Requires environment variables - see Step 1 below
 
-# 📦 uvx: Isolated single-client testing only  
+# 📦 uvx: Isolated single-client testing only
 # ⚠️ Requires API key - see Step 1 below
 uvx shared-context-server --help
 ```
@@ -116,10 +116,10 @@ make docker
 # OR: docker compose up -d
 
 # 🔧 Development (with hot reload):
-make dev-docker  
+make dev-docker
 # OR: docker compose -f docker-compose.dev.yml up -d
 
-# 🏗️ Production (build locally):  
+# 🏗️ Production (build locally):
 make docker-local
 # OR: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
