@@ -98,9 +98,22 @@ def has_sensitive_keys(file_path: Path) -> bool:
         return False
 
 
-def create_env_file(keys: dict[str, str], force: bool = False) -> Optional[str]:
+def create_env_file(
+    keys: dict[str, str], force: bool = False, demo: bool = False
+) -> Optional[str]:
     """Create .env file with generated keys"""
-    env_file = Path(".env")
+    if demo:
+        demo_dir = Path("examples/demos/multi-expert-optimization")
+        if not demo_dir.exists():
+            print_color(Colors.RED, f"❌ Demo directory not found: {demo_dir}")
+            print_color(
+                Colors.YELLOW, "   Make sure you're running from the repository root."
+            )
+            return None
+        env_file = demo_dir / ".env"
+    else:
+        env_file = Path(".env")
+
     target_file = env_file
 
     if env_file.exists():
@@ -288,6 +301,7 @@ def main() -> None:
 Examples:
   python scripts/generate_keys.py                    # Full interactive setup
   python scripts/generate_keys.py --docker-only      # Show only Docker commands
+  python scripts/generate_keys.py --demo --uvx       # Demo setup with uvx commands
   python scripts/generate_keys.py --mcp-only        # Show only MCP client commands
   python scripts/generate_keys.py --export json     # Export as JSON
   python scripts/generate_keys.py --no-file         # Don't create .env file
@@ -312,6 +326,11 @@ Examples:
         "--export",
         choices=["json", "yaml", "export", "docker-env"],
         help="Export keys in specified format",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Save .env file to examples/demos/multi-expert-optimization/ directory for demo setup",
     )
     parser.add_argument(
         "--quiet",
@@ -341,7 +360,7 @@ Examples:
 
     # Create .env file unless disabled
     if not args.no_file:
-        create_env_file(keys, args.force)
+        create_env_file(keys, args.force, args.demo)
 
     # Show commands based on arguments
     show_docker = not (args.mcp_only or args.export)
@@ -361,6 +380,22 @@ Examples:
 
     if not args.quiet and not args.export:
         show_security_notes()
+
+        if args.demo:
+            print_color(Colors.BLUE, "🎪 Multi-Expert Collaboration Demo Setup:")
+            print()
+            print_color(Colors.YELLOW, "Next steps:")
+            print("1. cd examples/demos/multi-expert-optimization/")
+            if args.uvx or not (args.docker_only):
+                print("2. Run the uvx command shown above")
+            if args.docker_only or not (args.uvx):
+                print("2. docker compose up -d")
+            print("3. Configure Claude Code with the API key shown above")
+            print(
+                "4. Follow the demo instructions in examples/demos/multi-expert-optimization/README.md"
+            )
+            print()
+
         print_color(
             Colors.GREEN,
             Colors.BOLD,

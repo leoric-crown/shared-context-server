@@ -2,23 +2,92 @@
 
 **Transform AI from individual agents into coordinated expert committees**
 
-This demo showcases how the shared-context-server enables three AI experts to collaborate autonomously, analyzing your codebase more effectively than any single agent could alone.
+## Content Navigation
 
-## 🚀 Quick Start (20 seconds)
+| Symbol | Meaning | Time Investment |
+|--------|---------|----------------|
+| 🚀 | Quick start | 2-3 minutes |
+| 🎯 | Demo script | 5-7 minutes |
+| 🔧 | Configuration | 5-10 minutes |
+| 💡 | Why this works | Context only |
 
-```bash
-# 1. Clone and navigate to demo
-git clone https://github.com/leoric-crown/shared-context-server.git
-cd shared-context-server/examples/demos/multi-expert-optimization/
+---
 
-# 2. Start the demo server (everything pre-configured)
-docker compose up -d
+## 🎯 Quick Understanding (30 seconds)
 
-# 3. Open Claude Code with demo MCP config
-# Copy demo.mcp.json to your Claude Code settings
+**The Demo**: Watch three AI experts (Performance Architect → Implementation Expert → Validation Expert) collaborate autonomously to analyze any codebase more effectively than a single agent could.
+
+**The Collaboration**: Each expert builds on the previous expert's findings through persistent shared sessions - no manual coordination required.
+
+```
+Agent 1: "Found 4 performance bottlenecks with evidence"
+Agent 2: "Building on your analysis, here are concrete solutions"
+Agent 3: "Designing tests for both your findings - comprehensive strategy complete"
 ```
 
-**That's it!** Your expert committee is ready to analyze any repository.
+💡 **Uses shared-context-server MCP tools**: Universal protocol that works with Claude Code, Gemini, VS Code, Cursor, and custom frameworks.
+
+---
+
+## 🚀 Quick Start (2-3 minutes)
+
+### Step 1: Generate Keys & Start Server
+
+**🚀 One-Command Demo Setup (Recommended)**
+```bash
+# Clone and generate keys directly for demo
+git clone https://github.com/leoric-crown/shared-context-server.git
+cd shared-context-server
+python scripts/generate_keys.py --demo --uvx
+# ↳ Generates secure keys, saves to demo directory, shows next steps
+```
+
+**Start the Server:**
+```bash
+# Follow the exact commands shown by the script above
+cd examples/demos/multi-expert-optimization/
+
+# For uvx (recommended):
+API_KEY="your-generated-key" JWT_SECRET_KEY="your-generated-secret" \
+JWT_ENCRYPTION_KEY="your-generated-encryption-key" \
+uvx shared-context-server --transport http
+
+# For Docker:
+docker compose up -d
+```
+
+### Step 2: Connect Claude Code
+
+```bash
+# Use the API key from Step 1 key generation
+# For uvx (port 23456):
+claude mcp add --transport http scs http://localhost:23456/mcp/ \
+  --header "X-API-Key: YOUR_GENERATED_API_KEY"
+
+# For Docker demo (port 23432):
+claude mcp add --transport http scs http://localhost:23432/mcp/ \
+  --header "X-API-Key: YOUR_GENERATED_API_KEY"
+
+# Alternative: Copy examples/demos/multi-expert-optimization/demo.mcp.json
+# to your Claude Code settings and update the API key
+```
+
+### Step 3: Verify Setup
+```bash
+# Health check
+# For uvx:
+curl http://localhost:23456/health
+# For Docker demo:
+curl http://localhost:23432/health
+
+# View dashboard (optional)
+# For uvx:
+open http://localhost:23456/ui/
+# For Docker demo:
+open http://localhost:23432/ui/
+```
+
+**✅ Success**: Health endpoint returns healthy status and Claude Code shows `✓ Connected`
 
 ## ✨ What You'll Experience
 
@@ -33,22 +102,39 @@ docker compose up -d
 - Visible handoffs show coordination in action
 - Memory persistence enables expertise building over time
 
-## 🎯 Demo Script (5 minutes)
+## 🎯 Demo Script (5-7 minutes)
 
-### Step 1: Initiate Expert Analysis (30 seconds)
-Say to Claude Code:
-> "I want to optimize this repository using our expert committee approach. Please start by having our Performance Architect analyze the codebase for bottlenecks and optimization opportunities."
+### The Magic Prompt
+Copy this exact prompt to Claude Code:
+```
+I want to optimize this repository using our expert committee approach. Please start by having our Performance Architect analyze the codebase for bottlenecks and optimization opportunities.
+```
 
-### Step 2: Watch Expert Coordination (3-4 minutes)
-Claude will automatically coordinate three experts:
+### What Happens Next (Autonomous Coordination)
+**Phase 1**: **Performance Architect** (2-3 minutes)
+- Repository analysis using octocode MCP integration
+- Identifies specific bottlenecks with evidence
+- Stores findings in shared session
+- **Handoff**: "Implementation Expert: Based on my analysis..."
 
-1. **Performance Architect** (2-3 min): Repository analysis using octocode MCP integration
-2. **Implementation Expert** (2-3 min): Concrete solutions based on architect findings
-3. **Validation Expert** (1-2 min): Testing strategy and comprehensive summary
+**Phase 2**: **Implementation Expert** (2-3 minutes)
+- Reads Performance Architect's findings from session
+- Develops concrete code solutions
+- Provides implementation details and risk assessment
+- **Handoff**: "Validation Expert: I've developed solutions..."
 
-### Step 3: Review Coordination Results (1-2 minutes)
+**Phase 3**: **Validation Expert** (1-2 minutes)
+- Integrates both previous expert analyses
+- Designs comprehensive testing strategy
+- **Summary**: "Expert Committee Summary: Complete optimization strategy..."
+
+### Value Demonstration
 Ask Claude:
-> "Show me how the experts coordinated and what would this analysis have looked like with a single agent instead?"
+```
+Show me how the experts coordinated and built on each other's findings. What would this analysis have looked like with a single agent instead?
+```
+
+**Expected Result**: Clear demonstration of knowledge building through expert coordination vs. surface-level single-agent advice.
 
 ## 📋 Expected Outcomes
 
@@ -103,33 +189,70 @@ Performance Architect → Implementation Expert → Validation Expert
 
 ## 🚨 Troubleshooting
 
-### Docker Issues
+<details>
+<summary>🔧 Common Setup Issues</summary>
+
+### Key Generation Problems
 ```bash
-# Check container status
-docker compose ps
+# If generate_keys.py fails
+pip install cryptography
 
-# View logs if issues
-docker compose logs shared-context-server
-
-# Reset if needed
-docker compose down && docker compose up -d
+# Verify Python version
+python --version  # Requires Python 3.10+
 ```
 
-### MCP Connection Issues
-1. **Verify .env file**: Ensure you copied `.env.demo` to `.env` in root directory
-2. **Check server status**: Visit http://localhost:23432/health
-3. **MCP Configuration**: Ensure `demo.mcp.json` is properly configured in Claude Code
+### Server Connection Issues
+```bash
+# Health check
+curl http://localhost:23456/health
+# Expected: {"status": "healthy", ...}
+
+# For uvx (recommended) - server logs appear in terminal where you ran uvx
+
+# For Docker - check logs (from demo directory)
+docker compose logs scs-demo
+```
+
+### MCP Connection Problems
+```bash
+# Test MCP tools discovery
+claude mcp list
+# Expected: ✓ Connected status for shared-context-server
+
+# Verify API key
+echo $API_KEY  # Should show your generated key
+
+# Alternative: Check Claude Code settings for proper API key
+```
+
+</details>
+
+<details>
+<summary>⚠️ Demo Execution Issues</summary>
+
+### Expert Coordination Not Visible
+- **Check**: Ask Claude to "show me the current session messages"
+- **Verify**: Experts should reference previous findings in their responses
+- **Recovery**: "Please have the experts coordinate through our shared session"
 
 ### GitHub Authentication (Optional)
 ```bash
-# If you want to analyze external repositories
+# For external repository analysis
 gh auth login
 
-# Or set token manually
-export GITHUB_TOKEN=your_token_here
+# Fallback: Use shared-context-server self-analysis
 ```
 
-**Note**: Demo works without GitHub auth using self-analysis of the shared-context-server repository.
+### Performance Issues
+```bash
+# For uvx deployment (recommended)
+# Stop with Ctrl+C and restart with the uvx command
+
+# For Docker deployment (from demo directory)
+docker compose restart scs-demo
+```
+
+</details>
 
 ## 📁 Repository Analysis Options
 
