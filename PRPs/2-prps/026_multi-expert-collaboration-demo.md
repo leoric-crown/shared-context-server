@@ -29,7 +29,7 @@ planning_session_id: session_dd6ade04de0349ed
 - **Docker Infrastructure**: Production-ready compose configuration with health checks
 - **Authentication System**: JWT-based with role-based access control already implemented
 - **MCP Tools**: All required coordination tools available (create_session, add_message, authenticate_agent)
-- **HTTP Transport**: Stable endpoint at :23456/mcp/ with API key authentication
+- **HTTP Transport**: Stable endpoint at :23432/mcp/ with API key authentication
 
 **Existing Patterns**:
 - FastMCP server foundation with lazy loading optimization
@@ -215,7 +215,7 @@ Expected Flow:
 
 ### Integration Success
 **System Integration Validation**:
-- ✅ **MCP Transport**: HTTP endpoint at :23456/mcp/ with API key authentication functions reliably
+- ✅ **MCP Transport**: HTTP endpoint at :23432/mcp/ with API key authentication functions reliably
 - ✅ **Docker Integration**: Uses existing production image without core code modifications
 - ✅ **Tool Auto-Approval**: Pre-configured .mcp.json enables smooth coordination without permission prompts
 - ✅ **Fallback Scenarios**: Self-analysis works when GitHub authentication unavailable

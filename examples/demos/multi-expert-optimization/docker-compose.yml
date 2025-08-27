@@ -1,0 +1,39 @@
+services:
+  scs-demo:
+    image: ghcr.io/leoric-crown/shared-context-server:latest
+    container_name: multi-expert-demo-server
+    ports:
+      - "23432:23456"
+      - "34543:34543"
+    volumes:
+      - ../../../database_sqlite.sql:/app/database_sqlite.sql:ro
+      - multi-expert-demo-data:/app/data
+    environment:
+      API_KEY: demo-multi-expert-collaboration-key-2025
+      JWT_SECRET_KEY: demo-jwt-secret-for-expert-committee-showcase-demo-1234567890
+      JWT_ENCRYPTION_KEY: 8fKdX8qVL6PQGDxa2dp-N6H0lI1au08O8lFM5dVtId8=
+      HTTP_PORT: 23432
+      WEBSOCKET_PORT: 34543
+      MCP_TRANSPORT: http
+      LOG_LEVEL: INFO
+      DATABASE_URL: "sqlite+aiosqlite:///demo_chat_history.db"
+      MAX_CONCURRENT_SESSIONS: 50
+      SESSION_MEMORY_LIMIT: 100MB
+      CACHE_TTL: 3600
+    command: ["shared-context-server", "--transport", "http", "--port", "23456", "--host", "0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:23456/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  multi-expert-demo-data:
+    driver: local
+
+networks:
+  default:
+    name: multi-expert-demo
+    driver: bridge

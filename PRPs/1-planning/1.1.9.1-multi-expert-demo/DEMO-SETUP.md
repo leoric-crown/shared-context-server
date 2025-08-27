@@ -29,8 +29,8 @@ cat .env
 # API_KEY=demo-multi-expert-collaboration-key-2025
 # JWT_SECRET_KEY=demo-jwt-secret-for-expert-committee-showcase-demo
 # JWT_ENCRYPTION_KEY=demo-fernet-key-for-multi-agent-coordination-demo
-# HTTP_PORT=23456
-# WEBSOCKET_PORT=34567
+# HTTP_PORT=23432
+# WEBSOCKET_PORT=34543
 ```
 
 ### 3. Configure GitHub Authentication
@@ -59,7 +59,7 @@ docker compose up -d
 Verify the server is running:
 ```bash
 curl -H "X-API-Key: demo-multi-expert-collaboration-key-2025" \
-     http://localhost:23456/mcp/ | head -5
+     http://localhost:23432/mcp/ | head -5
 ```
 
 ### 5. Launch Demo
@@ -92,7 +92,7 @@ octocode-mcp ← GitHub API
     ↓ (HTTP + API Key)
 shared-context-server ← Docker
     ↓ (WebSocket)
-Dashboard UI (localhost:23456/ui/)
+Dashboard UI (localhost:23432/ui/)
 ```
 
 ## Troubleshooting
@@ -118,14 +118,14 @@ curl -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user
 ```bash
 # Verify server responds
 curl -H "X-API-Key: demo-multi-expert-collaboration-key-2025" \
-     http://localhost:23456/mcp/
+     http://localhost:23432/mcp/
 
 # Check Claude Code MCP status
 # Look for shared-context-server in Claude Code > Settings > MCP
 ```
 
 ### Port Conflicts
-If port 23456 is in use, modify `.env`:
+If port 23432 is in use, modify `.env`:
 ```bash
 echo "HTTP_PORT=23457" >> .env
 echo "WEBSOCKET_PORT=23458" >> .env

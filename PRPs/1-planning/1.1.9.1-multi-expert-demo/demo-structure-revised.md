@@ -29,7 +29,7 @@ shared-context-server/
   "mcpServers": {
     "shared-context-server": {
       "type": "http",
-      "url": "http://localhost:23456/mcp/",
+      "url": "http://localhost:23432/mcp/",
       "headers": {
         "X-API-Key": "${API_KEY}"
       },
@@ -74,8 +74,8 @@ JWT_SECRET_KEY=demo-jwt-secret-for-expert-committee-showcase-demo
 JWT_ENCRYPTION_KEY=demo-fernet-key-for-multi-agent-coordination-demo
 
 # Server configuration
-HTTP_PORT=23456
-WEBSOCKET_PORT=34567
+HTTP_PORT=23432
+WEBSOCKET_PORT=34543
 MCP_TRANSPORT=http
 LOG_LEVEL=INFO
 
