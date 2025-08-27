@@ -238,14 +238,18 @@ curl http://localhost:23456/health
 # Run this in Claude: Create a session with purpose "README test setup"
 # Expected: {"success": true, "session_id": "session_...", ...}
 
-# Method 3: Test MCP tools with parameters
-npx @modelcontextprotocol/inspector --cli \
+# Method 3: Test MCP tools discovery
+npx @modelcontextprotocol/inspector --cli --method tools/list \
   -e API_KEY=$API_KEY \
-  -- uv run python -m shared_context_server.scripts.cli \
-  --method tools/call \
-  --tool-name get_usage_guidance
+  -e JWT_SECRET_KEY=$JWT_SECRET_KEY \
+  -e JWT_ENCRYPTION_KEY=$JWT_ENCRYPTION_KEY \
+  uv run python -m shared_context_server.scripts.cli
 
-# Expected: {"success": true, "access_level": "READ_ONLY", ...} (proves MCP tools work)
+# Expected: {"tools": [...]} (proves MCP tools are available)
+
+# Method 4: For Docker deployment, test via HTTP endpoint
+npx @modelcontextprotocol/inspector --cli --method tools/list \
+  http://localhost:23456/mcp
 ```
 
 ```bash
