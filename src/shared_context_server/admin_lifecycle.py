@@ -24,7 +24,7 @@ from pydantic import Field
 
 from .auth import validate_agent_context_or_error
 from .core_server import mcp
-from .database import get_db_connection, initialize_database
+from .database import get_db_connection
 from .utils.llm_errors import (
     ERROR_MESSAGE_PATTERNS,
     create_system_error,
@@ -135,8 +135,16 @@ async def lifespan() -> Any:
     print("Initializing Shared Context MCP Server...")
 
     # Use unified connection management from Phase 0
-    # Initialize database schema
-    await initialize_database()
+    # Initialize database schema using working SQLAlchemy manager
+    from .config import get_database_url
+    from .database_sqlalchemy import SimpleSQLAlchemyManager
+
+    database_url = get_database_url()
+    if database_url.startswith("sqlite://"):
+        database_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+    sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+    await sqlalchemy_manager.initialize()
 
     # Phase 4: Initialize performance optimization system
     from .utils.caching import start_cache_maintenance
@@ -216,8 +224,7 @@ async def shutdown_server() -> None:
 # Set up server lifecycle hooks if FastMCP supports them
 # Note: FastMCP lifecycle management varies by version - this may need adjustment
 try:
-    if hasattr(mcp, "on_startup"):
-        mcp.on_startup(initialize_database)
+    # Database initialization is handled in the lifespan function
     if hasattr(mcp, "lifespan"):
         mcp.lifespan = lifespan
 except Exception as e:

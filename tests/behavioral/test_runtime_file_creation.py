@@ -134,9 +134,19 @@ class TestRuntimeFileCreation:
 
                 try:
                     # Import and initialize database (simulates server startup)
-                    from shared_context_server.database import initialize_database
+                    from shared_context_server.config import get_database_url
+                    from shared_context_server.database_sqlalchemy import (
+                        SimpleSQLAlchemyManager,
+                    )
 
-                    await initialize_database()
+                    database_url = get_database_url()
+                    if database_url.startswith("sqlite://"):
+                        database_url = database_url.replace(
+                            "sqlite://", "sqlite+aiosqlite://", 1
+                        )
+
+                    sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
+                    await sqlalchemy_manager.initialize()
 
                 except Exception as e:
                     print(f"Database initialization failed: {e}")

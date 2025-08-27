@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from src.shared_context_server.config import get_config
-from src.shared_context_server.database import DatabaseManager
+from src.shared_context_server.database_sqlalchemy import SimpleSQLAlchemyManager
 
 
 class TestWALSchemaSmoke:
@@ -31,7 +31,7 @@ class TestWALSchemaSmoke:
             temp_path = f.name
 
         try:
-            db_manager = DatabaseManager(temp_path)
+            db_manager = SimpleSQLAlchemyManager(f"sqlite+aiosqlite:///{temp_path}")
             await db_manager.initialize()
 
             async with db_manager.get_connection() as conn:
@@ -53,7 +53,7 @@ class TestWALSchemaSmoke:
             temp_path = f.name
 
         try:
-            db_manager = DatabaseManager(temp_path)
+            db_manager = SimpleSQLAlchemyManager(f"sqlite+aiosqlite:///{temp_path}")
             await db_manager.initialize()
 
             required_tables = {
@@ -92,7 +92,7 @@ class TestWALSchemaSmoke:
             temp_path = f.name
 
         try:
-            db_manager = DatabaseManager(temp_path)
+            db_manager = SimpleSQLAlchemyManager(f"sqlite+aiosqlite:///{temp_path}")
             await db_manager.initialize()
 
             # Critical indexes for performance
@@ -182,7 +182,7 @@ class TestFoundationIntegrity:
             temp_path = f.name
 
         try:
-            db_manager = DatabaseManager(temp_path)
+            db_manager = SimpleSQLAlchemyManager(f"sqlite+aiosqlite:///{temp_path}")
             await db_manager.initialize()
 
             async with db_manager.get_connection() as conn:
@@ -203,7 +203,7 @@ class TestFoundationIntegrity:
             temp_path = f.name
 
         try:
-            db_manager = DatabaseManager(temp_path)
+            db_manager = SimpleSQLAlchemyManager(f"sqlite+aiosqlite:///{temp_path}")
             await db_manager.initialize()
 
             async with db_manager.get_connection() as conn:

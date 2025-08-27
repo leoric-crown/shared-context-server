@@ -123,11 +123,15 @@ class TestBackgroundTaskSystem:
         # Track database initialization calls
         init_calls = []
 
-        # Mock database initialization to avoid actual database operations
+        # Mock SQLAlchemy manager initialization to avoid actual database operations
+        async def mock_initialize():
+            init_calls.append("init")
+
         with patch(
-            "shared_context_server.admin_lifecycle.initialize_database"
-        ) as mock_init:
-            mock_init.side_effect = lambda: init_calls.append("init")
+            "shared_context_server.database_sqlalchemy.SimpleSQLAlchemyManager"
+        ) as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.initialize = mock_initialize
 
             # Mock background tasks to avoid actually starting them
             with (

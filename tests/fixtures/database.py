@@ -19,7 +19,7 @@ from unittest.mock import patch
 import pytest
 
 if TYPE_CHECKING:
-    from src.shared_context_server.database import DatabaseManager
+    from src.shared_context_server.database_sqlalchemy import SimpleSQLAlchemyManager
 
 # Global environment variables for pytest-xdist worker isolation
 # These ensure all workers have consistent authentication configuration
@@ -53,7 +53,7 @@ class DatabaseTestManager:
     def __init__(self):
         self.backend = "sqlalchemy"  # Always SQLAlchemy (aiosqlite backend removed)
         self.temp_db_path: str | None = None
-        self.db_manager: DatabaseManager | None = None
+        self.db_manager: SimpleSQLAlchemyManager | None = None
         self._original_managers: dict[str, Any] = {}
 
     async def setup(self) -> None:
@@ -93,7 +93,9 @@ class DatabaseTestManager:
         # Always use SQLAlchemy (aiosqlite backend removed)
 
         # Create SQLAlchemy database manager (aiosqlite backend removed)
-        from src.shared_context_server.database_manager import SimpleSQLAlchemyManager
+        from src.shared_context_server.database_sqlalchemy import (
+            SimpleSQLAlchemyManager,
+        )
 
         database_url = f"sqlite+aiosqlite:///{self.temp_db_path}"
         self.db_manager = SimpleSQLAlchemyManager(database_url)
@@ -212,7 +214,7 @@ class DatabaseTestManager:
         """
         if not self.db_manager:
             raise RuntimeError("Database manager not initialized")
-        async with self.db_manager.get_connection(autocommit=autocommit) as conn:
+        async with self.db_manager.get_connection() as conn:
             yield conn
 
 
@@ -353,7 +355,7 @@ def patch_database_for_test(db_manager: DatabaseTestManager):
 
     @asynccontextmanager
     async def mock_get_db_connection(autocommit: bool = False):
-        async with db_manager.get_connection(autocommit=autocommit) as conn:
+        async with db_manager.get_connection() as conn:
             yield conn
 
     # Create patches for all common database import patterns
