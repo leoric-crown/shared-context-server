@@ -103,7 +103,7 @@ cp .env.docker .env
 # Clone and generate everything automatically
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
-python scripts/setup.py --docker-only
+scs setup docker
 # ↳ Generates keys, shows Docker commands, creates .env file
 ```
 
@@ -137,7 +137,7 @@ docker run -d --name shared-context-server -p 23456:23456 \
 **Option B: uvx Trial (Isolated Testing Only)**
 ```bash
 # Generate keys first
-python scripts/setup.py --uvx --no-file
+scs setup uvx
 # ↳ Shows the exact uvx command with generated keys
 
 # Example output command to run:
@@ -154,7 +154,7 @@ API_KEY="generated-key" JWT_SECRET_KEY="generated-secret" \
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
 uv sync
-python scripts/setup.py --local
+scs setup
 # ↳ Creates .env file and shows make dev command
 
 make dev  # Starts with hot reload

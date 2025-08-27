@@ -77,6 +77,7 @@ all-databases = [
 
 [project.scripts]
 shared-context-server = "shared_context_server.scripts.cli:main"
+scs = "shared_context_server.scripts.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/shared-context-server/shared-context-server"

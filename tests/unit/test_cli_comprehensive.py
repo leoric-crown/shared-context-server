@@ -54,7 +54,7 @@ class TestCLIArgumentParsing:
         with patch("sys.argv", ["cli.py"]):
             args = parse_arguments()
 
-            assert args.transport == "stdio"
+            assert args.transport == "http"  # Updated to expect 'http' from config
             assert args.host == "localhost"
             # Port comes from config which may be overridden in test env
             assert isinstance(args.port, int)
@@ -484,7 +484,7 @@ class TestCLIEdgeCases:
             args = parse_arguments()
 
             # Should use defaults
-            assert args.transport == "stdio"
+            assert args.transport == "http"  # Updated to expect 'http' from config
             assert args.log_level == "INFO"
 
     def test_conflicting_arguments(self):

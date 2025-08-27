@@ -28,7 +28,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 # Load .env file at module level
-dotenv.load_dotenv()
+# Priority order: current working directory, then package directory
+dotenv.load_dotenv(
+    dotenv.find_dotenv(usecwd=True)
+)  # Load from current working directory first
+dotenv.load_dotenv()  # Load from package directory as fallback (doesn't override existing vars)
 
 
 def get_default_data_directory() -> str:
@@ -268,7 +272,7 @@ class SecurityConfig(BaseSettings):
                 "The server needs this key for JWT token signing.\n"
                 "Quick fixes:\n\n"
                 "  1. Generate secure keys:\n"
-                "     uv run python scripts/generate_keys.py\n\n"
+                "     scs setup\n\n"
                 "  2. Copy the generated configuration:\n"
                 "     cp .env.generated .env\n\n"
                 "  3. Or set the environment variable directly:\n"
@@ -278,7 +282,7 @@ class SecurityConfig(BaseSettings):
         if len(v) < 32:
             logger.warning(
                 "⚠️ JWT_SECRET_KEY should be at least 32 characters for security. "
-                "Generate with: uv run python scripts/generate_keys.py"
+                "Generate with: scs setup"
             )
 
         return v

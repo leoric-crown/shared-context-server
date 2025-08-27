@@ -473,7 +473,7 @@ class SimpleSQLAlchemyManager:
                 "This is usually caused by configuration issues.\n"
                 "Common fixes:\n\n"
                 "  • Missing authentication keys (most common):\n"
-                "    → uv run python scripts/generate_keys.py\n"
+                "    → scs setup\n"
                 "    → cp .env.generated .env\n\n"
                 "  • Database file permissions:\n"
                 "    → ls -la chat_history.db*\n"

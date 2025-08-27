@@ -332,7 +332,7 @@ class SecureTokenManager:
                 "The server needs this key for secure token encryption.\n"
                 "Quick fixes:\n\n"
                 "  1. Generate secure keys:\n"
-                "     uv run python scripts/generate_keys.py\n\n"
+                "     scs setup\n\n"
                 "  2. Copy the generated configuration:\n"
                 "     cp .env.generated .env\n\n"
                 "  3. Or set the environment variable directly:\n"

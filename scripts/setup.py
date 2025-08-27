@@ -2,63 +2,32 @@
 """
 Shared Context Server - Key Generation Script
 Generates secure API keys and JWT tokens for development and deployment
+
+Note: This script is maintained for backward compatibility and demo mode.
+For general use, prefer the integrated CLI: `scs setup`
 """
 
 import argparse
-import base64
-import secrets
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+# Import shared functionality
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 try:
-    from cryptography.fernet import Fernet
-except ImportError:
-    print("❌ Missing cryptography package. Install with: pip install cryptography")
+    from shared_context_server.setup_core import (
+        Colors,
+        create_env_file,
+        export_keys,
+        generate_keys,
+        print_color,
+        show_docker_commands,
+        show_security_notes,
+        show_uvx_commands,
+    )
+except ImportError as e:
+    print(f"❌ Could not import setup core module: {e}")
+    print("Make sure you're running from the repository root directory")
     sys.exit(1)
-
-
-class Colors:
-    """ANSI color codes for terminal output"""
-
-    RED = "\033[0;31m"
-    GREEN = "\033[0;32m"
-    YELLOW = "\033[1;33m"
-    BLUE = "\033[0;34m"
-    BOLD = "\033[1m"
-    NC = "\033[0m"  # No Color
-
-
-def print_color(color: str, *args, **kwargs) -> None:
-    """Print with color formatting"""
-    message = " ".join(str(arg) for arg in args)
-    print(f"{color}{message}{Colors.NC}", **kwargs)
-
-
-def generate_keys() -> dict[str, str]:
-    """Generate secure keys for the application"""
-    print_color(Colors.YELLOW, "🔑 Generating secure keys...")
-    print()
-
-    # Generate API key (32 bytes, base64 encoded)
-    api_key = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
-    print_color(Colors.GREEN, "✅ API_KEY generated (32 bytes, base64 encoded)")
-
-    # Generate JWT secret key (32 bytes, base64 encoded)
-    jwt_secret = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
-    print_color(Colors.GREEN, "✅ JWT_SECRET_KEY generated (32 bytes, base64 encoded)")
-
-    # Generate JWT encryption key (Fernet key)
-    jwt_encryption = Fernet.generate_key().decode("utf-8")
-    print_color(Colors.GREEN, "✅ JWT_ENCRYPTION_KEY generated (Fernet key)")
-    print()
-
-    return {
-        "API_KEY": api_key,
-        "JWT_SECRET_KEY": jwt_secret,
-        "JWT_ENCRYPTION_KEY": jwt_encryption,
-    }
 
 
 def display_keys(keys: dict[str, str]) -> None:
@@ -68,206 +37,6 @@ def display_keys(keys: dict[str, str]) -> None:
     for key, value in keys.items():
         print_color(Colors.YELLOW, f"{key}={value}")
     print()
-
-
-def has_sensitive_keys(file_path: Path) -> bool:
-    """Check if file contains sensitive keys or tokens"""
-    if not file_path.exists():
-        return False
-
-    try:
-        content = file_path.read_text()
-        sensitive_patterns = [
-            "API_KEY=",
-            "JWT_SECRET_KEY=",
-            "JWT_ENCRYPTION_KEY=",
-            "SECRET=",
-            "TOKEN=",
-            "_KEY=",
-            "_SECRET=",
-            "_TOKEN=",
-        ]
-        return any(
-            pattern in content
-            and not content.split(pattern, 1)[1]
-            .strip()
-            .startswith(("your-", "replace-", "change-"))
-            for pattern in sensitive_patterns
-        )
-    except Exception:
-        return False
-
-
-def create_env_file(
-    keys: dict[str, str], force: bool = False, demo: bool = False
-) -> Optional[str]:
-    """Create .env file with generated keys"""
-    if demo:
-        demo_dir = Path("examples/demos/multi-expert-optimization")
-        if not demo_dir.exists():
-            print_color(Colors.RED, f"❌ Demo directory not found: {demo_dir}")
-            print_color(
-                Colors.YELLOW, "   Make sure you're running from the repository root."
-            )
-            return None
-        env_file = demo_dir / ".env"
-    else:
-        env_file = Path(".env")
-
-    target_file = env_file
-
-    if env_file.exists():
-        if (force or demo) and has_sensitive_keys(env_file):
-            print_color(
-                Colors.RED, "🚨 WARNING: .env contains existing API keys/tokens!"
-            )
-            print_color(Colors.YELLOW, "   Previous keys will be permanently replaced.")
-            print()
-
-            # Ask for confirmation in all cases
-            try:
-                response = (
-                    input("Continue and replace existing keys? [y/N]: ").strip().lower()
-                )
-                if response not in ["y", "yes"]:
-                    print_color(
-                        Colors.YELLOW,
-                        "Operation cancelled. Your existing keys are safe.",
-                    )
-                    return None
-                print()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                print_color(
-                    Colors.YELLOW, "Operation cancelled. Your existing keys are safe."
-                )
-                return None
-        elif not force and not demo:
-            if has_sensitive_keys(env_file):
-                print_color(
-                    Colors.RED,
-                    "🚨 WARNING: .env contains API keys/tokens that would be overwritten!",
-                )
-                print_color(
-                    Colors.YELLOW,
-                    "   Use --force to overwrite, or backup your existing .env file first.",
-                )
-                print_color(
-                    Colors.YELLOW,
-                    f"   Creating {Path('.env.generated').name} instead for safety.",
-                )
-                print()
-
-            target_file = env_file.parent / ".env.generated"
-            print_color(
-                Colors.YELLOW,
-                f"⚠️  .env file already exists. Creating {target_file} instead.",
-            )
-
-    # Configure ports based on demo mode
-    if demo:
-        http_port = "23432"
-        websocket_port = "34543"
-        database_path = "./demo_chat_history.db"
-    else:
-        http_port = "23456"
-        websocket_port = "34567"
-        database_path = "./chat_history.db"
-
-    env_content = f"""# Shared Context MCP Server - Generated Configuration
-# Generated on {datetime.now().isoformat()}
-
-# ============================================================================
-# 🔒 SECURITY KEYS - Generated automatically
-# ============================================================================
-
-API_KEY={keys["API_KEY"]}
-JWT_SECRET_KEY={keys["JWT_SECRET_KEY"]}
-JWT_ENCRYPTION_KEY={keys["JWT_ENCRYPTION_KEY"]}
-
-# ============================================================================
-# ⚙️ BASIC CONFIG - Usually defaults work fine
-# ============================================================================
-
-# Database location
-DATABASE_PATH={database_path}
-
-# Server configuration
-HTTP_PORT={http_port}
-LOG_LEVEL=INFO
-ENVIRONMENT=development
-DEBUG=false
-
-# MCP client connection (hostname clients use to reach server)
-MCP_CLIENT_HOST=localhost
-# Server transport configuration
-MCP_TRANSPORT=http
-
-# CORS origins (use * for development, restrict for production)
-CORS_ORIGINS=*
-
-# WebSocket port (for real-time updates)
-WEBSOCKET_PORT={websocket_port}
-"""
-
-    target_file.write_text(env_content)
-    print_color(Colors.GREEN, f"✅ Configuration saved to {target_file}")
-
-    # Create MCP JSON configuration for demo mode
-    if demo:
-        create_mcp_json_file(keys, http_port)
-
-    print()
-
-    # Return info about whether we used a fallback filename
-    generated_fallback = target_file.name.endswith(".generated")
-    return str(target_file), generated_fallback
-
-
-def create_mcp_json_file(keys: dict[str, str], http_port: str) -> None:
-    """Create MCP JSON configuration file for Claude Code"""
-    demo_dir = Path("examples/demos/multi-expert-optimization")
-    if not demo_dir.exists():
-        print_color(Colors.RED, f"❌ Demo directory not found: {demo_dir}")
-        return
-
-    mcp_json_file = demo_dir / ".mcp.json"
-
-    mcp_config = {
-        "mcpServers": {
-            "scs-demo": {
-                "type": "http",
-                "url": f"http://localhost:{http_port}/mcp/",
-                "headers": {"X-API-Key": keys["API_KEY"]},
-            },
-            "octocode": {"command": "npx", "args": ["-y", "octocode-mcp"]},
-        }
-    }
-
-    import json
-
-    mcp_json_file.write_text(json.dumps(mcp_config, indent=2))
-    print_color(Colors.GREEN, f"✅ MCP configuration saved to {mcp_json_file}")
-
-
-def show_docker_commands(_keys: dict[str, str], demo: bool = False) -> None:
-    """Display Docker deployment commands"""
-    print_color(Colors.BLUE, "🐳 Docker Commands:")
-    print()
-    print_color(Colors.YELLOW, "Production (recommended):")
-    print_color(Colors.GREEN, "   docker compose up -d")
-    if not demo:
-        print_color(Colors.GREEN, "   # OR: make docker")
-    print()
-    print_color(Colors.YELLOW, "Development with hot reload:")
-    print_color(Colors.GREEN, "   docker compose -f docker-compose.dev.yml up -d")
-    if not demo:
-        print_color(Colors.GREEN, "   # OR: make dev")
-    print()
-    if not demo:
-        print_color(Colors.YELLOW, "More options:")
-        print_color(Colors.GREEN, "   make help")
-        print()
 
 
 def show_mcp_commands(keys: dict[str, str], demo: bool = False) -> None:
@@ -290,34 +59,6 @@ def show_mcp_commands(keys: dict[str, str], demo: bool = False) -> None:
     print()
 
 
-def show_uvx_commands(keys: dict[str, str], demo: bool = False) -> None:
-    """Display uvx testing commands"""
-    port = "23432" if demo else "23456"
-    print_color(Colors.BLUE, "📦 uvx Commands:")
-    print()
-    print_color(Colors.YELLOW, "Start server:")
-    print()
-
-    if demo:
-        # Demo mode: needs env vars since running from subdirectory
-        print_color(Colors.GREEN, f'   API_KEY="{keys["API_KEY"]}" \\')
-        print_color(Colors.GREEN, f'   JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\')
-        print_color(
-            Colors.GREEN, f'   JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\'
-        )
-        print_color(
-            Colors.GREEN, f"   uvx shared-context-server --transport http --port {port}"
-        )
-    else:
-        # Regular mode: reads from .env automatically
-        print_color(
-            Colors.GREEN, f"   uvx shared-context-server --transport http --port {port}"
-        )
-        print_color(Colors.GREEN, "   # OR: make run")
-
-    print()
-
-
 def show_local_commands(_keys: dict[str, str]) -> None:
     """Display local development commands"""
     print_color(Colors.BLUE, "💻 Local Development:")
@@ -325,37 +66,6 @@ def show_local_commands(_keys: dict[str, str]) -> None:
     print_color(Colors.YELLOW, "Start development server:")
     print_color(Colors.GREEN, "   make dev")
     print()
-
-
-def show_security_notes() -> None:
-    """Display security best practices"""
-    print_color(Colors.BLUE, "🔒 Security Reminders:")
-    print_color(
-        Colors.YELLOW,
-        "• Keep keys secure • Don't commit .env files • Use different keys per environment",
-    )
-    print()
-
-
-def export_keys(keys: dict[str, str], format_type: str) -> None:
-    """Export keys in various formats"""
-    if format_type == "json":
-        import json
-
-        print(json.dumps(keys, indent=2))
-    elif format_type == "yaml":
-        try:
-            import yaml
-
-            print(yaml.dump(keys, default_flow_style=False))
-        except ImportError:
-            print("❌ PyYAML not installed. Install with: pip install pyyaml")
-    elif format_type == "export":
-        for key, value in keys.items():
-            print(f"export {key}='{value}'")
-    elif format_type == "docker-env":
-        for key, value in keys.items():
-            print(f"-e {key}='{value}' \\")
 
 
 def main() -> None:

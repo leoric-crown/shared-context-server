@@ -32,13 +32,14 @@ import os
 from .. import __version__
 from ..config import get_config, load_config
 
-# Check if we're running client-config command or version to suppress logging
+# Check if we're running commands that should suppress config validation logging
 client_config_mode = len(sys.argv) >= 2 and sys.argv[1] == "client-config"
 version_mode = "--version" in sys.argv
+setup_mode = len(sys.argv) >= 2 and sys.argv[1] == "setup"
 
 log_level = (
     logging.CRITICAL
-    if client_config_mode or version_mode
+    if client_config_mode or version_mode or setup_mode
     else getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 )
 
@@ -85,7 +86,7 @@ async def validate_startup_configuration() -> None:
         logger.error("")
         logger.error("Quick fixes:")
         logger.error("  1. Generate secure keys:")
-        logger.error("     uv run python scripts/generate_keys.py")
+        logger.error("     scs setup")
         logger.error("")
         logger.error("  2. Copy the generated configuration:")
         logger.error("     cp .env.generated .env")
@@ -109,7 +110,7 @@ async def validate_startup_configuration() -> None:
         logger.error("JWT_ENCRYPTION_KEY must be a valid Fernet key.")
         logger.error("")
         logger.error("Quick fix:")
-        logger.error("  uv run python scripts/generate_keys.py")
+        logger.error("  scs setup")
         logger.error("  cp .env.generated .env")
         logger.error("")
         sys.exit(1)
@@ -190,7 +191,7 @@ async def ensure_database_initialized() -> None:
             logger.error("Quick fixes:")
             logger.error("")
             logger.error("  1. Generate secure keys:")
-            logger.error("     uv run python scripts/generate_keys.py")
+            logger.error("     scs setup")
             logger.error("")
             logger.error("  2. Copy the generated configuration:")
             logger.error("     cp .env.generated .env")
@@ -207,7 +208,7 @@ async def ensure_database_initialized() -> None:
             logger.error("")
             logger.error("The server requires JWT_SECRET_KEY for token signing.")
             logger.error("Quick fix:")
-            logger.error("  uv run python scripts/generate_keys.py")
+            logger.error("  scs setup")
             logger.error("")
             sys.exit(1)
 
@@ -240,7 +241,7 @@ async def ensure_database_initialized() -> None:
         logger.error("Common fixes (try in order):")
         logger.error("")
         logger.error("  1. Ensure authentication keys are configured:")
-        logger.error("     uv run python scripts/generate_keys.py")
+        logger.error("     scs setup")
         logger.error("     cp .env.generated .env")
         logger.error("")
         logger.error("  2. Check database file permissions:")
@@ -382,22 +383,24 @@ Claude Code Integration:
         """,
     )
 
-    parser.add_argument(
-        "--transport",
-        choices=["stdio", "http"],
-        default="stdio",
-        help="Transport protocol (default: stdio)",
-    )
     # Load config to get proper defaults
-
     try:
         config = get_config()
+        default_transport = config.mcp_server.mcp_transport.lower()
         default_host = config.mcp_server.http_host
         default_port = config.mcp_server.http_port
     except Exception:
         # Fallback to hardcoded defaults if config loading fails
+        default_transport = "stdio"
         default_host = "localhost"
         default_port = 23456
+
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default=default_transport,
+        help=f"Transport protocol (default: {default_transport}, from MCP_TRANSPORT env var)",
+    )
 
     parser.add_argument(
         "--host",
@@ -464,6 +467,45 @@ Claude Code Integration:
 
     # Status command
     subparsers.add_parser("status", help="Show server status and connected clients")
+
+    # Setup command
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Setup keys and configuration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  scs setup                    # Basic setup: generate keys, create .env, show deployment options
+  scs setup docker            # Generate keys + show Docker commands only
+  scs setup uvx                # Generate keys + show uvx commands only
+  scs setup demo               # Show demo setup guidance (requires repo context)
+  scs setup export json       # Create .env file + export keys as JSON to stdout
+  scs setup export yaml       # Create .env file + export keys as YAML to stdout
+  scs setup export env        # Create .env file + export as shell variables to stdout
+  scs setup export docker-env # Create .env file + export as Docker -e flags to stdout
+  scs setup --force           # Overwrite existing .env file if it exists
+
+Notes:
+  - Without arguments: Creates .env file and shows both Docker and uvx deployment options
+  - With deployment type: Creates .env file and shows specific deployment commands
+  - With 'export': Creates .env file and exports keys to stdout in specified format
+        """,
+    )
+    setup_parser.add_argument(
+        "deployment",
+        nargs="?",
+        choices=["docker", "uvx", "demo", "export"],
+        help="Deployment type: 'docker', 'uvx', 'demo', or 'export'",
+    )
+    setup_parser.add_argument(
+        "format",
+        nargs="?",
+        choices=["json", "yaml", "env", "docker-env"],
+        help="Export format (only used with 'export' deployment): 'json', 'yaml', 'env', or 'docker-env'",
+    )
+    setup_parser.add_argument(
+        "--force", action="store_true", help="Overwrite existing .env file"
+    )
 
     return parser.parse_args()
 
@@ -575,6 +617,198 @@ Headers: X-API-Key: {api_key_display}""",
     print()
 
 
+def run_setup_command(
+    deployment: str | None, format_type: str | None, force: bool
+) -> None:
+    """Run setup command with integrated setup functionality."""
+    from ..setup_core import (
+        Colors,
+        check_demo_dependencies,
+        create_env_file,
+        export_keys,
+        generate_keys,
+        show_dependency_error,
+        show_docker_commands,
+        show_security_notes,
+        show_uvx_commands,
+    )
+
+    # Validate argument combinations
+    if format_type and deployment != "export":
+        print(
+            f"{Colors.RED}❌ Error: Format argument '{format_type}' can only be used with 'export' deployment.{Colors.NC}"
+        )
+        print(
+            f"{Colors.YELLOW}   Did you mean: scs setup export {format_type}?{Colors.NC}"
+        )
+        print()
+        sys.exit(1)
+
+    # Generate keys first
+    keys = generate_keys()
+
+    # Handle different deployment types
+    if deployment == "export":
+        # For export, create .env file first, then export to stdout
+        result = create_env_file(keys, force, demo=False)
+        if not result:
+            sys.exit(1)
+
+        export_format = format_type or "json"
+        if export_format == "env":
+            export_format = "export"
+        export_keys(keys, export_format)
+        return
+
+    # For all other cases, create env file unless it's demo mode handled specially
+    used_generated = False
+    if deployment != "demo":
+        result = create_env_file(keys, force, demo=False)
+        if not result:
+            sys.exit(1)
+        _, used_generated = result
+
+    # Show specific commands based on deployment type
+    if deployment == "docker":
+        show_docker_commands(keys, demo=False)
+    elif deployment == "uvx":
+        show_uvx_commands(keys, demo=False)
+    elif deployment == "demo":
+        # Handle demo mode - check if we're in repository context
+        from pathlib import Path
+
+        demo_dir = Path("examples/demos/multi-expert-optimization")
+        if not demo_dir.exists():
+            print(f"\n{Colors.RED}🎪 Demo mode requires repository context.{Colors.NC}")
+            print(
+                "Please run from the repository root directory where examples/ exists."
+            )
+            print("Or use the original script for demo setup:")
+            print("  cd examples/demos/multi-expert-optimization/")
+            print("  python ../../../scripts/setup.py --demo")
+            print()
+            return
+
+        # Check demo dependencies (npm/npx for octocode MCP server)
+        deps_available, missing_deps = check_demo_dependencies()
+        if not deps_available:
+            show_dependency_error(missing_deps)
+            print(
+                f"{Colors.YELLOW}💡 You can still run the demo with a limited MCP configuration.{Colors.NC}"
+            )
+            print(
+                f"{Colors.YELLOW}   The shared-context-server will work, but octocode features won't be available.{Colors.NC}"
+            )
+            print()
+            if not force:
+                try:
+                    response = (
+                        input("Continue with limited demo setup? [y/N]: ")
+                        .strip()
+                        .lower()
+                    )
+                    if response not in ["y", "yes"]:
+                        print(f"{Colors.YELLOW}Demo setup cancelled.{Colors.NC}")
+                        return
+                    print()
+                except (KeyboardInterrupt, EOFError):
+                    print()
+                    print(f"{Colors.YELLOW}Demo setup cancelled.{Colors.NC}")
+                    return
+            else:
+                print(
+                    f"{Colors.YELLOW}🔄 Force mode: Continuing with limited demo setup...{Colors.NC}"
+                )
+                print()
+
+        # We're in the right place, run demo setup
+        result = create_env_file(
+            keys, force, demo=True, include_octocode=deps_available
+        )
+        if not result:
+            sys.exit(1)
+
+        env_file_path, used_generated = result
+
+        print(f"{Colors.BLUE}🎪 Multi-Expert Collaboration Demo Setup:{Colors.NC}")
+        print()
+        print(f"{Colors.YELLOW}Next steps:{Colors.NC}")
+        print(f"{Colors.YELLOW}1. Navigate to demo directory:{Colors.NC}")
+        print(
+            f"{Colors.GREEN}   cd examples/demos/multi-expert-optimization/{Colors.NC}"
+        )
+
+        if used_generated:
+            print(f"{Colors.YELLOW}2. Copy configuration for safety:{Colors.NC}")
+            print(f"{Colors.GREEN}   cp .env.generated .env{Colors.NC}")
+            print(f"{Colors.YELLOW}3. Start the server (choose one):{Colors.NC}")
+            step_num = 4
+        else:
+            print(f"{Colors.YELLOW}2. Start the server (choose one):{Colors.NC}")
+            step_num = 3
+
+        print(f"{Colors.GREEN}   # Option A - uvx:{Colors.NC}")
+        print(f'{Colors.GREEN}   API_KEY="{keys["API_KEY"]}" \\{Colors.NC}')
+        print(
+            f'{Colors.GREEN}   JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\{Colors.NC}'
+        )
+        print(
+            f'{Colors.GREEN}   JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\{Colors.NC}'
+        )
+        print(
+            f"{Colors.GREEN}   uvx shared-context-server --transport http --port 23432{Colors.NC}"
+        )
+        print()
+        print(f"{Colors.GREEN}   # Option B - Docker:{Colors.NC}")
+        print(f"{Colors.GREEN}   docker compose up -d{Colors.NC}")
+        print(f"{Colors.YELLOW}{step_num}. Start Claude Code:{Colors.NC}")
+        print(f"{Colors.GREEN}   claude --mcp-config .mcp.json{Colors.NC}")
+        print(
+            f"{Colors.YELLOW}{step_num + 1}. Follow demo instructions in README.md{Colors.NC}"
+        )
+        print()
+        if used_generated:
+            print(
+                f"{Colors.GREEN}✅ Demo setup ready! (Configuration saved safely to .env.generated){Colors.NC}"
+            )
+        else:
+            print(f"{Colors.GREEN}✅ Demo setup ready!{Colors.NC}")
+        return
+    else:
+        # Default: show both main deployment methods
+        show_docker_commands(keys, demo=False)
+        show_uvx_commands(keys, demo=False)
+
+    # Show security notes and completion message
+    show_security_notes()
+
+    if used_generated:
+        print(
+            f"{Colors.GREEN}{Colors.BOLD}🎉 Setup complete! Configuration saved safely to .env.generated{Colors.NC}"
+        )
+        print()
+        print(f"{Colors.YELLOW}📋 Next steps to use your new configuration:{Colors.NC}")
+        print(f"{Colors.GREEN}   1. Review the generated configuration:{Colors.NC}")
+        print(f"{Colors.GREEN}      cat .env.generated{Colors.NC}")
+        print(
+            f"{Colors.GREEN}   2. Update your .env file with the new keys:{Colors.NC}"
+        )
+        print(
+            f"{Colors.GREEN}      • Copy individual keys from .env.generated to .env{Colors.NC}"
+        )
+        print(
+            f"{Colors.GREEN}      • Or replace entirely: cp .env.generated .env{Colors.NC}"
+        )
+        print()
+        print(
+            f"{Colors.YELLOW}💡 Your server will use the new keys once you update .env{Colors.NC}"
+        )
+    else:
+        print(
+            f"{Colors.GREEN}{Colors.BOLD}🎉 Setup complete! Your shared-context-server is ready to use.{Colors.NC}"
+        )
+
+
 def show_status(host: str | None = None, port: int | None = None) -> None:
     """Show server status."""
     import requests
@@ -652,6 +886,12 @@ def main() -> None:
             return
         if args.command == "status":
             show_status()
+            return
+        if args.command == "setup":
+            deployment = getattr(args, "deployment", None)
+            format_type = getattr(args, "format", None)
+            force = getattr(args, "force", False)
+            run_setup_command(deployment, format_type, force)
             return
 
     # Setup signal handlers for container environments

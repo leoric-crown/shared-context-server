@@ -188,7 +188,7 @@ Performance Architect → Implementation Expert → Validation Expert
 
 ### Key Generation Problems
 ```bash
-# If generate_keys.py fails
+# If scs setup fails
 pip install cryptography
 
 # Verify Python version
