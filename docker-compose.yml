@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-23456}:23456"
-      - "${WEBSOCKET_PORT:-34567}:${WEBSOCKET_PORT:-34567}"
+      - "${WEBSOCKET_PORT:-34567}:34567"
     volumes:
       - shared-context-data:/app/data
       - shared-context-logs:/app/logs
