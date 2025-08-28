@@ -204,7 +204,7 @@ def _generate_operations_guidance(access_level: str) -> dict[str, Any]:
 
     read_only_operations = [
         "get_session - Retrieve session information and messages",
-        "get_messages - Retrieve messages with agent-specific filtering",
+        "get_messages - Retrieve messages with agent-specific filtering (use offset for efficient polling)",
         "search_context - Fuzzy search messages with RapidFuzz",
         "search_by_sender - Find messages by specific sender",
         "search_by_timerange - Search messages within time ranges",
@@ -442,6 +442,7 @@ def _generate_troubleshooting_guidance(access_level: str) -> dict[str, Any]:
                     "Check database connection pool status",
                     "Monitor cache hit rates and effectiveness",
                     "Review audit logs for unusual patterns",
+                    "For efficient message polling: use offset parameter (e.g., if you saw 3 messages, next call use offset=3)",
                 ],
                 "Agent Coordination Problems": [
                     "Check agent token generation and distribution",

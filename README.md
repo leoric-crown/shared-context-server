@@ -48,6 +48,34 @@ Each agent builds on previous work instead of starting over.
 
 ---
 
+## 🎪 Multi-Expert Demo (30 seconds to start)
+
+**See AI agents collaborate better than any individual agent could.**
+
+```bash
+# One command creates complete demo environment
+scs setup demo
+scs  # Start server, then try the magic prompt below in Claude Code
+```
+
+**The Magic Prompt** (copy to Claude Code):
+```
+I want to optimize this repository using our expert committee approach. Please start by having our Performance Architect analyze the codebase for bottlenecks.
+```
+
+**What Happens**: Three AI experts collaborate autonomously:
+- **Performance Architect** → finds bottlenecks with evidence
+- **Implementation Expert** → builds concrete solutions
+- **Validation Expert** → creates testing strategy
+
+Each expert builds on the previous expert's findings through persistent shared sessions. **No manual coordination required.**
+
+💡 **Try asking Claude**: "Show me how the experts coordinated and what would this look like with a single agent instead?"
+
+➡️ **[Complete Demo Guide](./examples/demos/multi-expert-optimization/README.md)** (transforms to "ALREADY DONE!" after setup)
+
+---
+
 ## 🚀 Try It Now (2 minutes)
 
 ### ⚠️ **Important: Choose Your Deployment Method**
@@ -98,11 +126,18 @@ cp .env.docker .env
 
 ### Step 1: Generate Keys & Start Server
 
-**🚀 One-Command Setup (Recommended)**
+**🚀 One-Command Demo Setup (Recommended)**
 ```bash
-# Clone and generate everything automatically
+# Experience multi-expert AI collaboration in 30 seconds
 git clone https://github.com/leoric-crown/shared-context-server.git
 cd shared-context-server
+scs setup demo
+# ↳ Creates complete demo environment with expert agents ready to collaborate
+```
+
+**🐳 Production Setup Alternative**
+```bash
+# For production deployment with Docker
 scs setup docker
 # ↳ Generates keys, shows Docker commands, creates .env file
 ```
@@ -335,17 +370,25 @@ async def create_session():
 
 ## ⚙️ Framework Examples
 
-### Code Review Pipeline
-1. **Security Agent** finds vulnerabilities → shares findings
-2. **Performance Agent** builds on security context → optimizes safely
-3. **Documentation Agent** documents complete solution
+### Multi-Expert Code Optimization (Featured Demo)
+1. **Performance Architect** analyzes codebase → identifies bottlenecks with evidence
+2. **Implementation Expert** reads findings → develops concrete solutions
+3. **Validation Expert** synthesizes both → creates comprehensive testing strategy
 
-💡 **Why this works**: Each agent builds on discoveries instead of duplicating work.
+💡 **Why this works**: Experts ask clarifying questions and build on each other's insights through persistent sessions.
 
-### Research & Implementation
+### Conversational vs Monologue Patterns
+```
+❌ Traditional: "Here are my findings" (isolated analysis)
+✅ Advanced: "Based on your bottleneck analysis, I have questions about X constraint..." (collaborative)
+```
+
+### Research & Implementation Pipeline
 1. **Research Agent** gathers requirements → shares insights
-2. **Architecture Agent** designs using research → documents decisions
-3. **Developer Agent** implements with full context
+2. **Architecture Agent** questions research gaps → designs using complete context
+3. **Developer Agent** implements with iterative feedback loop
+
+**Demo these patterns**: Run `scs setup demo` to experience expert committees vs individual analysis.
 
 **More examples**: [Collaborative Workflows Guide](./docs/integration-guide.md#collaborative-workflows)
 
@@ -471,8 +514,12 @@ async def create_session():
 **Why**: Granular information sharing - agents can have private working memory and shared discoveries
 
 ### MCP Protocol Integration
-**What**: Model Context Protocol compliance for universal compatibility
-**Why**: Works with any MCP-compatible framework without custom integration code
+**What**: Model Context Protocol compliance with automated orchestration prompts
+**Why**: Works with any MCP-compatible framework with built-in multi-agent collaboration patterns
+
+### Advanced Orchestration Features
+**What**: MCP prompts with parallel agent launches, token refresh patterns, and collaborative documentation
+**Why**: Enables true conversational collaboration vs sequential monologues
 
 </details>
 
@@ -555,6 +602,18 @@ make docker      # Production Docker (GHCR image) → shows logs
 make dev-docker  # Development Docker (local build + hot reload) → shows logs
 # ⚠️ Both commands show live logs - press Ctrl+C to exit and continue setup
 ```
+
+### SCS Setup Commands
+
+```bash
+scs setup                    # Basic setup: generate keys, create .env, show deployment options
+scs setup demo               # 🎪 Create complete demo environment with expert agents
+scs setup docker            # Generate keys + show Docker commands only
+scs setup uvx                # Generate keys + show uvx commands only
+scs setup export json       # Create .env file + export keys as JSON to stdout
+```
+
+💡 **For first-time users**: `scs setup demo` creates everything needed for the multi-expert collaboration experience.
 
 <details>
 <summary>⚙️ Direct commands without make</summary>

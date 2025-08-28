@@ -497,11 +497,22 @@ async def get_messages(
     limit: int = Field(
         default=50, description="Maximum messages to return", ge=1, le=1000
     ),
-    offset: int = Field(default=0, description="Offset for pagination", ge=0),
+    offset: int = Field(
+        default=0,
+        description="Offset for pagination (IMPORTANT: Use to fetch new messages efficiently - if you previously saw 3 messages, use offset=3 to get only newer messages)",
+        ge=0,
+    ),
     ctx: Context = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
     """
     Retrieve messages from session with agent-specific filtering.
+
+    EFFICIENT POLLING PATTERN:
+    - First call: get_messages(session_id) → returns messages 0-49 (if limit=50)
+    - If you got 3 messages, next call: get_messages(session_id, offset=3) → returns messages 3+ only
+    - For real-time updates: track message_count from previous calls, use as offset for next call
+
+    This prevents re-fetching the same messages and improves performance for multi-agent coordination.
     """
 
     try:

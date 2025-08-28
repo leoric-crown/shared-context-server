@@ -17,6 +17,7 @@ valid_token = authenticate_agent(agent_id="validation_expert_001", agent_type="c
 
 ### 2. Conversational Collaboration (CRITICAL - ENFORCE ACTIVELY)
 **YOU MUST facilitate iterative dialogue, not collect monologues**:
+- **LAUNCH EXPERTS IN PARALLEL** to enable concurrent message posting and reading
 - **REQUIRE 3+ questions per expert per round**
 - **PROACTIVELY guide experts to ask clarifying questions**
 - **IMMEDIATELY intervene if monologue detected**
@@ -40,6 +41,7 @@ valid_token = authenticate_agent(agent_id="validation_expert_001", agent_type="c
 
 ## Success Criteria
 - ✅ Unique authentication per expert (no token reuse)
+- ✅ Experts launched in parallel for concurrent collaboration
 - ✅ 3+ questions per expert per round
 - ✅ Solutions evolve through dialogue
 - ✅ Human validation between rounds

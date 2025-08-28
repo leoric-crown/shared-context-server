@@ -139,10 +139,12 @@ orchestrator_token = authenticate_agent(
 **CRITICAL**: Facilitate conversation, don't just collect individual outputs.
 
 **Orchestration Protocol**:
-1. **Round Initiation**: "[Expert Role]: Focus on [specific aspect]. Ask questions if you need clarification from other experts."
-2. **Question Facilitation**: "[Expert A] asked about X. [Expert B], please respond and feel free to ask follow-up questions."
-3. **Synthesis Checkpoints**: "Based on the discussion, I'm seeing [patterns]. Let's proceed to next round with [specific focus]."
-4. **Conversation Threading**: "[Expert C], you mentioned Y earlier. How does [Expert A's] new insight change your approach?"
+1. **LAUNCH EXPERTS IN PARALLEL**: Use multiple Task tool calls in single message for concurrent collaboration
+2. **Token Refresh Between Rounds**: Refresh expert tokens before each new round to prevent authentication failures
+3. **Round Initiation**: "[Expert Role]: Focus on [specific aspect]. Ask questions if you need clarification from other experts."
+4. **Question Facilitation**: "[Expert A] asked about X. [Expert B], please respond and feel free to ask follow-up questions."
+5. **Synthesis Checkpoints**: "Based on the discussion, I'm seeing [patterns]. Let's proceed to next round with [specific focus]."
+6. **Conversation Threading**: "[Expert C], you mentioned Y earlier. How does [Expert A's] new insight change your approach?"
 
 ## Checkpoint-Driven Collaboration Workflow
 
@@ -186,14 +188,25 @@ add_message(
 )
 ```
 
+### Final Documentation Action
+```
+# Save detailed team findings to demonstrate collaborative value
+# Create timestamped markdown file: team-analysis-[timestamp].md
+# Include: session_id, cross-expert insights, dialogue evolution, collaborative breakthroughs
+# Format: ## Session Context\n**Session ID**: {session_id}\n**Timestamp**: {timestamp}
+```
+
 ## Conversation Quality Indicators
 
 **Successful Conversational Collaboration**:
+- ✅ Experts launched in parallel for concurrent collaboration
+- ✅ Tokens refreshed between rounds to prevent auth failures
 - ✅ Experts ask clarifying questions to each other
 - ✅ Solutions evolve through iterative dialogue
 - ✅ Cross-expert knowledge integration visible
 - ✅ Orchestrator facilitates conversation flow
 - ✅ Each round builds on previous discussions
+- ✅ Detailed findings saved to timestamped markdown file
 
 **Anti-Patterns to Avoid**:
 - ❌ Individual monologues without interaction
