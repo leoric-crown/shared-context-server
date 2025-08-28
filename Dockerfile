@@ -73,16 +73,20 @@ USER appuser
 # Create data volume mount point
 VOLUME ["/app/data"]
 
-# Configure container
+# Configure container - expose standard internal ports
 EXPOSE 23456 34567
 
-# Health check - verify both HTTP and WebSocket servers
+# Health check - verify both HTTP and WebSocket servers using dynamic ports
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:23456/health && curl -f http://localhost:34567/health || exit 1
+    CMD HTTP_PORT=${HTTP_PORT:-23456} WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567} && \
+        curl -f "http://localhost:${HTTP_PORT}/health" && \
+        curl -f "http://localhost:${WEBSOCKET_PORT}/health" || exit 1
 
 # Default environment variables (can be overridden)
 ENV DATABASE_PATH=/app/data/chat_history.db \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    HTTP_PORT=23456 \
+    WEBSOCKET_PORT=34567
 
-# Default command - HTTP transport with WebSocket support
-CMD ["shared-context-server", "--transport", "http", "--host", "0.0.0.0", "--port", "23456"]
+# Default command - HTTP transport with WebSocket support using environment variable
+CMD sh -c "shared-context-server --transport http --host 0.0.0.0 --port ${HTTP_PORT:-23456}"

@@ -24,33 +24,42 @@ Complete guide for using MCP Inspector to discover, test, and validate the Share
 uv sync
 
 # Set environment variables (required for authentication)
-export API_KEY="test-key"
+export API_KEY="ueCdNbbvVvTK89qSn1tQpZP4rHi4oMVYhvVzg7/7m8A="
 export JWT_SECRET_KEY="test-secret-key-for-jwt-signing-123456"
 export JWT_ENCRYPTION_KEY="3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY="
 ```
 
-### Basic Discovery Workflow
+### Preferred: STDIO (Clean Pattern)
+
+Use this for local development without polluting your shell environment.
+
 ```bash
-# 1. List all available tools
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
+# List tools
+npx @modelcontextprotocol/inspector --cli -e MCP_TRANSPORT=stdio --method tools/list \
   uv run python -m shared_context_server.scripts.cli
 
-# 2. Get just tool names
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | jq '.tools[].name'
-
-# 3. List resource templates
-npx @modelcontextprotocol/inspector --cli --method resources/templates/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
+# List prompts
+npx @modelcontextprotocol/inspector --cli -e MCP_TRANSPORT=stdio --method prompts/list \
   uv run python -m shared_context_server.scripts.cli
 
-# 4. List prompt templates
-npx @modelcontextprotocol/inspector --cli --method prompts/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
+# List resource templates
+npx @modelcontextprotocol/inspector --cli -e MCP_TRANSPORT=stdio --method resources/templates/list \
   uv run python -m shared_context_server.scripts.cli
 ```
+
+### Alternative: HTTP Transport (for remote or header-based auth)
+
+```bash
+# Start the server in HTTP mode (separate terminal)
+make dev  # http://localhost:24456
+
+# Use MCP Inspector over HTTP
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method tools/list
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method prompts/list
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method resources/templates/list
+```
+
+Note: Custom tools may still require authentication over HTTP. See [Tool Testing](#tool-testing).
 
 ---
 
@@ -68,16 +77,43 @@ The MCP Inspector supports these methods for the Shared Context Server:
 - `prompts/get` - Get a specific prompt template
 - `logging/setLevel` - Configure logging level
 
-### Method Syntax
-All methods require the `--method` parameter and environment variables for authentication:
+### Authentication Model
 
+The server uses **selective authentication** as of v1.1.10:
+
+**✅ No Authentication Required (MCP Protocol Methods):**
+- `initialize` - Server initialization
+- `tools/list` - Tool discovery
+- `resources/list` - Resource discovery
+- `resources/templates/list` - Resource template discovery
+- `prompts/list` - Prompt template discovery
+- `ping` - Server health check
+
+**🔐 Authentication Required (Custom Tools):**
+- `create_session` - Session management
+- `add_message` - Message operations
+- `authenticate_agent` - Token generation
+- `search_context` - Search operations
+- `get_memory` - Memory access
+- All other custom server functionality
+
+This design enables **MCP Inspector CLI compatibility** while maintaining security for operational tools.
+
+### Method Syntax
+
+**STDIO (Clean pattern - recommended for local dev)**:
 ```bash
-npx @modelcontextprotocol/inspector --cli \
-  --method METHOD_NAME \
-  -e API_KEY=your-key \
-  -e JWT_SECRET_KEY=your-secret \
-  -e JWT_ENCRYPTION_KEY=your-encryption-key \
+npx @modelcontextprotocol/inspector --cli -e MCP_TRANSPORT=stdio --method METHOD_NAME \
   uv run python -m shared_context_server.scripts.cli
+```
+
+**HTTP (Alternative - remote/auth scenarios)**:
+```bash
+# Optional: set auth headers via env if needed
+export AUTH_APIKEY_HEADER_NAME="X-API-Key"
+export AUTH_APIKEY_VALUE="your-api-key"
+
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method METHOD_NAME
 ```
 
 ---
@@ -86,10 +122,8 @@ npx @modelcontextprotocol/inspector --cli \
 
 ### List All Tools
 ```bash
-# Get complete tool catalog with schemas
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli
+# Get complete tool catalog with schemas (HTTP transport)
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method tools/list
 ```
 
 **Available Tools:**
@@ -111,20 +145,14 @@ npx @modelcontextprotocol/inspector --cli --method tools/list \
 ### Extract Specific Tool Information
 ```bash
 # Get tool names only
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | jq '.tools[].name'
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method tools/list | jq '.tools[].name'
 
 # Get specific tool schema
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | \
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method tools/list | \
   jq '.tools[] | select(.name == "create_session")'
 
 # Get tool parameter requirements
-npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | \
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method tools/list | \
   jq '.tools[] | select(.name == "add_message") | {name, required: .inputSchema.required, properties: .inputSchema.properties | keys}'
 ```
 
@@ -136,9 +164,7 @@ Resource templates define URI patterns for accessing dynamic server resources.
 
 ### List Resource Templates
 ```bash
-npx @modelcontextprotocol/inspector --cli --method resources/templates/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method resources/templates/list
 ```
 
 **Available Resource Templates:**
@@ -166,9 +192,7 @@ npx @modelcontextprotocol/inspector --cli --method resources/templates/list \
 ### Extract Resource Template Information
 ```bash
 # Get resource template URI patterns
-npx @modelcontextprotocol/inspector --cli --method resources/templates/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | \
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method resources/templates/list | \
   jq '.resourceTemplates[] | {name, uriTemplate, description}'
 ```
 
@@ -180,9 +204,7 @@ The server provides pre-built prompt templates for common multi-agent workflows.
 
 ### List Prompt Templates
 ```bash
-npx @modelcontextprotocol/inspector --cli --method prompts/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method prompts/list
 ```
 
 **Available Prompt Templates:**
@@ -201,9 +223,7 @@ npx @modelcontextprotocol/inspector --cli --method prompts/list \
 ### Get Prompt Template Details
 ```bash
 # Get specific prompt template information
-npx @modelcontextprotocol/inspector --cli --method prompts/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | \
+npx @modelcontextprotocol/inspector --cli http://localhost:24456/mcp --method prompts/list | \
   jq '.prompts[] | select(.name == "setup-collaboration")'
 ```
 
@@ -216,9 +236,12 @@ The Inspector provides `tools/call` for testing tools, but requires proper param
 
 ```bash
 # Test create_session (working example)
-npx @modelcontextprotocol/inspector --cli --method tools/call \
+npx @modelcontextprotocol/inspector --cli \
+  -e MCP_TRANSPORT=stdio \
+  -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 \
+  -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
+  --method tools/call \
   --tool-name create_session \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
   uv run python -m shared_context_server.scripts.cli
 # This will show validation error: 'purpose' is required
 
@@ -233,12 +256,12 @@ For reliable tool testing, use direct server API calls or the development server
 # Start development server for testing
 make dev
 
-# Or use MCP Inspector CLI for direct testing
+# Or use MCP Inspector CLI for direct testing (STDIO)
 npx @modelcontextprotocol/inspector --cli \
-  -e API_KEY=$API_KEY \
-  -- uv run python -m shared_context_server.scripts.cli \
+  -e MCP_TRANSPORT=stdio \
   --method tools/call \
-  --tool-name get_usage_guidance
+  --tool-name get_usage_guidance \
+  uv run python -m shared_context_server.scripts.cli
 ```
 
 ---
@@ -365,19 +388,28 @@ npx @modelcontextprotocol/inspector --cli --method tools/list \
 ```
 
 #### 4. Authentication Issues
-```bash
-# Verify authentication by checking available tools
-# Check if tools are available (indicates successful authentication)
-TOOL_COUNT=$(npx @modelcontextprotocol/inspector --cli --method tools/list \
-  -e API_KEY=test-key -e JWT_SECRET_KEY=test-secret-key-for-jwt-signing-123456 -e JWT_ENCRYPTION_KEY=3LBG8-a0Zs-JXO0cOiLCLhxrPXjL4tV5-qZ6H_ckGBY= \
-  uv run python -m shared_context_server.scripts.cli | jq '.tools | length')
 
-if [ "$TOOL_COUNT" -lt 10 ]; then
-  echo "❌ Authentication may be failing - only $TOOL_COUNT tools found"
-else
-  echo "✅ Authentication working - $TOOL_COUNT tools available"
-fi
+**New in v1.1.10**: Standard MCP methods work without authentication!
+
+```bash
+# Test discovery methods (no authentication needed)
+curl -X POST 'http://localhost:24456/mcp?sessionId=test' \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc": "2.0", "id": "1", "method": "tools/list", "params": {}}'
+
+# If discovery works but custom tools fail, authentication may be needed
+# Test an authenticated tool (requires API_KEY)
+curl -X POST 'http://localhost:24456/mcp?sessionId=test' \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-API-Key: your-api-key" \
+  -d '{"jsonrpc": "2.0", "id": "2", "method": "create_session", "params": {"purpose": "test"}}'
 ```
+
+**Expected Behavior:**
+- ✅ `tools/list`, `resources/list`, `prompts/list` work without API key
+- ❌ `create_session`, `add_message`, etc. require API key in `X-API-Key` header
 
 ### Diagnostic Commands
 

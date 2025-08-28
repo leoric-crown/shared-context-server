@@ -32,14 +32,14 @@ services:
       # WebSocket configuration
       - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
       - WEBSOCKET_HOST=0.0.0.0
-      - WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
+      - WEBSOCKET_PORT=34567
 
       # Environment configuration
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - DEBUG=${DEBUG:-false}
 
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f http://localhost:23456/health && curl -f http://localhost:34567/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:${HTTP_PORT:-23456}/health && curl -f http://localhost:${WEBSOCKET_PORT:-34567}/health"]
       interval: 300s
       timeout: 10s
       retries: 3

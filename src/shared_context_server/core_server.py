@@ -21,6 +21,7 @@ from starlette.responses import JSONResponse
 from starlette.templating import Jinja2Templates
 
 from . import __version__
+from .mcp_auth_middleware import MCPAuthenticationMiddleware
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -35,6 +36,10 @@ mcp = FastMCP(
     version=__version__,
     instructions="Centralized memory store for multi-agent collaboration",
 )
+
+# Add selective authentication middleware for MCP Inspector CLI compatibility
+# This must be added early to intercept authentication before other processing
+mcp.add_middleware(MCPAuthenticationMiddleware())
 
 # ============================================================================
 # WEB UI TEMPLATE CONFIGURATION
