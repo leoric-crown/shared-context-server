@@ -816,6 +816,9 @@ def fetch_docker_compose_files() -> tuple[bool, dict[int, int]]:
     # Track port mappings from conflict resolution
     resolved_port_mappings = {}
 
+    # Cache busting parameter - use current timestamp
+    cache_bust = str(int(time.time()))
+
     # Try to create SSL context that handles certificate issues
     ssl_context = None
     try:
@@ -851,7 +854,8 @@ def fetch_docker_compose_files() -> tuple[bool, dict[int, int]]:
                 continue
 
             try:
-                url = f"{github_base_url}/{file_name}"
+                # Add cache busting parameter to ensure fresh content
+                url = f"{github_base_url}/{file_name}?_cb={cache_bust}"
                 if attempt == 0:
                     print_color(Colors.YELLOW, f"   • Downloading {file_name}...")
                 else:
@@ -1407,6 +1411,9 @@ def _create_demo_content_files(demo_port: int, api_key: str) -> None:
     # Base GitHub URL for demo files
     base_url = "https://raw.githubusercontent.com/leoric-crown/shared-context-server/main/examples/demos/multi-expert-optimization"
 
+    # Cache busting parameter - use current timestamp
+    cache_bust = str(int(time.time()))
+
     # Files to download
     demo_files = [
         ("README.md", Path("README.md")),
@@ -1425,7 +1432,8 @@ def _create_demo_content_files(demo_port: int, api_key: str) -> None:
     print_color(Colors.BLUE, "   📦 Downloading demo content from GitHub...")
 
     for remote_path, local_path in demo_files:
-        url = f"{base_url}/{remote_path}"
+        # Add cache busting parameter to ensure fresh content
+        url = f"{base_url}/{remote_path}?_cb={cache_bust}"
         content = None
 
         # Try with SSL verification first

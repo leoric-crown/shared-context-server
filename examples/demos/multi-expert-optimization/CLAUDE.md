@@ -13,6 +13,7 @@ valid_token = authenticate_agent(agent_id="validation_expert_001", agent_type="c
 ```
 **NEVER reuse tokens between agents.**
 **VALIDATE authentication before starting collaboration.**
+**YOU MUST refresh tokens for expert agents between rounds and always pass valid tokens to experts when calling them.**
 
 ### 2. Conversational Collaboration (CRITICAL - ENFORCE ACTIVELY)
 **YOU MUST facilitate iterative dialogue, not collect monologues**:
@@ -35,6 +36,7 @@ valid_token = authenticate_agent(agent_id="validation_expert_001", agent_type="c
 **Round 2**: All experts + deeper investigation (adaptive based on Round 1)
 **Checkpoint 2**: Human validation - proceed to synthesis?
 **Round 3**: Validation Expert leads session synthesis + collaborative value demonstration
+**Final Action**: Save detailed team findings summary to `team-analysis-[timestamp].md` in active directory
 
 ## Success Criteria
 - ✅ Unique authentication per expert (no token reuse)
@@ -42,5 +44,6 @@ valid_token = authenticate_agent(agent_id="validation_expert_001", agent_type="c
 - ✅ Solutions evolve through dialogue
 - ✅ Human validation between rounds
 - ✅ Final synthesis demonstrates collaborative intelligence vs individual analysis
+- ✅ Detailed findings summary saved to markdown file highlighting conversational benefits
 
 The server handles session management - you orchestrate collaborative intelligence through guided conversation with human oversight.
