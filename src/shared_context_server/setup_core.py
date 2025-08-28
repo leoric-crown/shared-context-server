@@ -621,17 +621,8 @@ def create_env_file(
     include_octocode: bool = True,
 ) -> Optional[tuple[str, bool]]:
     """Create .env file with generated keys"""
-    if demo:
-        demo_dir = Path("examples/demos/multi-expert-optimization")
-        if not demo_dir.exists():
-            print_color(Colors.RED, f"❌ Demo directory not found: {demo_dir}")
-            print_color(
-                Colors.YELLOW, "   Make sure you're running from the repository root."
-            )
-            return None
-        env_file = demo_dir / ".env"
-    else:
-        env_file = Path(".env")
+    # Create standard .env file (demo mode gets demo-specific defaults)
+    env_file = Path(".env")
 
     target_file = env_file
 
@@ -1301,6 +1292,213 @@ def show_dependency_error(missing_deps: list[str]) -> None:
         print_color(Colors.GREEN, "  npm --version")
         print_color(Colors.GREEN, "  npx --version")
         print()
+
+
+def _apply_demo_configuration(
+    env_file_path: str, keys: dict[str, str], include_octocode: bool = True
+) -> None:
+    """Apply demo-specific configuration to the .env file"""
+    import re
+    from pathlib import Path
+
+    # Convert string path to Path object and read content
+    env_file = Path(env_file_path)
+    content = env_file.read_text()
+
+    # Demo-specific port defaults (with conflict resolution)
+    demo_http_port = 23432
+    demo_ws_port = 34532
+    demo_db_name = "demo_chat_history.db"
+
+    # Check for port conflicts and resolve them
+    conflicting_ports = _check_port_conflicts([demo_http_port, demo_ws_port])
+
+    if conflicting_ports:
+        print_color(
+            Colors.YELLOW,
+            "   ⚠️  Demo port conflicts detected, finding alternative ports...",
+        )
+
+        # Use our smart port resolution for demo ports
+        if demo_http_port in conflicting_ports:
+            new_http_port = _find_available_port_smart(demo_http_port)
+            if new_http_port:
+                print_color(
+                    Colors.GREEN, f"     → HTTP Port {demo_http_port} → {new_http_port}"
+                )
+                demo_http_port = new_http_port
+
+        if demo_ws_port in conflicting_ports:
+            new_ws_port = _find_available_port_smart(demo_ws_port)
+            if new_ws_port:
+                print_color(
+                    Colors.GREEN,
+                    f"     → WebSocket Port {demo_ws_port} → {new_ws_port}",
+                )
+                demo_ws_port = new_ws_port
+
+    # Apply demo-specific configuration
+    content = re.sub(
+        r"^HTTP_PORT=.*$", f"HTTP_PORT={demo_http_port}", content, flags=re.MULTILINE
+    )
+    content = re.sub(
+        r"^WEBSOCKET_PORT=.*$",
+        f"WEBSOCKET_PORT={demo_ws_port}",
+        content,
+        flags=re.MULTILINE,
+    )
+    content = re.sub(
+        r"^DATABASE_PATH=.*$",
+        f"DATABASE_PATH=./{demo_db_name}",
+        content,
+        flags=re.MULTILINE,
+    )
+
+    # Write back the updated content
+    env_file.write_text(content)
+
+    # Create MCP client configuration for Claude Code
+    mcp_config = {
+        "mcpServers": {
+            "scs-demo": {
+                "type": "http",
+                "url": f"http://localhost:{demo_http_port}/mcp/",
+                "headers": {"X-API-Key": keys["API_KEY"]},
+            }
+        }
+    }
+
+    # Add octocode MCP server if available
+    if include_octocode:
+        mcp_config["mcpServers"]["octocode"] = {
+            "command": "npx",
+            "args": ["-y", "octocode-mcp"],
+        }
+
+    # Write MCP configuration
+    import json
+
+    mcp_file = Path(".mcp.json")
+    with open(mcp_file, "w") as f:
+        json.dump(mcp_config, f, indent=2)
+
+    # Create demo content files
+    _create_demo_content_files(demo_http_port, keys["API_KEY"])
+
+    print_color(Colors.GREEN, "   ✅ Demo configuration applied")
+    print_color(
+        Colors.GREEN, f"   ✅ MCP client config saved to: {mcp_file.absolute()}"
+    )
+    print_color(Colors.GREEN, "   ✅ Demo content and instructions created")
+    print()
+
+
+def _create_demo_content_files(demo_port: int, api_key: str) -> None:
+    """Create the demo README and agent configuration files by downloading from GitHub"""
+    import urllib.error
+    import urllib.request
+    from pathlib import Path
+
+    # Create .claude/agents directory
+    claude_dir = Path(".claude")
+    agents_dir = claude_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+
+    # Base GitHub URL for demo files
+    base_url = "https://raw.githubusercontent.com/leoric-crown/shared-context-server/main/examples/demos/multi-expert-optimization"
+
+    # Files to download
+    demo_files = [
+        ("README.md", Path("README.md")),
+        (
+            ".claude/agents/performance-architect.md",
+            agents_dir / "performance-architect.md",
+        ),
+        (
+            ".claude/agents/implementation-expert.md",
+            agents_dir / "implementation-expert.md",
+        ),
+        (".claude/agents/validation-expert.md", agents_dir / "validation-expert.md"),
+    ]
+
+    print_color(Colors.BLUE, "   📦 Downloading demo content from GitHub...")
+
+    for remote_path, local_path in demo_files:
+        url = f"{base_url}/{remote_path}"
+        content = None
+
+        # Try with SSL verification first
+        try:
+            with urllib.request.urlopen(url) as response:
+                content = response.read().decode("utf-8")
+        except urllib.error.URLError as e:
+            if "CERTIFICATE_VERIFY_FAILED" in str(e):
+                print_color(
+                    Colors.YELLOW,
+                    f"     • Retrying {local_path.name} without SSL verification...",
+                )
+                # Retry without SSL verification
+                import ssl
+
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+
+                try:
+                    with urllib.request.urlopen(url, context=ssl_context) as response:
+                        content = response.read().decode("utf-8")
+                except urllib.error.URLError as retry_error:
+                    print_color(
+                        Colors.YELLOW,
+                        f"     ⚠️  Could not download {local_path.name}: {retry_error}",
+                    )
+                    print_color(
+                        Colors.YELLOW,
+                        f"        Demo will work but {local_path.name} will be missing",
+                    )
+                    continue
+            else:
+                print_color(
+                    Colors.YELLOW, f"     ⚠️  Could not download {local_path.name}: {e}"
+                )
+                print_color(
+                    Colors.YELLOW,
+                    f"        Demo will work but {local_path.name} will be missing",
+                )
+                continue
+
+        if content:
+            # Update README with current port and configuration
+            if local_path.name == "README.md":
+                # Replace references to the original port with the current demo port
+                content = content.replace("23432", str(demo_port))
+                # Replace placeholder API key with the actual generated key
+                content = content.replace("your-api-key", api_key)
+                content = content.replace("your-key", api_key)
+                content = content.replace(
+                    "## 🚀 Quick Start (2-3 minutes)",
+                    "## 🚀 Quick Start (ALREADY DONE!)\n\n"
+                    "✅ **Setup Complete**: Your demo environment is ready with:\n"
+                    f"- Shared context server configured (port {demo_port})\n"
+                    "- MCP client configuration (.mcp.json)\n"
+                    "- Expert agent personas (.claude/agents/)\n"
+                    "- Demo database (demo_chat_history.db)\n\n"
+                    "### Next Steps:\n\n"
+                    "1. **Start the server:**\n"
+                    "   ```bash\n"
+                    "   scs\n"
+                    "   ```\n\n"
+                    "2. **Start Claude Code with MCP:**\n"
+                    "   ```bash\n"
+                    "   claude --mcp-config .mcp.json\n"
+                    "   ```\n\n"
+                    "3. **Run the demo** (see below)\n\n"
+                    "## 🎯 Demo Script (5-7 minutes)",
+                )
+
+            # Write the content to local file
+            local_path.write_text(content)
+            print_color(Colors.GREEN, f"     ✅ {local_path.name}")
 
 
 def show_security_notes() -> None:

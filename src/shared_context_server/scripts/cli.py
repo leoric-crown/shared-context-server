@@ -623,6 +623,7 @@ def run_setup_command(
     """Run setup command with integrated setup functionality."""
     from ..setup_core import (
         Colors,
+        _apply_demo_configuration,
         check_demo_dependencies,
         create_env_file,
         export_keys,
@@ -674,20 +675,12 @@ def run_setup_command(
     elif deployment == "uvx":
         show_uvx_commands(keys, demo=False)
     elif deployment == "demo":
-        # Handle demo mode - check if we're in repository context
-        from pathlib import Path
+        # Handle demo mode - create demo files in current directory
 
-        demo_dir = Path("examples/demos/multi-expert-optimization")
-        if not demo_dir.exists():
-            print(f"\n{Colors.RED}🎪 Demo mode requires repository context.{Colors.NC}")
-            print(
-                "Please run from the repository root directory where examples/ exists."
-            )
-            print("Or use the original script for demo setup:")
-            print("  cd examples/demos/multi-expert-optimization/")
-            print("  python ../../../scripts/setup.py --demo")
-            print()
-            return
+        print(
+            f"\n{Colors.BLUE}🎪 Setting up demo environment in current directory{Colors.NC}"
+        )
+        print()
 
         # Check demo dependencies (npm/npx for octocode MCP server)
         deps_available, missing_deps = check_demo_dependencies()
@@ -721,58 +714,40 @@ def run_setup_command(
                 )
                 print()
 
-        # We're in the right place, run demo setup
-        result = create_env_file(
-            keys, force, demo=True, include_octocode=deps_available
-        )
+        # Use standard setup flow with demo-specific port defaults
+        result = create_env_file(keys, force, demo=False)
         if not result:
             sys.exit(1)
 
         env_file_path, used_generated = result
 
-        print(f"{Colors.BLUE}🎪 Multi-Expert Collaboration Demo Setup:{Colors.NC}")
+        # Apply demo-specific configuration to the .env file
+        _apply_demo_configuration(env_file_path, keys, deps_available)
+
+        print(f"{Colors.BLUE}🎪 Demo Environment Setup Complete!{Colors.NC}")
         print()
         print(f"{Colors.YELLOW}Next steps:{Colors.NC}")
-        print(f"{Colors.YELLOW}1. Navigate to demo directory:{Colors.NC}")
+        print(f"{Colors.YELLOW}1. Start the server:{Colors.NC}")
         print(
-            f"{Colors.GREEN}   cd examples/demos/multi-expert-optimization/{Colors.NC}"
-        )
-
-        if used_generated:
-            print(f"{Colors.YELLOW}2. Copy configuration for safety:{Colors.NC}")
-            print(f"{Colors.GREEN}   cp .env.generated .env{Colors.NC}")
-            print(f"{Colors.YELLOW}3. Start the server (choose one):{Colors.NC}")
-            step_num = 4
-        else:
-            print(f"{Colors.YELLOW}2. Start the server (choose one):{Colors.NC}")
-            step_num = 3
-
-        print(f"{Colors.GREEN}   # Option A - uvx:{Colors.NC}")
-        print(f'{Colors.GREEN}   API_KEY="{keys["API_KEY"]}" \\{Colors.NC}')
-        print(
-            f'{Colors.GREEN}   JWT_SECRET_KEY="{keys["JWT_SECRET_KEY"]}" \\{Colors.NC}'
-        )
-        print(
-            f'{Colors.GREEN}   JWT_ENCRYPTION_KEY="{keys["JWT_ENCRYPTION_KEY"]}" \\{Colors.NC}'
-        )
-        print(
-            f"{Colors.GREEN}   uvx shared-context-server --transport http --port 23432{Colors.NC}"
+            f"{Colors.GREEN}   scs{Colors.NC}  {Colors.BLUE}# Uses demo configuration automatically{Colors.NC}"
         )
         print()
-        print(f"{Colors.GREEN}   # Option B - Docker:{Colors.NC}")
-        print(f"{Colors.GREEN}   docker compose up -d{Colors.NC}")
-        print(f"{Colors.YELLOW}{step_num}. Start Claude Code:{Colors.NC}")
+        print(f"{Colors.YELLOW}2. Start Claude Code with MCP configuration:{Colors.NC}")
         print(f"{Colors.GREEN}   claude --mcp-config .mcp.json{Colors.NC}")
+        print()
         print(
-            f"{Colors.YELLOW}{step_num + 1}. Follow demo instructions in README.md{Colors.NC}"
+            f"{Colors.YELLOW}3. You're ready for multi-expert collaboration!{Colors.NC}"
+        )
+        print(
+            f"{Colors.BLUE}   • Server running with demo-specific configuration{Colors.NC}"
+        )
+        print(f"{Colors.BLUE}   • MCP client configured for Claude Code{Colors.NC}")
+        print(
+            f"{Colors.BLUE}   • {('Octocode MCP included' if deps_available else 'Limited MCP setup (octocode unavailable)')}{Colors.NC}"
         )
         print()
-        if used_generated:
-            print(
-                f"{Colors.GREEN}✅ Demo setup ready! (Configuration saved safely to .env.generated){Colors.NC}"
-            )
-        else:
-            print(f"{Colors.GREEN}✅ Demo setup ready!{Colors.NC}")
+        print(f"{Colors.GREEN}💡 Demo database: demo_chat_history.db{Colors.NC}")
+        print(f"{Colors.GREEN}💡 MCP config: .mcp.json{Colors.NC}")
         return
     else:
         # Default: show both main deployment methods
