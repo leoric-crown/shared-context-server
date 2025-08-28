@@ -2,10 +2,10 @@
 MCP Prompts for Shared Context Server Workflow Automation.
 
 Provides user-facing prompts that automate common multi-agent workflows,
-session setup, and troubleshooting operations.
+session setup, conversational collaboration, and troubleshooting operations.
 
 Prompts:
-- setup-collaboration: Initialize multi-agent session with proper configuration
+- setup-collaboration: Initialize multi-agent collaboration with advanced conversational protocols
 - debug-session: Analyze session state and provide troubleshooting guidance
 """
 
@@ -24,120 +24,253 @@ from .database_manager import CompatibleRow, get_db_connection
 @mcp.prompt("setup-collaboration")
 async def setup_collaboration_prompt(
     purpose: str,
-    agent_types: list[str] | None = None,
+    expert_roles: str,
+    collaboration_type: str = "committee",
+    session_id: str | None = None,
+    iteration_rounds: str = "3",
     project_name: str | None = None,
     ctx: Any = None,  # noqa: ARG001
 ) -> GetPromptResult:
     """
-    Initialize a multi-agent collaboration session with proper configuration.
+    Initialize a multi-agent collaboration session with advanced conversational protocols.
 
-    This prompt automates the creation of collaboration sessions, JWT token
-    generation for agents, and provides implementation guidance.
+    This comprehensive prompt combines session creation, JWT token generation, and
+    research-based iterative dialogue patterns for effective multi-agent coordination.
+    Based on research from Anthropic, OpenAI, Google, and academic sources.
 
     Args:
         purpose: Description of the collaboration session purpose
-        agent_types: List of agent types to provision (default: ["claude", "admin"])
-        project_name: Optional project name for metadata
+        expert_roles: Comma-separated expert roles (e.g., "performance-architect,implementation-expert,validation-expert")
+        collaboration_type: Type of collaboration (committee, debate, peer-review) - default: "committee"
+        session_id: Optional existing session ID to use
+        iteration_rounds: Number of iterative rounds (default: "3")
+        project_name: Optional project name for metadata (backward compatibility)
         ctx: MCP context for authentication
     """
 
-    # Default agent types if not specified
-    if agent_types is None:
-        agent_types = ["claude", "admin"]
-
-    # Validate agent types
-    valid_types = ["claude", "gemini", "admin", "system", "test", "generic"]
-    invalid_types = [t for t in agent_types if t not in valid_types]
-    if invalid_types:
+    # Parse expert roles
+    roles = [role.strip() for role in expert_roles.split(",") if role.strip()]
+    if not roles:
         return GetPromptResult(
             messages=[
                 PromptMessage(
                     role="user",
                     content=TextContent(
                         type="text",
-                        text=f"Invalid agent types: {invalid_types}. Valid types: {valid_types}",
+                        text="Error: At least one expert role must be specified.",
                     ),
                 )
             ]
         )
 
-    # Generate session creation metadata
-    metadata = {
-        "setup_date": datetime.now(timezone.utc).isoformat(),
-        "agent_types_requested": agent_types,
-        "setup_method": "prompt_automation",
-    }
+    # Validate iteration rounds
+    try:
+        rounds = int(iteration_rounds)
+        if rounds < 1 or rounds > 10:
+            rounds = 3
+    except ValueError:
+        rounds = 3
 
-    if project_name:
-        metadata["project"] = project_name
+    # Generate conversational collaboration setup
+    timestamp = datetime.now(timezone.utc).timestamp()
+    instructions = f"""# Conversational Multi-Agent Collaboration Setup
 
-    # Create the collaboration setup instructions
-    instructions = f"""# Multi-Agent Collaboration Setup
-
-## Session Configuration
+## Collaboration Configuration
 **Purpose**: {purpose}
-**Agent Types**: {", ".join(agent_types)}
-**Project**: {project_name or "Not specified"}
+**Type**: {collaboration_type}
+**Expert Roles**: {", ".join(roles)}
+**Iteration Rounds**: {rounds}
+**Session**: {session_id if session_id else "New session required"}
 
-## Setup Commands
+## Authentication Gateway Pattern (CRITICAL)
 
-### 1. Create Collaboration Session
+### 1. Unique Token Provisioning
 ```
-create_session(
-    purpose="{purpose}",
-    metadata={json.dumps(metadata, indent=2)}
+# Orchestrator (Admin permissions for coordination)
+orchestrator_token = authenticate_agent(
+    agent_id="orchestrator_main_{timestamp:.0f}",
+    agent_type="admin"
 )
-```
 
-### 2. Generate Agent Tokens
 """
 
-    # Add token generation commands for each agent type
-    for i, agent_type in enumerate(agent_types):
-        agent_id = f"agent_{agent_type}_{i + 1}"
+    # Generate unique authentication for each expert role following established pattern
+    for i, role in enumerate(roles):
+        role_clean = role.replace("-", "_").replace(" ", "_").lower()
+        agent_id = f"agent_{role_clean}_{i + 1:03d}"  # Sequential pattern for audit consistency
         instructions += f"""
-**{agent_type.title()} Agent**:
-```
-authenticate_agent(
+# {role.title()} Expert (Unique token required)
+{role_clean}_token = authenticate_agent(
     agent_id="{agent_id}",
-    agent_type="{agent_type}"
+    agent_type="claude"
 )
+"""
+
+    instructions += """
+```
+
+## Conversational Collaboration Protocols
+
+### Iterative Dialogue Pattern (Based on Academic Research)
+
+**Round Structure**: Each round follows Explain-Question-Refine pattern
+1. **Expert Analysis**: Initial focused analysis with specific findings
+2. **Cross-Expert Questioning**: Agents ask clarifying questions to each other
+3. **Iterative Refinement**: Solutions evolve through dialogue
+4. **Checkpoint Integration**: Orchestrator synthesizes and guides next round
+
+### Agent Conversation Instructions
+
+#### For Expert Agents:
+**CRITICAL**: You are participating in iterative dialogue, NOT delivering monologues.
+
+**Conversation Protocol**:
+- **Ask Questions**: When analysis seems incomplete, ask specific questions
+- **Seek Clarification**: Challenge assumptions and request deeper detail
+- **Build on Responses**: Integrate other experts' insights into your analysis
+- **Iterate Solutions**: Refine your recommendations based on discussion
+
+**Example Conversational Patterns**:
+- "Performance Architect: I see database bottlenecks. Implementation Expert: Can you quantify the query complexity?"
+- "Implementation Expert: Your solution assumes X. Have you considered Y constraint?"
+- "Validation Expert: The testing approach needs clarification on Z. Can you elaborate?"
+
+#### For Orchestrator Agent:
+**CRITICAL**: Facilitate conversation, don't just collect individual outputs.
+
+**Orchestration Protocol**:
+1. **Round Initiation**: "[Expert Role]: Focus on [specific aspect]. Ask questions if you need clarification from other experts."
+2. **Question Facilitation**: "[Expert A] asked about X. [Expert B], please respond and feel free to ask follow-up questions."
+3. **Synthesis Checkpoints**: "Based on the discussion, I'm seeing [patterns]. Let's proceed to next round with [specific focus]."
+4. **Conversation Threading**: "[Expert C], you mentioned Y earlier. How does [Expert A's] new insight change your approach?"
+
+## Checkpoint-Driven Collaboration Workflow
+
+### Round 1: Initial Discovery with Questioning
+```
+# Orchestrator initiates with specific guidance
+add_message(
+    session_id=session_id,  # Use the session_id from creation or parameter
+    content="Round 1: [Expert Role] - Analyze [specific area]. Ask questions if you need clarification from other experts.",
+    visibility="public",
+    sender="orchestrator_main"
+)
+
+# Experts engage in dialogue, not monologue
+# Performance Architect: "I found bottlenecks X, Y, Z. Implementation Expert: Is constraint A a factor?"
+# Implementation Expert: "Constraint A affects approach B. Validation Expert: How should we test scenario C?"
+```
+
+### Round 2: Deep Investigation Through Dialogue
+```
+# Orchestrator guides deeper investigation based on Round 1 questions
+add_message(
+    session_id=session_id,  # Use the session_id from creation or parameter
+    content="Round 2: Deep dive on [specific issues from Round 1]. Continue asking questions to refine understanding.",
+    visibility="public",
+    sender="orchestrator_main"
+)
+
+# Experts build on previous dialogue
+# Continue questioning and refinement based on Round 1 discoveries
+```
+
+### Round 3: Solution Synthesis Through Collaboration
+```
+# Final collaborative synthesis
+add_message(
+    session_id=session_id,  # Use the session_id from creation or parameter
+    content="Round 3: Final synthesis. Review complete conversation history and create integrated solution.",
+    visibility="public",
+    sender="orchestrator_main"
+)
+```
+
+## Conversation Quality Indicators
+
+**Successful Conversational Collaboration**:
+- ✅ Experts ask clarifying questions to each other
+- ✅ Solutions evolve through iterative dialogue
+- ✅ Cross-expert knowledge integration visible
+- ✅ Orchestrator facilitates conversation flow
+- ✅ Each round builds on previous discussions
+
+**Anti-Patterns to Avoid**:
+- ❌ Individual monologues without interaction
+- ❌ Experts ignoring other experts' contributions
+- ❌ Orchestrator collecting outputs without facilitation
+- ❌ No questions or clarifications between experts
+
+## Implementation Commands
+
+### Session Setup
+"""
+
+    # Add conditional session creation based on session_id parameter
+    if session_id:
+        instructions += f"""
+**Using Existing Session**: {session_id}
+
+The session is already configured. Proceed directly to expert agent coordination.
+"""
+    else:
+        # Generate metadata with consistent timestamp format
+        session_metadata = {
+            "collaboration_type": collaboration_type,
+            "expert_roles": roles,
+            "iteration_rounds": rounds,
+            "conversation_pattern": "iterative_dialogue",
+            "setup_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if project_name:
+            session_metadata["project"] = project_name
+
+        instructions += f"""
+**Create New Session**:
+```
+session_result = create_session(
+    purpose="{purpose}",
+    metadata={json.dumps(session_metadata, indent=2)}
+)
+# Save the session_id from session_result for use in subsequent commands
+session_id = session_result["session_id"]
 ```
 """
 
     instructions += """
-### 3. Agent Coordination Pattern
+### Expert Agent Instructions Template
+```
+You are participating in conversational collaboration. Your role:
 
-**Handoff Protocol**:
-1. Main agent creates session and provisions tokens
-2. Share session_id and JWT tokens with subagents
-3. Agents coordinate through session messages with appropriate visibility
-4. Use agent memory for persistent state between handoffs
+1. **Analyze**: Provide focused analysis on your expertise area
+2. **Question**: Ask specific questions to other experts when you need clarification
+3. **Respond**: Answer questions from other experts and integrate their insights
+4. **Iterate**: Refine your solutions based on ongoing dialogue
+5. **Collaborate**: Build on the evolving conversation, don't work in isolation
 
-**Message Visibility Guidelines**:
-- `public`: Shared coordination and status updates
-- `agent_only`: Agent-type specific coordination
-- `private`: Internal agent state and debugging
-- `admin_only`: System-level coordination (requires admin token)
+Session ID: {session_id if session_id else '[to_be_created]'}
+Your Token: [unique_token_from_authentication]
+Your Role: [specific_expert_role]
 
-### 4. Recommended Workflow
+IMPORTANT: This is iterative dialogue, not individual report generation.
+```
 
-1. **Initialize**: Create session and authenticate agents
-2. **Coordinate**: Use add_message for status updates and handoffs
-3. **Persist**: Use set_memory for agent-specific state management
-4. **Search**: Use search_context for finding relevant information
-5. **Monitor**: Check session messages for coordination status
+## Success Metrics
 
-## Client Integration
+**Conversational Quality**:
+- Number of cross-expert questions asked
+- Solutions that reference other experts' insights
+- Evidence of iterative refinement across rounds
+- Orchestrator guidance effectiveness
 
-**Claude Code**: Access via `@server://info` and use session for coordination
-**VS Code**: Use MCP context menu for resource access and coordination
-**Direct MCP**: Use mcp__shared-context-server__* tools directly
+**Collaboration Outcomes**:
+- Higher solution quality than individual expert approaches
+- Integration of multiple expert perspectives
+- Identification of insights only possible through dialogue
+- Clear progression from initial analysis to refined solutions
 
-## Next Steps
-
-Execute the commands above in sequence, then begin your collaboration workflow.
-Session will be ready for multi-agent coordination with proper authentication.
+This setup ensures expert agents engage in iterative dialogue rather than delivering isolated analyses, following best practices from leading AI research organizations.
 """
 
     return GetPromptResult(

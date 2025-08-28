@@ -282,8 +282,8 @@ class ProductionServer:
                 f"✅ Shared Context MCP Server v{__version__} initialized successfully"
             )
 
-            # Run server with STDIO transport
-            await server.run_stdio_async()
+            # Run server with STDIO transport (no banner for MCP Inspector compatibility)
+            await server.run_stdio_async(show_banner=False)
         except Exception:
             logger.exception("STDIO server failed")
             sys.exit(1)
