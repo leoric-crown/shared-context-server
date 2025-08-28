@@ -1410,6 +1410,7 @@ def _create_demo_content_files(demo_port: int, api_key: str) -> None:
     # Files to download
     demo_files = [
         ("README.md", Path("README.md")),
+        ("CLAUDE.md", Path("CLAUDE.md")),
         (
             ".claude/agents/performance-architect.md",
             agents_dir / "performance-architect.md",
