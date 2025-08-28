@@ -24,3 +24,7 @@ feature: provide a way to flag/star a session as important
 feature: building on the above, provide a way to tag sessions
 
 let's get a proper logo / favicon? - to quickly identify SCS WebUI browser tabs
+
+it would also be very nice to display in the UI if the server is running via docker or via uvx (nice-to-have)
+
+we also need to think about security for our web ui: it currently is completely unauthenticated.

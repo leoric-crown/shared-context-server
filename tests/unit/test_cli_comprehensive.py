@@ -674,7 +674,9 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("claude", "localhost", 23456)
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("claude", "localhost", 23456)
 
         captured = capsys.readouterr()
         assert "=== CLAUDE MCP Client Configuration ===" in captured.out
@@ -688,12 +690,14 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("cursor", "example.com", 9000)
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("cursor", "example.com", 9000)
 
         captured = capsys.readouterr()
         assert "=== CURSOR MCP Client Configuration ===" in captured.out
         assert "http://example.com:9000/mcp/" in captured.out
-        assert "settings.json" in captured.out
+        assert "mcp.json" in captured.out
 
     def test_generate_client_config_windsurf(self, capsys):
         """Test Windsurf client configuration generation."""
@@ -702,7 +706,9 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("windsurf", "192.168.1.100", 7777)
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("windsurf", "192.168.1.100", 7777)
 
         captured = capsys.readouterr()
         assert "=== WINDSURF MCP Client Configuration ===" in captured.out
@@ -715,7 +721,9 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("vscode", "127.0.0.1", 3000)
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("vscode", "127.0.0.1", 3000)
 
         captured = capsys.readouterr()
         assert "=== VSCODE MCP Client Configuration ===" in captured.out
@@ -729,7 +737,9 @@ class TestClientConfigGeneration:
 
         from shared_context_server.scripts.cli import generate_client_config
 
-        generate_client_config("generic", "test.server", 5555)
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("generic", "test.server", 5555)
 
         captured = capsys.readouterr()
         assert "=== GENERIC MCP Client Configuration ===" in captured.out

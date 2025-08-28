@@ -370,13 +370,13 @@ def parse_arguments() -> Any:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Transport Options:
-  STDIO (default):  Direct process communication (recommended for Claude Code)
-  HTTP:            Web server for team/remote access
+  HTTP (default):   Web server for multi-client access (recommended for shared coordination)
+  STDIO:            Direct process communication (legacy, single-client only)
 
 Examples:
-  shared-context-server                          # Start with STDIO (default)
-  shared-context-server --transport http        # Start HTTP server on localhost:23456
+  shared-context-server                          # Start with HTTP (default)
   shared-context-server --transport http --host 0.0.0.0 --port 9000  # Custom HTTP config
+  shared-context-server --transport stdio       # Start with STDIO for legacy compatibility
 
 Claude Code Integration:
   claude mcp add shared-context-server shared-context-server
@@ -438,6 +438,24 @@ Claude Code Integration:
         choices=["claude", "cursor", "windsurf", "vscode", "generic"],
         help="MCP client type",
     )
+
+    # Scope support (Claude Code pattern)
+    client_parser.add_argument(
+        "-s",
+        "--scope",
+        choices=["user", "project", "local"],
+        default="local",
+        help="Configuration scope: user (global), project (shared), or local (default)",
+    )
+
+    # Clipboard integration
+    client_parser.add_argument(
+        "-c",
+        "--copy",
+        action="store_true",
+        help="Copy configuration to clipboard without confirmation",
+    )
+
     # Get default host and port from config/environment
     try:
         config = get_config()
@@ -541,80 +559,282 @@ async def run_server_http(host: str, port: int) -> None:
     await production_server.start_http_server(host, port)
 
 
-def generate_client_config(client: str, host: str, port: int) -> None:
-    """Generate MCP client configuration."""
+def generate_client_config(
+    client: str, host: str, port: int, scope: str = "local", copy: bool = False
+) -> None:
+    """Generate MCP client configuration with modern UX."""
+    # Import setup utilities for consistent formatting
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+        # Fallback colors if import fails
+        class Colors:  # type: ignore[no-redef]
+            RED = "\033[0;31m"
+            GREEN = "\033[0;32m"
+            YELLOW = "\033[1;33m"
+            BLUE = "\033[0;34m"
+            BOLD = "\033[1m"
+            NC = "\033[0m"
+
     server_url = f"http://{host}:{port}/mcp/"
 
     # Get API key from environment for display
     api_key = os.getenv("API_KEY", "").strip()
     api_key_display = api_key if api_key else "YOUR_API_KEY_HERE"
 
-    configs = {
-        "claude": f"""Add to Claude Code MCP configuration:
-claude mcp add-json shared-context-server '{{
-  "type": "http",
-  "url": "{server_url}",
-  "headers": {{
-    "X-API-Key": "{api_key_display}"
-  }}
-}}'""",
-        "cursor": f"""Add to Cursor settings.json:
-{{
-  "mcp.servers": {{
-    "shared-context-server": {{
-      "type": "http",
-      "url": "{server_url}",
-      "headers": {{
-        "X-API-Key": "{api_key_display}"
-      }}
-    }}
-  }}
-}}""",
-        "windsurf": f"""Add to Windsurf MCP configuration:
-{{
-  "shared-context-server": {{
-    "type": "http",
-    "url": "{server_url}",
-    "headers": {{
-      "X-API-Key": "{api_key_display}"
-    }}
-  }}
-}}""",
-        "vscode": f"""Add to VS Code settings.json:
-{{
-  "mcp.servers": {{
-    "shared-context-server": {{
-      "type": "http",
-      "url": "{server_url}",
-      "headers": {{
-        "X-API-Key": "{api_key_display}"
-      }}
-    }}
-  }}
-}}""",
-        "generic": f"""Generic MCP client configuration:
-Type: http
-URL: {server_url}
-Headers: X-API-Key: {api_key_display}""",
-    }
+    # Generate configuration based on client type
+    if client == "claude":
+        config_text = _generate_claude_config(server_url, api_key_display, scope)
+    elif client == "cursor":
+        config_text = _generate_cursor_config(server_url, api_key_display)
+    elif client == "windsurf":
+        config_text = _generate_windsurf_config(server_url, api_key_display)
+    elif client == "vscode":
+        config_text = _generate_vscode_config(server_url, api_key_display)
+    else:  # generic
+        config_text = _generate_generic_config(server_url, api_key_display)
 
-    print(f"\n=== {client.upper()} MCP Client Configuration ===\n")
-    print(configs[client])
-    print(f"\nServer URL: {server_url}")
+    # Display the configuration
+    print(
+        f"\n{Colors.BLUE}=== {client.upper()} MCP Client Configuration ==={Colors.NC}\n"
+    )
+    print(config_text)
 
+    # Show API key status
     if api_key_display == "YOUR_API_KEY_HERE":
         print(
-            "⚠️  SECURITY: Replace 'YOUR_API_KEY_HERE' with your actual API_KEY from server environment"
+            f"\n{Colors.YELLOW}⚠️  SECURITY: Replace 'YOUR_API_KEY_HERE' with your actual API_KEY{Colors.NC}"
         )
         print(
-            "   You can find the API_KEY in your server's .env file or environment variables"
+            f"{Colors.YELLOW}   You can find the API_KEY in your server's .env file{Colors.NC}"
         )
     else:
         print(
-            f"✅ Using API_KEY from server environment (first 8 chars: {api_key[:8]}...)"
+            f"\n{Colors.GREEN}✅ Using API_KEY from server environment (first 8 chars: {api_key[:8]}...){Colors.NC}"
         )
 
+    # Handle clipboard integration
+    _handle_clipboard(config_text, copy, Colors)
+
     print()
+
+
+def _generate_claude_config(server_url: str, api_key: str, scope: str) -> str:
+    """Generate Claude Code configuration with proper scope."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    scope_flag = f" -s {scope}" if scope != "local" else ""
+
+    # For HTTP servers, Claude Code requires add-json with proper JSON structure
+    # Format JSON with proper indentation for readability
+    json_config = f'''{{
+  "type": "http",
+  "url": "{server_url}",
+  "headers": {{
+    "X-API-Key": "{api_key}"
+  }}
+}}'''
+
+    return f"""Command to add to Claude Code:
+
+{Colors.GREEN}claude mcp add-json shared-context-server{scope_flag} '{json_config}'{Colors.NC}
+
+Scope: {scope}
+  • user: Global configuration (available in all projects)
+  • project: Project-specific configuration (shared via .mcp.json)
+  • local: Local configuration (current project only)"""
+
+
+def _generate_cursor_config(server_url: str, api_key: str) -> str:
+    """Generate Cursor configuration object for insertion."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    config_object = f'''"shared-context-server": {{
+  "url": "{server_url}",
+  "headers": {{
+    "X-API-Key": "{api_key}"
+  }}
+}}'''
+
+    return f"""Insert the following object into your mcpServers section:
+
+{Colors.GREEN}{config_object}{Colors.NC}
+
+Configuration locations:
+  • Global: ~/.cursor/mcp.json (all projects)
+  • Project: .cursor/mcp.json (project-specific)
+
+Full structure example:
+{{
+  "mcpServers": {{
+    {config_object}
+  }}
+}}"""
+
+
+def _generate_windsurf_config(server_url: str, api_key: str) -> str:
+    """Generate Windsurf configuration."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    return f"""Add to Windsurf MCP configuration:
+
+{Colors.GREEN}{{
+  "shared-context-server": {{
+    "url": "{server_url}",
+    "headers": {{
+      "X-API-Key": "{api_key}"
+    }}
+  }}
+}}{Colors.NC}"""
+
+
+def _generate_vscode_config(server_url: str, api_key: str) -> str:
+    """Generate VS Code configuration."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    return f"""Add to VS Code settings.json:
+
+{Colors.GREEN}{{
+  "mcp.servers": {{
+    "shared-context-server": {{
+      "url": "{server_url}",
+      "headers": {{
+        "X-API-Key": "{api_key}"
+      }}
+    }}
+  }}
+}}{Colors.NC}"""
+
+
+def _generate_generic_config(server_url: str, api_key: str) -> str:
+    """Generate generic MCP configuration."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    return f"""Generic MCP client configuration:
+
+{Colors.GREEN}Type: http
+URL: {server_url}
+Headers: X-API-Key: {api_key}{Colors.NC}"""
+
+
+def _handle_clipboard(content: str, copy: bool, Colors: Any) -> None:
+    """Handle clipboard integration with user confirmation."""
+    # Try to import clipboard functionality
+    clipboard_available = False
+    try:
+        import pyperclip  # type: ignore[import-untyped]
+
+        clipboard_available = True
+    except ImportError:
+        pass
+
+    if not clipboard_available:
+        return
+
+    # Extract the actual command/config from the formatted text
+    clipboard_content = _extract_clipboard_content(content)
+
+    if copy:
+        # Auto-copy without confirmation
+        try:
+            pyperclip.copy(clipboard_content)
+            print(f"\n{Colors.GREEN}✅ Copied to clipboard{Colors.NC}")
+        except Exception:
+            print(f"\n{Colors.YELLOW}⚠️  Failed to copy to clipboard{Colors.NC}")
+    else:
+        # Ask for confirmation
+        try:
+            response = (
+                input(f"\n{Colors.YELLOW}Copy to clipboard? [y/N]: {Colors.NC}")
+                .strip()
+                .lower()
+            )
+            if response in ["y", "yes"]:
+                pyperclip.copy(clipboard_content)
+                print(f"{Colors.GREEN}✅ Copied to clipboard{Colors.NC}")
+        except (KeyboardInterrupt, EOFError):
+            print()  # Clean exit on Ctrl+C
+
+
+def _extract_clipboard_content(formatted_text: str) -> str:
+    """Extract the actual command/config from formatted display text."""
+    import re
+
+    # Remove ANSI color codes
+    ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+    clean_text = ansi_escape.sub("", formatted_text)
+
+    # For Claude Code, extract the command line (including add-json)
+    if "claude mcp add" in clean_text:
+        lines = clean_text.split("\n")
+        for line in lines:
+            if line.strip().startswith("claude mcp add"):
+                return line.strip()
+
+    # For Cursor and others, extract the JSON object
+    if '"shared-context-server"' in clean_text:
+        # Extract just the object that needs to be inserted
+        lines = clean_text.split("\n")
+        in_object = False
+        object_lines = []
+        for line in lines:
+            if '"shared-context-server":' in line:
+                in_object = True
+            if in_object:
+                object_lines.append(line)
+                if line.strip() == "}" and len(
+                    [
+                        line_content
+                        for line_content in object_lines
+                        if "{" in line_content
+                    ]
+                ) == len(
+                    [
+                        line_content
+                        for line_content in object_lines
+                        if "}" in line_content
+                    ]
+                ):
+                    break
+        return "\n".join(object_lines)
+
+    # Fallback: return cleaned text
+    return clean_text.strip()
 
 
 def run_setup_command(
@@ -732,8 +952,12 @@ def run_setup_command(
             f"{Colors.GREEN}   scs{Colors.NC}  {Colors.BLUE}# Uses demo configuration automatically{Colors.NC}"
         )
         print()
-        print(f"{Colors.YELLOW}2. Start Claude Code with MCP configuration:{Colors.NC}")
+        print(f"{Colors.YELLOW}2. Configure MCP clients:{Colors.NC}")
+        print(f"{Colors.GREEN}   Option A: Use pre-generated config:{Colors.NC}")
         print(f"{Colors.GREEN}   claude --mcp-config .mcp.json{Colors.NC}")
+        print()
+        print(f"{Colors.GREEN}   Option B: Add to your existing config:{Colors.NC}")
+        print(f"{Colors.GREEN}   scs client-config claude -s user --copy{Colors.NC}")
         print()
         print(
             f"{Colors.YELLOW}3. You're ready for multi-expert collaboration!{Colors.NC}"
@@ -756,6 +980,22 @@ def run_setup_command(
 
     # Show security notes and completion message
     show_security_notes()
+
+    # Add client configuration instructions for all deployment types
+    print()
+    print(
+        f"{Colors.YELLOW}📋 After starting your server, configure MCP clients:{Colors.NC}"
+    )
+    print(
+        f"{Colors.GREEN}   scs client-config claude -s user --copy{Colors.NC}    {Colors.BLUE}# Claude Code (global){Colors.NC}"
+    )
+    print(
+        f"{Colors.GREEN}   scs client-config cursor --copy{Colors.NC}            {Colors.BLUE}# Cursor IDE{Colors.NC}"
+    )
+    print()
+    print(
+        f"{Colors.YELLOW}💡 Scope options for Claude Code: -s user (global) | -s project | -s local{Colors.NC}"
+    )
 
     if used_generated:
         print(
@@ -781,6 +1021,19 @@ def run_setup_command(
     else:
         print(
             f"{Colors.GREEN}{Colors.BOLD}🎉 Setup complete! Your shared-context-server is ready to use.{Colors.NC}"
+        )
+
+        # Add client configuration instructions
+        print()
+        print(f"{Colors.YELLOW}📋 Next steps:{Colors.NC}")
+        print(
+            f"{Colors.GREEN}   1. Start the server: `shared-context-server` or `scs`{Colors.NC}"
+        )
+        print(
+            f"{Colors.GREEN}   2. Configure MCP clients (commands shown above){Colors.NC}"
+        )
+        print(
+            f"{Colors.YELLOW}   3. Start collaborating with multi-agent workflows!{Colors.NC}"
         )
 
 
@@ -857,7 +1110,9 @@ def main() -> None:
     # Handle subcommands first
     if hasattr(args, "command") and args.command:
         if args.command == "client-config":
-            generate_client_config(args.client, args.host, args.port)
+            generate_client_config(
+                args.client, args.host, args.port, args.scope, args.copy
+            )
             return
         if args.command == "status":
             show_status()
