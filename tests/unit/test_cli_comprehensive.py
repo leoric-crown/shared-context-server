@@ -730,22 +730,6 @@ class TestClientConfigGeneration:
         assert "http://127.0.0.1:3000/mcp/" in captured.out
         assert "VS Code settings.json" in captured.out
 
-    def test_generate_client_config_generic(self, capsys):
-        """Test generic client configuration generation."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        from shared_context_server.scripts.cli import generate_client_config
-
-        # Mock input to avoid stdin reading during pytest
-        with patch("builtins.input", return_value="n"):
-            generate_client_config("generic", "test.server", 5555)
-
-        captured = capsys.readouterr()
-        assert "=== GENERIC MCP Client Configuration ===" in captured.out
-        assert "http://test.server:5555/mcp/" in captured.out
-        assert "Type: http" in captured.out
-
 
 class TestImportErrorHandling:
     """Test import error handling and availability flags."""

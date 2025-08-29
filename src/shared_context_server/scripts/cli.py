@@ -15,6 +15,7 @@ import contextlib
 import logging
 import signal
 import sys
+from pathlib import Path
 from typing import Any
 
 # Import uvloop conditionally for better performance
@@ -71,51 +72,57 @@ async def validate_startup_configuration() -> None:
     if essential configuration is missing, rather than waiting for
     the first authentication request to fail.
     """
-    import os
-
-    logger.info("Validating startup configuration...")
-
-    # Check JWT encryption key (required for authentication)
-    jwt_encryption_key = os.getenv("JWT_ENCRYPTION_KEY")
-    if not jwt_encryption_key:
-        logger.error("")
-        logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
-        logger.error("")
-        logger.error("JWT_ENCRYPTION_KEY is required for secure authentication.")
-        logger.error("The server cannot start without this key.")
-        logger.error("")
-        logger.error("Quick fixes:")
-        logger.error("  1. Generate secure keys:")
-        logger.error("     scs setup")
-        logger.error("")
-        logger.error("  2. Copy the generated configuration:")
-        logger.error("     cp .env.generated .env")
-        logger.error("")
-        logger.error("  3. Or set the environment variable:")
-        logger.error("     export JWT_ENCRYPTION_KEY='your-fernet-key-here'")
-        logger.error("")
-        sys.exit(1)
-
-    # Validate JWT encryption key format (should be a valid Fernet key)
     try:
-        from cryptography.fernet import Fernet
+        from ..cli.startup_validation import validate_environment
 
-        Fernet(jwt_encryption_key.encode())
-    except Exception:
-        # Intentionally using logger.error() for clean user-facing messages
-        # without technical stack traces
-        logger.error("")
-        logger.error("🔐 CONFIGURATION ERROR: Invalid JWT encryption key format")
-        logger.error("")
-        logger.error("JWT_ENCRYPTION_KEY must be a valid Fernet key.")
-        logger.error("")
-        logger.error("Quick fix:")
-        logger.error("  scs setup")
-        logger.error("  cp .env.generated .env")
-        logger.error("")
-        sys.exit(1)
+        await validate_environment()
+    except ImportError:
+        # Fallback to inline validation for backward compatibility
+        import os
 
-    logger.info("✅ Startup configuration validation completed")
+        logger.info("Validating startup configuration...")
+
+        # Check JWT encryption key (required for authentication)
+        jwt_encryption_key = os.getenv("JWT_ENCRYPTION_KEY")
+        if not jwt_encryption_key:
+            logger.error("")
+            logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
+            logger.error("")
+            logger.error("JWT_ENCRYPTION_KEY is required for secure authentication.")
+            logger.error("The server cannot start without this key.")
+            logger.error("")
+            logger.error("Quick fixes:")
+            logger.error("  1. Generate secure keys:")
+            logger.error("     scs setup")
+            logger.error("")
+            logger.error("  2. Copy the generated configuration:")
+            logger.error("     cp .env.generated .env")
+            logger.error("")
+            logger.error("  3. Or set the environment variable:")
+            logger.error("     export JWT_ENCRYPTION_KEY='your-fernet-key-here'")
+            logger.error("")
+            sys.exit(1)
+
+        # Validate JWT encryption key format (should be a valid Fernet key)
+        try:
+            from cryptography.fernet import Fernet
+
+            Fernet(jwt_encryption_key.encode())
+        except Exception:
+            # Intentionally using logger.error() for clean user-facing messages
+            # without technical stack traces
+            logger.error("")
+            logger.error("🔐 CONFIGURATION ERROR: Invalid JWT encryption key format")
+            logger.error("")
+            logger.error("JWT_ENCRYPTION_KEY must be a valid Fernet key.")
+            logger.error("")
+            logger.error("Quick fix:")
+            logger.error("  scs setup")
+            logger.error("  cp .env.generated .env")
+            logger.error("")
+            sys.exit(1)
+
+        logger.info("✅ Startup configuration validation completed")
 
 
 async def ensure_database_initialized() -> None:
@@ -435,17 +442,17 @@ Claude Code Integration:
     )
     client_parser.add_argument(
         "client",
-        choices=["claude", "cursor", "windsurf", "vscode", "generic"],
+        choices=["claude", "claude-desktop", "cursor", "windsurf", "vscode"],
         help="MCP client type",
     )
 
-    # Scope support (Claude Code pattern)
+    # Scope support (Claude Code only)
     client_parser.add_argument(
         "-s",
         "--scope",
         choices=["user", "project", "local"],
         default="local",
-        help="Configuration scope: user (global), project (shared), or local (default)",
+        help="Configuration scope for Claude Code only: user (global), project (shared), or local (default)",
     )
 
     # Clipboard integration
@@ -563,19 +570,14 @@ def generate_client_config(
     client: str, host: str, port: int, scope: str = "local", copy: bool = False
 ) -> None:
     """Generate MCP client configuration with modern UX."""
-    # Import setup utilities for consistent formatting
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-        # Fallback colors if import fails
-        class Colors:  # type: ignore[no-redef]
-            RED = "\033[0;31m"
-            GREEN = "\033[0;32m"
-            YELLOW = "\033[1;33m"
-            BLUE = "\033[0;34m"
-            BOLD = "\033[1m"
-            NC = "\033[0m"
+    # Validate scope usage - only Claude Code supports scope
+    if scope != "local" and client not in ["claude"]:
+        print(
+            f"Warning: --scope/-s flag is only supported for Claude Code, ignoring for {client}"
+        )
+        scope = "local"
 
+    Colors = _get_colors()
     server_url = f"http://{host}:{port}/mcp/"
 
     # Get API key from environment for display
@@ -585,14 +587,16 @@ def generate_client_config(
     # Generate configuration based on client type
     if client == "claude":
         config_text = _generate_claude_config(server_url, api_key_display, scope)
+    elif client == "claude-desktop":
+        config_text = _generate_claude_desktop_config(server_url, api_key_display)
     elif client == "cursor":
         config_text = _generate_cursor_config(server_url, api_key_display)
     elif client == "windsurf":
         config_text = _generate_windsurf_config(server_url, api_key_display)
     elif client == "vscode":
         config_text = _generate_vscode_config(server_url, api_key_display)
-    else:  # generic
-        config_text = _generate_generic_config(server_url, api_key_display)
+    else:
+        raise ValueError(f"Unsupported client type: {client}")
 
     # Display the configuration
     print(
@@ -619,21 +623,50 @@ def generate_client_config(
     print()
 
 
+def _get_colors() -> Any:
+    """Get Colors class with fallback for consistent styling across client configs."""
+    try:
+        from ..cli.utils import get_colors_with_fallback
+
+        return get_colors_with_fallback()
+    except ImportError:
+        # Fallback to setup_core for backward compatibility
+        try:
+            from ..setup_core import Colors
+
+            return Colors
+        except ImportError:
+            # Final fallback colors if import fails
+            class Colors:  # type: ignore[no-redef]
+                RED = "\033[0;31m"
+                GREEN = "\033[0;32m"
+                YELLOW = "\033[1;33m"
+                BLUE = "\033[0;34m"
+                BOLD = "\033[1m"
+                NC = "\033[0m"
+
+            return Colors
+
+
+def _generate_http_json_config(
+    server_url: str, api_key: str, server_name: str = "shared-context-server"
+) -> str:
+    """Generate standard HTTP JSON configuration object for HTTP-based MCP clients."""
+    return f'''"{server_name}": {{
+  "url": "{server_url}",
+  "headers": {{
+    "X-API-Key": "{api_key}"
+  }}
+}}'''
+
+
 def _generate_claude_config(server_url: str, api_key: str, scope: str) -> str:
     """Generate Claude Code configuration with proper scope."""
-    # Import colors for this function
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-
-        class Colors:  # type: ignore[no-redef]
-            GREEN = "\033[0;32m"
-            NC = "\033[0m"
+    Colors = _get_colors()
 
     scope_flag = f" -s {scope}" if scope != "local" else ""
 
     # For HTTP servers, Claude Code requires add-json with proper JSON structure
-    # Format JSON with proper indentation for readability
     json_config = f'''{{
   "type": "http",
   "url": "{server_url}",
@@ -652,23 +685,58 @@ Scope: {scope}
   • local: Local configuration (current project only)"""
 
 
+def _generate_claude_desktop_config(server_url: str, api_key: str) -> str:
+    """Generate Claude Desktop configuration using mcp-proxy."""
+    Colors = _get_colors()
+
+    # Detect mcp-proxy location - common locations
+    import shutil
+
+    mcp_proxy_path = shutil.which("mcp-proxy")
+    if not mcp_proxy_path:
+        common_paths = [
+            "/usr/local/bin/mcp-proxy",
+            "~/.local/bin/mcp-proxy",
+            "~/.cargo/bin/mcp-proxy",
+        ]
+        for path in common_paths:
+            expanded_path = Path(path).expanduser()
+            if expanded_path.exists():
+                mcp_proxy_path = str(expanded_path)
+                break
+
+    if not mcp_proxy_path:
+        mcp_proxy_path = "/path/to/mcp-proxy"
+
+    config_object = f'''"scs": {{
+  "command": "{mcp_proxy_path}",
+  "args": ["--transport=streamablehttp", "{server_url}", "--headers", "X-API-Key", "{api_key}"]
+}}'''
+
+    return f"""Add to Claude Desktop configuration:
+
+{Colors.GREEN}{config_object}{Colors.NC}
+
+{Colors.BLUE}Configuration file location:{Colors.NC}
+{Colors.YELLOW}Claude Desktop → Settings → Developer → Edit Config{Colors.NC}
+
+Full structure example:
+{{
+  "mcpServers": {{
+    {config_object}
+  }}
+}}
+
+{Colors.YELLOW}Note: Ensure mcp-proxy is installed:{Colors.NC}
+  cargo install mcp-proxy
+
+{Colors.YELLOW}If mcp-proxy path differs, update the "command" field accordingly{Colors.NC}"""
+
+
 def _generate_cursor_config(server_url: str, api_key: str) -> str:
     """Generate Cursor configuration object for insertion."""
-    # Import colors for this function
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-
-        class Colors:  # type: ignore[no-redef]
-            GREEN = "\033[0;32m"
-            NC = "\033[0m"
-
-    config_object = f'''"shared-context-server": {{
-  "url": "{server_url}",
-  "headers": {{
-    "X-API-Key": "{api_key}"
-  }}
-}}'''
+    Colors = _get_colors()
+    config_object = _generate_http_json_config(server_url, api_key)
 
     return f"""Insert the following object into your mcpServers section:
 
@@ -688,68 +756,31 @@ Full structure example:
 
 def _generate_windsurf_config(server_url: str, api_key: str) -> str:
     """Generate Windsurf configuration."""
-    # Import colors for this function
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-
-        class Colors:  # type: ignore[no-redef]
-            GREEN = "\033[0;32m"
-            NC = "\033[0m"
+    Colors = _get_colors()
+    # Windsurf uses "serverUrl" instead of "url"
+    config_object = _generate_http_json_config(server_url, api_key).replace(
+        '"url":', '"serverUrl":'
+    )
 
     return f"""Add to Windsurf MCP configuration:
 
 {Colors.GREEN}{{
-  "shared-context-server": {{
-    "url": "{server_url}",
-    "headers": {{
-      "X-API-Key": "{api_key}"
-    }}
-  }}
+  {config_object}
 }}{Colors.NC}"""
 
 
 def _generate_vscode_config(server_url: str, api_key: str) -> str:
     """Generate VS Code configuration."""
-    # Import colors for this function
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-
-        class Colors:  # type: ignore[no-redef]
-            GREEN = "\033[0;32m"
-            NC = "\033[0m"
+    Colors = _get_colors()
+    config_object = _generate_http_json_config(server_url, api_key)
 
     return f"""Add to VS Code settings.json:
 
 {Colors.GREEN}{{
   "mcp.servers": {{
-    "shared-context-server": {{
-      "url": "{server_url}",
-      "headers": {{
-        "X-API-Key": "{api_key}"
-      }}
-    }}
+    {config_object}
   }}
 }}{Colors.NC}"""
-
-
-def _generate_generic_config(server_url: str, api_key: str) -> str:
-    """Generate generic MCP configuration."""
-    # Import colors for this function
-    try:
-        from ..setup_core import Colors
-    except ImportError:
-
-        class Colors:  # type: ignore[no-redef]
-            GREEN = "\033[0;32m"
-            NC = "\033[0m"
-
-    return f"""Generic MCP client configuration:
-
-{Colors.GREEN}Type: http
-URL: {server_url}
-Headers: X-API-Key: {api_key}{Colors.NC}"""
 
 
 def _handle_clipboard(content: str, copy: bool, Colors: Any) -> None:
@@ -799,12 +830,34 @@ def _extract_clipboard_content(formatted_text: str) -> str:
     ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
     clean_text = ansi_escape.sub("", formatted_text)
 
-    # For Claude Code, extract the command line (including add-json)
+    # For Claude Code, extract the complete multi-line command
     if "claude mcp add" in clean_text:
         lines = clean_text.split("\n")
+        command_started = False
+        command_lines = []
+        brace_count = 0
+
         for line in lines:
-            if line.strip().startswith("claude mcp add"):
-                return line.strip()
+            original_line = line  # Keep original spacing
+            line = line.strip()
+
+            if line.startswith("claude mcp add"):
+                command_started = True
+                command_lines.append(line)
+                # Check if the JSON starts on the same line
+                if "'" in line:
+                    json_part = line.split("'", 1)[1] if "'" in line else ""
+                    brace_count += json_part.count("{") - json_part.count("}")
+            elif command_started:
+                if line:
+                    command_lines.append(original_line.rstrip())  # Preserve indentation
+                    brace_count += line.count("{") - line.count("}")
+                    # End when we've closed all braces and hit the closing quote
+                    if brace_count == 0 and line.endswith("}'"):
+                        break
+
+        if command_lines:
+            return "\n".join(command_lines)
 
     # For Cursor and others, extract the JSON object
     if '"shared-context-server"' in clean_text:
@@ -994,7 +1047,7 @@ def run_setup_command(
     )
     print()
     print(
-        f"{Colors.YELLOW}💡 Scope options for Claude Code: -s user (global) | -s project | -s local{Colors.NC}"
+        f"{Colors.YELLOW}💡 Note: Scope flag (-s) only applies to Claude Code configuration{Colors.NC}"
     )
 
     if used_generated:
@@ -1039,51 +1092,57 @@ def run_setup_command(
 
 def show_status(host: str | None = None, port: int | None = None) -> None:
     """Show server status."""
-    import requests
-
-    # Get default host and port from config/environment if not provided
-    if host is None or port is None:
-        try:
-            config = get_config()
-            port = port or config.mcp_server.http_port
-            # For status check, use client-accessible hostname
-            host = (
-                host
-                or os.getenv("CLIENT_HOST")
-                or os.getenv("MCP_CLIENT_HOST", "localhost")
-            )
-        except Exception:
-            host = (
-                host
-                or os.getenv("CLIENT_HOST")
-                or os.getenv("MCP_CLIENT_HOST", "localhost")
-            )
-            port = port or int(os.getenv("HTTP_PORT", "23456"))
-
     try:
-        # Check health endpoint
-        health_url = f"http://{host}:{port}/health"
-        response = requests.get(health_url, timeout=5)
+        from ..cli.status_utils import show_status_interactive
 
-        if response.status_code == 200:
-            print(f"✅ Server is running at http://{host}:{port}")
-            print(f"✅ Health check: {response.json()}")
+        show_status_interactive(host, port)
+    except ImportError:
+        # Fallback to inline status check for backward compatibility
+        import requests
 
-            # Try to get MCP endpoint info
+        # Get default host and port from config/environment if not provided
+        if host is None or port is None:
             try:
-                requests.get(f"http://{host}:{port}/mcp/", timeout=5)
-                print("✅ MCP endpoint: Available")
+                config = get_config()
+                port = port or config.mcp_server.http_port
+                # For status check, use client-accessible hostname
+                host = (
+                    host
+                    or os.getenv("CLIENT_HOST")
+                    or os.getenv("MCP_CLIENT_HOST", "localhost")
+                )
             except Exception:
-                print("⚠️  MCP endpoint: Not accessible")
+                host = (
+                    host
+                    or os.getenv("CLIENT_HOST")
+                    or os.getenv("MCP_CLIENT_HOST", "localhost")
+                )
+                port = port or int(os.getenv("HTTP_PORT", "23456"))
 
-        else:
-            print(f"❌ Server health check failed: {response.status_code}")
+        try:
+            # Check health endpoint
+            health_url = f"http://{host}:{port}/health"
+            response = requests.get(health_url, timeout=5)
 
-    except requests.exceptions.ConnectionError:
-        print(f"❌ Cannot connect to server at http://{host}:{port}")
-        print("   Make sure the server is running with 'docker compose up -d'")
-    except Exception as e:
-        print(f"❌ Error checking server status: {e}")
+            if response.status_code == 200:
+                print(f"✅ Server is running at http://{host}:{port}")
+                print(f"✅ Health check: {response.json()}")
+
+                # Try to get MCP endpoint info
+                try:
+                    requests.get(f"http://{host}:{port}/mcp/", timeout=5)
+                    print("✅ MCP endpoint: Available")
+                except Exception:
+                    print("⚠️  MCP endpoint: Not accessible")
+
+            else:
+                print(f"❌ Server health check failed: {response.status_code}")
+
+        except requests.exceptions.ConnectionError:
+            print(f"❌ Cannot connect to server at http://{host}:{port}")
+            print("   Make sure the server is running with 'docker compose up -d'")
+        except Exception as e:
+            print(f"❌ Error checking server status: {e}")
 
 
 def setup_signal_handlers() -> None:
