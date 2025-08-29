@@ -5,9 +5,7 @@ This test file focuses on covering error paths and edge cases that weren't cover
 in the comprehensive test file.
 """
 
-import asyncio
 import os
-import signal
 import sys
 from unittest.mock import Mock, patch
 
@@ -15,11 +13,9 @@ import pytest
 
 # Import the CLI module - handle import failures gracefully
 try:
-    from shared_context_server.scripts.cli import (
-        ProductionServer,
-        main,
-        setup_signal_handlers,
-        show_status,
+    pass
+    from shared_context_server.cli.status_utils import (
+        show_status_interactive as show_status,
     )
 
     CLI_AVAILABLE = True
@@ -38,8 +34,9 @@ class TestUvloopImportError:
         # the UVLOOP_AVAILABLE flag behavior
 
         # Import the module to check current state
-        import shared_context_server.scripts.cli as cli_module
 
+        # Use sys.modules to get the actual module, not the main function
+        cli_module = sys.modules["shared_context_server.cli.main"]
         # Verify the flag is boolean
         assert isinstance(cli_module.UVLOOP_AVAILABLE, bool)
 
@@ -56,8 +53,9 @@ class TestServerImportError:
     def test_server_import_error_path(self):
         """Test the server ImportError path (lines 56-58)."""
         # Similar to uvloop, this tests the import error handling
-        import shared_context_server.scripts.cli as cli_module
 
+        # Use sys.modules to get the actual module, not the main function
+        cli_module = sys.modules["shared_context_server.cli.main"]
         # Verify the flag is boolean
         assert isinstance(cli_module.SERVER_AVAILABLE, bool)
 
@@ -65,67 +63,9 @@ class TestServerImportError:
         assert cli_module.SERVER_AVAILABLE is True
 
 
-class TestProductionServerErrorPaths:
-    """Test ProductionServer error handling paths."""
-
-    @pytest.mark.asyncio
-    async def test_stdio_server_exception_path(self):
-        """Test STDIO server exception handling (lines 76-84)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        server = ProductionServer()
-
-        # Mock SERVER_AVAILABLE as True to reach the try block
-        with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", True),
-            patch(
-                "shared_context_server.scripts.cli.initialize_server",
-                side_effect=Exception("Init error"),
-            ),
-            pytest.raises(SystemExit),
-        ):
-            await server.start_stdio_server()
-
-    @pytest.mark.asyncio
-    async def test_http_server_import_error_path(self):
-        """Test HTTP server ImportError handling (lines 107-111)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        server = ProductionServer()
-
-        # Mock SERVER_AVAILABLE as True and cause ImportError in server.run_http_async
-        with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", True),
-            patch("shared_context_server.scripts.cli.initialize_server"),
-            patch(
-                "shared_context_server.scripts.cli.server.run_http_async",
-                side_effect=ImportError("FastAPI not available"),
-            ),
-            pytest.raises(SystemExit),
-        ):
-            await server.start_http_server("localhost", 23456)
-
-    @pytest.mark.asyncio
-    async def test_http_server_general_exception_path(self):
-        """Test HTTP server general exception handling (lines 112-114)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        server = ProductionServer()
-
-        # Mock SERVER_AVAILABLE as True and cause general exception
-        with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", True),
-            patch("shared_context_server.scripts.cli.initialize_server"),
-            patch(
-                "shared_context_server.scripts.cli.server.run_http_async",
-                side_effect=RuntimeError("Server error"),
-            ),
-            pytest.raises(SystemExit),
-        ):
-            await server.start_http_server("localhost", 23456)
+# Note: TestProductionServerErrorPaths moved to
+# test_cli_signal_handlers_sequential.py due to complex server mocking
+# causing pytest-xdist I/O capture conflicts
 
 
 class TestRunServerErrorPaths:
@@ -137,10 +77,10 @@ class TestRunServerErrorPaths:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import run_server_stdio
+        from shared_context_server.cli.main import run_server_stdio
 
         with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             await run_server_stdio()
@@ -151,10 +91,10 @@ class TestRunServerErrorPaths:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import run_server_http
+        from shared_context_server.cli.main import run_server_http
 
         with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             await run_server_http("localhost", 23456)
@@ -173,9 +113,7 @@ class TestShowStatusFunction:
         mock_response.status_code = 200
         mock_response.json.return_value = {"status": "healthy"}
 
-        with (
-            patch("requests.get", return_value=mock_response),
-        ):
+        with patch("requests.get", return_value=mock_response):
             show_status("localhost", 23456)
 
             captured = capsys.readouterr()
@@ -267,7 +205,7 @@ class TestShowStatusFunction:
 
         with (
             patch(
-                "shared_context_server.scripts.cli.get_config", return_value=mock_config
+                "shared_context_server.cli.main.get_config", return_value=mock_config
             ),
             patch.dict(os.environ, {"CLIENT_HOST": "example.com"}),
             patch("requests.get") as mock_get,
@@ -289,7 +227,7 @@ class TestShowStatusFunction:
 
         with (
             patch(
-                "shared_context_server.scripts.cli.get_config",
+                "shared_context_server.cli.main.get_config",
                 side_effect=Exception("Config error"),
             ),
             patch.dict(os.environ, {"HTTP_PORT": "7000"}),
@@ -305,131 +243,13 @@ class TestShowStatusFunction:
             mock_get.assert_called()
 
 
-class TestSignalHandlers:
-    """Test signal handler functionality (lines 354-356, 363)."""
-
-    def test_signal_handler_function(self):
-        """Test signal handler function execution."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        with patch("sys.exit") as mock_exit:
-            # Access the signal handler function
-            setup_signal_handlers()
-
-            # Get the actual handler function that was registered
-            # We can't easily test the handler directly, but we can verify setup
-            mock_exit.assert_not_called()  # Setup shouldn't call exit
-
-    def test_signal_handler_sigterm(self):
-        """Test SIGTERM signal handler."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        with (
-            patch("signal.signal") as mock_signal,
-            patch("sys.exit") as mock_exit,
-        ):
-            setup_signal_handlers()
-
-            # Verify signal handlers were set up
-            assert mock_signal.call_count >= 2  # At least SIGTERM and SIGINT
-
-            # Get the handler function from the first call
-            if mock_signal.call_args_list:
-                signal_num, handler_func = mock_signal.call_args_list[0][0]
-
-                # Test the handler function
-                handler_func(signal.SIGTERM, None)
-                mock_exit.assert_called_once_with(0)
-
-    def test_signal_handler_sighup_availability(self):
-        """Test SIGHUP handler setup when available (line 363)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        with (
-            patch("signal.signal") as mock_signal,
-            patch(
-                "builtins.hasattr", return_value=True
-            ),  # Force SIGHUP to be "available"
-        ):
-            setup_signal_handlers()
-
-            # Should have called signal.signal multiple times including SIGHUP
-            assert mock_signal.call_count >= 3
+# NOTE: All signal handler tests have been moved to
+# tests/unit/test_cli_signal_handlers_sequential.py due to pytest-xdist
+# worker I/O capture conflicts. The entire TestSignalHandlers class is incompatible
+# with parallel execution. Run that file separately for signal handler testing:
+# pytest tests/unit/test_cli_signal_handlers_sequential.py -v
 
 
-class TestMainConfigurationPaths:
-    """Test main function configuration paths."""
-
-    def test_main_custom_config_loading(self):
-        """Test main function with custom config file (line 389)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        mock_args = Mock()
-        mock_args.command = None
-        mock_args.transport = "stdio"
-        mock_args.log_level = "INFO"
-        mock_args.config = "/custom/config.env"
-
-        with (
-            patch(
-                "shared_context_server.scripts.cli.parse_arguments",
-                return_value=mock_args,
-            ),
-            patch("shared_context_server.scripts.cli.load_config") as mock_load_config,
-            patch("shared_context_server.scripts.cli.get_config"),
-            patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop"
-            ) as mock_run,
-        ):
-            # Mock run_with_optimal_loop to close the coroutine properly
-            def mock_runner(coro):
-                if asyncio.iscoroutine(coro):
-                    coro.close()
-                return
-
-            mock_run.side_effect = mock_runner
-
-            main()
-
-            # Should load custom config
-            mock_load_config.assert_called_once_with("/custom/config.env")
-
-    def test_main_http_transport_path(self):
-        """Test main function HTTP transport path (line 400)."""
-        if not CLI_AVAILABLE:
-            pytest.skip("CLI module not available")
-
-        mock_args = Mock()
-        mock_args.command = None
-        mock_args.transport = "http"
-        mock_args.host = "0.0.0.0"
-        mock_args.port = 9000
-        mock_args.log_level = "INFO"
-        mock_args.config = None
-
-        with (
-            patch(
-                "shared_context_server.scripts.cli.parse_arguments",
-                return_value=mock_args,
-            ),
-            patch("shared_context_server.scripts.cli.get_config"),
-            patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop"
-            ) as mock_run,
-        ):
-            # Mock run_with_optimal_loop to close the coroutine properly
-            def mock_runner(coro):
-                if asyncio.iscoroutine(coro):
-                    coro.close()
-                return
-
-            mock_run.side_effect = mock_runner
-
-            main()
-
-            # Should call run_with_optimal_loop thrice - config validation, db init, server start
-            assert mock_run.call_count == 3
+# NOTE: TestMainConfigurationPaths tests have also been moved to
+# tests/unit/test_cli_signal_handlers_sequential.py due to pytest-xdist
+# worker I/O capture conflicts affecting complex main function mocking.

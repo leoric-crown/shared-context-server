@@ -17,18 +17,19 @@ class Colors:
     NC = "\033[0m"  # No Color
 
 
-def print_color(text: str, color: str = "default") -> None:
+def print_color(text: str, color: str = "default", end: str = "\n") -> None:
     """
     Unified color printing helper.
 
     Args:
         text: Text to print
         color: Color code or "default" for no color
+        end: String appended after the text (default: newline)
     """
     if color == "default" or color == Colors.NC:
-        print(text)
+        print(text, end=end)
     else:
-        print(f"{color}{text}{Colors.NC}")
+        print(f"{color}{text}{Colors.NC}", end=end)
 
 
 def get_colors_with_fallback() -> type[Colors]:

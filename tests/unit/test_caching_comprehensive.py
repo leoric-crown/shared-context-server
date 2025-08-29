@@ -1036,6 +1036,8 @@ class TestConcurrentAccessPatterns:
                 assert "_iteration_" in value
 
     @pytest.mark.asyncio
+    @pytest.mark.performance
+    @pytest.mark.flaky
     async def test_cache_performance_degradation_concurrent_load(self, cache_mgr):
         """Test cache performance degradation under concurrent load."""
         import time

@@ -13,13 +13,13 @@
 
 ## Content Navigation
 
-| Symbol | Meaning | Time Investment |
-|--------|---------|----------------|
-| 🚀 | Quick start | 2-5 minutes |
-| ⚙️ | Configuration | 10-15 minutes |
-| 🔧 | Deep dive | 30+ minutes |
-| 💡 | Why this works | Context only |
-| ⚠️ | Important note | Read carefully |
+| Symbol | Meaning        | Time Investment |
+| ------ | -------------- | --------------- |
+| 🚀     | Quick start    | 2-5 minutes     |
+| ⚙️     | Configuration  | 10-15 minutes   |
+| 🔧     | Deep dive      | 30+ minutes     |
+| 💡     | Why this works | Context only    |
+| ⚠️     | Important note | Read carefully  |
 
 ---
 
@@ -59,11 +59,13 @@ scs  # Start server, then try the magic prompt below in Claude Code
 ```
 
 **The Magic Prompt** (copy to Claude Code):
+
 ```
 I want to optimize this repository using our expert committee approach. Please start by having our Performance Architect analyze the codebase for bottlenecks.
 ```
 
 **What Happens**: Three AI experts collaborate autonomously:
+
 - **Performance Architect** → finds bottlenecks with evidence
 - **Implementation Expert** → builds concrete solutions
 - **Validation Expert** → creates testing strategy
@@ -81,12 +83,14 @@ Each expert builds on the previous expert's findings through persistent shared s
 ### ⚠️ **Important: Choose Your Deployment Method**
 
 **Docker (Recommended for Multi-Client Collaboration):**
+
 - ✅ **Shared context across all MCP clients** (Claude Code + Cursor + Windsurf)
 - ✅ **Persistent service** - single server instance on port 23456
 - ✅ **True multi-agent collaboration** - agents share sessions and memory
 - 🎯 **Use when**: You want multiple tools to collaborate on the same tasks
 
 **uvx (Quick Trial & Testing Only):**
+
 - ⚠️ **Isolated per-client** - each MCP client gets its own separate instance
 - ⚠️ **No shared context** - Claude Code and Cursor can't see each other's work
 - ✅ **Quick testing** - perfect for trying features without Docker setup
@@ -104,11 +108,14 @@ uvx shared-context-server --help
 💡 **TL;DR**: Use Docker for real multi-agent work, uvx for quick testing only.
 
 ### Prerequisites Check (30 seconds)
+
 **Choose your path**:
+
 - ✅ **Docker** (recommended): `docker --version` works
 - ✅ **uvx Trial**: `uvx --version` works (testing only)
 
 ### Environment Configuration Templates
+
 **Choose your .env template** (for local development):
 
 ```bash
@@ -127,6 +134,7 @@ cp .env.docker .env
 ### Step 1: Generate Keys & Start Server
 
 **🚀 One-Command Demo Setup (Recommended)**
+
 ```bash
 # Experience multi-expert AI collaboration in 30 seconds
 git clone https://github.com/leoric-crown/shared-context-server.git
@@ -136,6 +144,7 @@ scs setup demo
 ```
 
 **🐳 Production Setup Alternative**
+
 ```bash
 # For production deployment with Docker
 scs setup docker
@@ -143,6 +152,7 @@ scs setup docker
 ```
 
 **Option A: Docker Compose (Recommended)**
+
 ```bash
 # After running the key generator above, choose your deployment:
 
@@ -160,6 +170,7 @@ make docker-local
 ```
 
 **Alternative: Raw Docker Commands**
+
 ```bash
 # If you prefer docker run over docker compose:
 docker run -d --name shared-context-server -p 23456:23456 \
@@ -170,6 +181,7 @@ docker run -d --name shared-context-server -p 23456:23456 \
 ```
 
 **Option B: uvx Trial (Isolated Testing Only)**
+
 ```bash
 # Generate keys first
 scs setup uvx
@@ -184,6 +196,7 @@ API_KEY="generated-key" JWT_SECRET_KEY="generated-secret" \
 ```
 
 **Option C: Local Development**
+
 ```bash
 # Full development setup
 git clone https://github.com/leoric-crown/shared-context-server.git
@@ -221,7 +234,7 @@ Add to your existing `.vscode/mcp.json` (create if it doesn't exist):
     "shared-context-server": {
       "type": "http",
       "url": "http://localhost:23456/mcp",
-      "headers": {"X-API-Key": "YOUR_API_KEY_HERE"}
+      "headers": { "X-API-Key": "YOUR_API_KEY_HERE" }
     }
   }
 }
@@ -236,7 +249,13 @@ Add to your existing `.cursor/mcp.json` (create if it doesn't exist):
   "mcpServers": {
     "shared-context-server": {
       "command": "mcp-proxy",
-      "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/", "--headers", "X-API-Key", "YOUR_API_KEY_HERE"]
+      "args": [
+        "--transport=streamablehttp",
+        "http://localhost:23456/mcp/",
+        "--headers",
+        "X-API-Key",
+        "YOUR_API_KEY_HERE"
+      ]
     }
   }
 }
@@ -252,10 +271,16 @@ Have not tested in Windows.
 
 ```json
 {
-    "scs": {
-      "command": "/Users/YOUR_USER/.local/bin/mcp-proxy",
-      "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/", "--headers", "X-API-Key", "YOUR_API_KEY_HERE"]
-    }
+  "scs": {
+    "command": "/Users/YOUR_USER/.local/bin/mcp-proxy",
+    "args": [
+      "--transport=streamablehttp",
+      "http://localhost:23456/mcp/",
+      "--headers",
+      "X-API-Key",
+      "YOUR_API_KEY_HERE"
+    ]
+  }
 }
 ```
 
@@ -293,13 +318,16 @@ open http://localhost:23456/ui/  # Real-time session monitoring
 ```
 
 ✅ **Success indicators**:
+
 - Health endpoint returns `{"status": "healthy", ...}`
 - Dashboard loads at http://localhost:23456/ui/ and shows active sessions
 - MCP Inspector validation error (proves MCP protocol is working)
 - MCP client shows `✓ Connected` status
 
 ### 📊 Web Dashboard (MVP)
+
 Real-time monitoring interface for agent collaboration:
+
 - **Live session overview** with active agent counts
 - **Real-time message streaming** without page refreshes
 - **Session isolation visualization** to track multi-agent workflows
@@ -348,9 +376,14 @@ uvx shared-context-server --version
 Works with existing tools you already use:
 
 ### Direct MCP Integration (Tested)
-```python
-# Via Claude Code or any MCP client
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+
+```bash
+# Generate Claude Code configuration automatically
+scs client-config claude -s user -c
+
+# Or generate configuration for other MCP clients
+scs client-config cursor -c     # Cursor IDE
+scs client-config all -c        # All supported clients
 
 # Direct MCP usage (use proper MCP client in production)
 # Example shows concept - use mcp-proxy or MCP client libraries
@@ -371,6 +404,7 @@ async def create_session():
 ## ⚙️ Framework Examples
 
 ### Multi-Expert Code Optimization (Featured Demo)
+
 1. **Performance Architect** analyzes codebase → identifies bottlenecks with evidence
 2. **Implementation Expert** reads findings → develops concrete solutions
 3. **Validation Expert** synthesizes both → creates comprehensive testing strategy
@@ -378,12 +412,14 @@ async def create_session():
 💡 **Why this works**: Experts ask clarifying questions and build on each other's insights through persistent sessions.
 
 ### Conversational vs Monologue Patterns
+
 ```
 ❌ Traditional: "Here are my findings" (isolated analysis)
 ✅ Advanced: "Based on your bottleneck analysis, I have questions about X constraint..." (collaborative)
 ```
 
 ### Research & Implementation Pipeline
+
 1. **Research Agent** gathers requirements → shares insights
 2. **Architecture Agent** questions research gaps → designs using complete context
 3. **Developer Agent** implements with iterative feedback loop
@@ -400,6 +436,7 @@ async def create_session():
 ## 🔧 What This Is / What This Isn't
 
 ### ✅ **What this MCP server provides**
+
 - **Real-time collaboration substrate** for multi-agent workflows
 - **Session isolation** with clean boundaries between different tasks
 - **MCP protocol compliance** that works with any MCP-compatible agent framework
@@ -408,6 +445,7 @@ async def create_session():
 💡 **Why MCP protocol?** Universal compatibility - works with Claude Code, CrewAI, AutoGen, LangChain, and custom frameworks without vendor lock-in.
 
 ### ❌ **What this MCP server isn't**
+
 - **Not a vector database** - Use Pinecone, Milvus, or Chroma for long-term storage
 - **Not an orchestration platform** - Use CrewAI, AutoGen, or LangChain for task management
 - **Not for permanent memory** - Sessions are for active collaboration, not archival
@@ -424,16 +462,19 @@ async def create_session():
 ### Development → Production Path
 
 **Development (SQLite)**
+
 - ✅ Zero configuration
 - ✅ Perfect for prototyping
 - ❌ Limited to ~5 concurrent agents
 
 **Production (PostgreSQL)**
+
 - ✅ High concurrency (20+ agents)
 - ✅ Enterprise backup/recovery
 - ❌ Requires database management
 
 ### Enterprise Features Roadmap
+
 - **SSO Integration**: SAML/OIDC support planned
 - **Audit Logging**: Enhanced compliance logging
 - **High Availability**: Multi-node deployment
@@ -447,12 +488,14 @@ async def create_session():
 <summary>🔧 Security & Compliance</summary>
 
 ### Current Security Features
+
 - **JWT Authentication**: Role-based access control
 - **Input Sanitization**: XSS and injection prevention
 - **Secure Token Management**: Prevents JWT exposure vulnerabilities
 - **Message Visibility**: Public/private/agent-only filtering
 
 ### Enterprise Security Roadmap
+
 - **SSO Integration**: SAML, OIDC, Active Directory
 - **Audit Trails**: SOX, HIPAA-compliant logging
 - **Data Governance**: Retention policies, geographic residency
@@ -468,6 +511,7 @@ async def create_session():
 <summary>🔄 Deployment Architecture: Docker vs uvx</summary>
 
 ### Docker Deployment (Multi-Client Shared Context)
+
 ```
 ┌─────────────────┐    ┌──────────────────────┐
 │   Claude Code   │───▶│                      │
@@ -479,9 +523,11 @@ async def create_session():
                        │  • Cross-tool memory │
                        └──────────────────────┘
 ```
+
 **✅ Enables**: True multi-agent collaboration, session sharing, persistent context
 
 ### uvx Deployment (Isolated Per-Client)
+
 ```
 ┌─────────────────┐    ┌─────────────────┐
 │   Claude Code   │───▶│ Isolated Server │
@@ -496,6 +542,7 @@ async def create_session():
 └─────────────────┘    │ + Database #3   │
                        └─────────────────┘
 ```
+
 **⚠️ Limitation**: No cross-tool collaboration, separate contexts, testing only
 
 💡 **Key Insight**: Docker provides the "shared" in shared-context-server, while uvx creates isolated silos.
@@ -506,18 +553,22 @@ async def create_session():
 <summary>Core Design Principles</summary>
 
 ### Session-Based Isolation
+
 **What**: Each collaborative task gets its own workspace
 **Why**: Prevents cross-contamination while enabling rich collaboration within teams
 
 ### Message Visibility Controls
+
 **What**: Four-tier system (public/private/agent-only/admin-only)
 **Why**: Granular information sharing - agents can have private working memory and shared discoveries
 
 ### MCP Protocol Integration
+
 **What**: Model Context Protocol compliance with automated orchestration prompts
 **Why**: Works with any MCP-compatible framework with built-in multi-agent collaboration patterns
 
 ### Advanced Orchestration Features
+
 **What**: MCP prompts with parallel agent launches, token refresh patterns, and collaborative documentation
 **Why**: Enables true conversational collaboration vs sequential monologues
 
@@ -527,6 +578,7 @@ async def create_session():
 <summary>Performance Characteristics</summary>
 
 ### Designed for Real-Time Collaboration
+
 - **<30ms** message operations for smooth agent handoffs
 - **2-3ms** fuzzy search across session history
 - **20+ concurrent agents** per session
@@ -535,6 +587,7 @@ async def create_session():
 💡 **Why these targets?** Sub-30ms ensures imperceptible delays during agent handoffs, maintaining workflow momentum.
 
 ### Scalability Considerations
+
 - **SQLite**: Development and small teams (<5 concurrent agents)
 - **PostgreSQL**: Production deployments (20+ concurrent agents)
 - **Connection pooling**: Built-in performance optimization
@@ -548,17 +601,20 @@ async def create_session():
 ### Architecture Decision: Database Choice
 
 **SQLite for Development**
+
 - ✅ Zero configuration
 - ✅ Perfect for prototyping
 - ❌ Single writer limitation
 
 **PostgreSQL for Production**
+
 - ✅ Multi-writer concurrency
 - ✅ Enterprise backup/recovery
 - ✅ Advanced indexing and performance
 - ❌ Requires database administration
 
 **Database Backend**
+
 - **Unified**: SQLAlchemy Core (supports SQLite, PostgreSQL, MySQL)
 - **Development**: SQLite with aiosqlite driver (fastest, simplest)
 - **Production**: PostgreSQL/MySQL with async drivers (scalable, robust)
@@ -574,16 +630,19 @@ async def create_session():
 ## 📖 Documentation & Next Steps
 
 ### 🟢 Getting Started Paths
+
 - **[Integration Guide](./docs/integration-guide.md)** - CrewAI, AutoGen, LangChain examples
 - **[Quick Reference](./docs/quick-reference.md)** - Commands and common tasks
 - **[Development Setup](./docs/development.md)** - Local development environment
 
 ### 🟡 Production Deployment
+
 - **[Docker Setup](./DOCKER.md)** - Container deployment guide
 - **[API Reference](./docs/api-reference.md)** - All 15+ MCP tools with examples
 - **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
 
 ### 🔴 Advanced Topics
+
 - **[Custom Integration](./docs/integration-guide.md#custom-agent-integration)** - Build your own MCP integration
 - **[Production Deployment](./docs/production-deployment.md)** - Docker and scaling strategies
 

@@ -3,6 +3,7 @@
 .DS_Store
 .playwright-mcp
 postgresql
+mcp-client-configurations.md
 
 # Multi-agent Collaboration Demo MCP config
 examples/demos/multi-expert-optimization/.mcp.json

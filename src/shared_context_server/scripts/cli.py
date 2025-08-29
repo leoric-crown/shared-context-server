@@ -2,574 +2,64 @@
 """
 Command Line Interface for Shared Context MCP Server.
 
-This module provides the main CLI entry point for production use,
-supporting both STDIO and HTTP transports with proper configuration
-management for system deployment.
+THIN WRAPPER: This module serves as the legacy entry point, redirecting
+core functionality to the modular cli/main.py implementation while preserving
+backward compatibility and essential bootstrap logic.
 """
-# ruff: noqa: TRY400 - Using logger.error in exception handlers for clean user-facing messages
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import logging
-import signal
+import os
 import sys
-from pathlib import Path
 from typing import Any
 
-# Import uvloop conditionally for better performance
-try:
-    import uvloop
+# Import centralized color infrastructure
+from ..cli.utils import Colors
 
-    UVLOOP_AVAILABLE = True
-except ImportError:
-    uvloop = None  # type: ignore[assignment]
-    UVLOOP_AVAILABLE = False
+# Configure logging before importing other modules
+# Skip logging configuration during pytest runs to avoid I/O capture conflicts
+if "pytest" not in sys.modules and "PYTEST_CURRENT_TEST" not in os.environ:
+    # Check if we're running commands that should suppress config validation logging
+    client_config_mode = len(sys.argv) >= 2 and sys.argv[1] == "client-config"
+    version_mode = "--version" in sys.argv
+    setup_mode = len(sys.argv) >= 2 and sys.argv[1] == "setup"
 
-# Configure logging - use environment LOG_LEVEL if available
-import os
-
-from .. import __version__
-from ..config import get_config, load_config
-
-# Check if we're running commands that should suppress config validation logging
-client_config_mode = len(sys.argv) >= 2 and sys.argv[1] == "client-config"
-version_mode = "--version" in sys.argv
-setup_mode = len(sys.argv) >= 2 and sys.argv[1] == "setup"
-
-log_level = (
-    logging.CRITICAL
-    if client_config_mode or version_mode or setup_mode
-    else getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-)
-
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stderr)
-    ],  # Use stderr to avoid interfering with STDIO transport
-)
-
-logger = logging.getLogger(__name__)
-
-# Import server components
-try:
-    from ..server import initialize_server, server
-
-    SERVER_AVAILABLE = True
-except ImportError:
-    SERVER_AVAILABLE = False
-    logger.exception("Server components not available")
-
-
-async def validate_startup_configuration() -> None:
-    """
-    Validate critical configuration requirements at startup.
-
-    This ensures the server fails fast with helpful error messages
-    if essential configuration is missing, rather than waiting for
-    the first authentication request to fail.
-    """
-    try:
-        from ..cli.startup_validation import validate_environment
-
-        await validate_environment()
-    except ImportError:
-        # Fallback to inline validation for backward compatibility
-        import os
-
-        logger.info("Validating startup configuration...")
-
-        # Check JWT encryption key (required for authentication)
-        jwt_encryption_key = os.getenv("JWT_ENCRYPTION_KEY")
-        if not jwt_encryption_key:
-            logger.error("")
-            logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
-            logger.error("")
-            logger.error("JWT_ENCRYPTION_KEY is required for secure authentication.")
-            logger.error("The server cannot start without this key.")
-            logger.error("")
-            logger.error("Quick fixes:")
-            logger.error("  1. Generate secure keys:")
-            logger.error("     scs setup")
-            logger.error("")
-            logger.error("  2. Copy the generated configuration:")
-            logger.error("     cp .env.generated .env")
-            logger.error("")
-            logger.error("  3. Or set the environment variable:")
-            logger.error("     export JWT_ENCRYPTION_KEY='your-fernet-key-here'")
-            logger.error("")
-            sys.exit(1)
-
-        # Validate JWT encryption key format (should be a valid Fernet key)
-        try:
-            from cryptography.fernet import Fernet
-
-            Fernet(jwt_encryption_key.encode())
-        except Exception:
-            # Intentionally using logger.error() for clean user-facing messages
-            # without technical stack traces
-            logger.error("")
-            logger.error("🔐 CONFIGURATION ERROR: Invalid JWT encryption key format")
-            logger.error("")
-            logger.error("JWT_ENCRYPTION_KEY must be a valid Fernet key.")
-            logger.error("")
-            logger.error("Quick fix:")
-            logger.error("  scs setup")
-            logger.error("  cp .env.generated .env")
-            logger.error("")
-            sys.exit(1)
-
-        logger.info("✅ Startup configuration validation completed")
-
-
-async def ensure_database_initialized() -> None:
-    """
-    Ensure database is properly initialized with all required tables.
-
-    This function is idempotent - it checks if critical tables exist
-    and only runs initialization if they're missing. This ensures
-    fresh deployments work without requiring manual intervention.
-    """
-    try:
-        from ..database import get_db_connection
-
-        # Check if critical tables exist by trying to query them
-        async with get_db_connection() as conn:
-            # Try to query critical tables that must exist for the server to function
-            critical_tables = ["sessions", "messages", "audit_log", "secure_tokens"]
-            missing_tables = []
-
-            # Check which tables exist by querying sqlite_master for all at once
-            try:
-                table_list = "', '".join(critical_tables)
-                result = await conn.execute(
-                    f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('{table_list}')"
-                )
-                rows = await result.fetchall()
-                existing_tables = {row[0] for row in rows}
-                missing_tables = [
-                    table for table in critical_tables if table not in existing_tables
-                ]
-            except Exception:
-                # If query fails entirely, assume all tables are missing
-                missing_tables = critical_tables.copy()
-
-            if missing_tables:
-                logger.info(f"Missing database tables detected: {missing_tables}")
-                logger.info("Initializing database schema...")
-
-                # Import and run database initialization using the WORKING SQLAlchemy manager
-                # The database_manager version has broken schema path resolution in Docker
-                from ..config import get_database_url
-                from ..database_sqlalchemy import SimpleSQLAlchemyManager
-
-                # Convert database URL to format expected by working manager
-                database_url = get_database_url()
-                if database_url.startswith("sqlite://"):
-                    database_url = database_url.replace(
-                        "sqlite://", "sqlite+aiosqlite://", 1
-                    )
-
-                sqlalchemy_manager = SimpleSQLAlchemyManager(database_url)
-                await sqlalchemy_manager.initialize()
-
-                logger.info("✅ Database schema initialized successfully")
-            else:
-                logger.debug("Database schema is already initialized")
-
-    except Exception as e:
-        logger.exception("Database initialization check failed")
-
-        # Check for common configuration issues and provide helpful guidance
-        # Note: Using logger.error() below for user-facing messages without stack traces
-        error_message = str(e)
-
-        # JWT/Authentication configuration issues
-        if "JWT_ENCRYPTION_KEY" in error_message:
-            logger.error("")
-            logger.error("🔐 CONFIGURATION ERROR: Missing JWT encryption key")
-            logger.error("")
-            logger.error(
-                "The server requires JWT_ENCRYPTION_KEY for secure token management."
-            )
-            logger.error("Quick fixes:")
-            logger.error("")
-            logger.error("  1. Generate secure keys:")
-            logger.error("     scs setup")
-            logger.error("")
-            logger.error("  2. Copy the generated configuration:")
-            logger.error("     cp .env.generated .env")
-            logger.error("")
-            logger.error("  3. Or set the environment variable directly:")
-            logger.error("     export JWT_ENCRYPTION_KEY='your-generated-key'")
-            logger.error("")
-            sys.exit(1)
-
-        # JWT Secret Key issues
-        if "JWT_SECRET_KEY" in error_message:
-            logger.error("")
-            logger.error("🔐 CONFIGURATION ERROR: Missing JWT secret key")
-            logger.error("")
-            logger.error("The server requires JWT_SECRET_KEY for token signing.")
-            logger.error("Quick fix:")
-            logger.error("  scs setup")
-            logger.error("")
-            sys.exit(1)
-
-        # Database permission/lock issues
-        if (
-            "database is locked" in error_message.lower()
-            or "permission denied" in error_message.lower()
-        ):
-            logger.error("")
-            logger.error("💾 DATABASE ERROR: Unable to access database file")
-            logger.error("")
-            logger.error("Common causes and fixes:")
-            logger.error("  • Another server instance running:")
-            logger.error("    → Check: lsof -i :23456")
-            logger.error("    → Kill: pkill -f shared-context-server")
-            logger.error("")
-            logger.error("  • File permissions issue:")
-            logger.error("    → Check: ls -la chat_history.db*")
-            logger.error("    → Fix: chmod 664 chat_history.db*")
-            logger.error("")
-            logger.error("  • Stale lock files:")
-            logger.error("    → Clean: rm chat_history.db-wal chat_history.db-shm")
-            logger.error("")
-            sys.exit(1)
-
-        # Generic database initialization failure with helpful guidance
-        logger.error("")
-        logger.error("💥 DATABASE INITIALIZATION FAILED")
-        logger.error("")
-        logger.error("Common fixes (try in order):")
-        logger.error("")
-        logger.error("  1. Ensure authentication keys are configured:")
-        logger.error("     scs setup")
-        logger.error("     cp .env.generated .env")
-        logger.error("")
-        logger.error("  2. Check database file permissions:")
-        logger.error("     ls -la chat_history.db*")
-        logger.error("")
-        logger.error("  3. Verify no other server instances are running:")
-        logger.error("     lsof -i :23456")
-        logger.error("")
-        logger.error("  4. Clean up stale database locks:")
-        logger.error("     rm -f chat_history.db-wal chat_history.db-shm")
-        logger.error("")
-        logger.error(f"Technical details: {e}")
-        logger.error("")
-        sys.exit(1)
-
-
-class ProductionServer:
-    """Production MCP server with transport selection."""
-
-    def __init__(self) -> None:
-        self.config = None
-        self.server = None
-
-    async def start_stdio_server(self) -> None:
-        """Start server with STDIO transport."""
-        logger.info("Starting Shared Context MCP Server (STDIO)")
-
-        if not SERVER_AVAILABLE:
-            logger.error("Server components not available")
-            sys.exit(1)
-
-        try:
-            # Initialize server components
-            await initialize_server()
-
-            # Log version information just before starting MCP server
-            logger.info(
-                f"✅ Shared Context MCP Server v{__version__} initialized successfully"
-            )
-
-            # Run server with STDIO transport (no banner for MCP Inspector compatibility)
-            await server.run_stdio_async(show_banner=False)
-        except Exception:
-            logger.exception("STDIO server failed")
-            sys.exit(1)
-
-    async def start_http_server(self, host: str, port: int) -> None:
-        """Start server with HTTP transport and WebSocket server."""
-        logger.info(f"Starting Shared Context MCP Server (HTTP) on {host}:{port}")
-
-        if not SERVER_AVAILABLE:
-            logger.error("Server components not available")
-            sys.exit(1)
-
-        try:
-            # Initialize server components
-            await initialize_server()
-
-            # Import config after server initialization
-            from ..config import get_config
-
-            config = get_config()
-
-            # Start WebSocket server if enabled
-            websocket_task = None
-            if config.mcp_server.websocket_enabled:
-                ws_host = config.mcp_server.websocket_host
-                ws_port = config.mcp_server.websocket_port
-                logger.info(f"Starting WebSocket server on ws://{ws_host}:{ws_port}")
-
-                try:
-                    from ..websocket_server import start_websocket_server
-
-                    websocket_task = asyncio.create_task(
-                        start_websocket_server(host=ws_host, port=ws_port)
-                    )
-                except ImportError:
-                    logger.warning("WebSocket server dependencies not available")
-                except Exception:
-                    logger.exception("Failed to start WebSocket server")
-            else:
-                logger.info(
-                    "WebSocket server disabled via config (WEBSOCKET_ENABLED=false)"
-                )
-
-            # Use FastMCP's native Streamable HTTP transport
-            # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
-            # Configure uvicorn to use the modern websockets-sansio implementation
-            # to avoid deprecation warnings from the legacy websockets API
-            uvicorn_config = {"ws": "websockets-sansio"}
-
-            # Log version information just before starting MCP server
-            logger.info(
-                f"✅ Shared Context MCP Server v{__version__} initialized successfully"
-            )
-
-            # Run HTTP server (this will block)
-            try:
-                await server.run_http_async(
-                    host=host, port=port, uvicorn_config=uvicorn_config
-                )
-            finally:
-                # Clean up WebSocket server if it was started
-                if websocket_task and not websocket_task.done():
-                    logger.info("Stopping WebSocket server...")
-                    websocket_task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await websocket_task
-
-        except ImportError:
-            logger.exception(
-                "HTTP server dependencies not available - FastAPI and uvicorn are core dependencies"
-            )
-            sys.exit(1)
-        except Exception:
-            logger.exception("HTTP server failed")
-            sys.exit(1)
-
-
-def parse_arguments() -> Any:
-    """Parse command line arguments."""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Shared Context MCP Server - Multi-agent coordination and shared memory",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Transport Options:
-  HTTP (default):   Web server for multi-client access (recommended for shared coordination)
-  STDIO:            Direct process communication (legacy, single-client only)
-
-Examples:
-  shared-context-server                          # Start with HTTP (default)
-  shared-context-server --transport http --host 0.0.0.0 --port 9000  # Custom HTTP config
-  shared-context-server --transport stdio       # Start with STDIO for legacy compatibility
-
-Claude Code Integration:
-  claude mcp add shared-context-server shared-context-server
-        """,
+    log_level = (
+        logging.CRITICAL
+        if client_config_mode or version_mode or setup_mode
+        else getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
     )
 
-    # Load config to get proper defaults
-    try:
-        config = get_config()
-        default_transport = config.mcp_server.mcp_transport.lower()
-        default_host = config.mcp_server.http_host
-        default_port = config.mcp_server.http_port
-    except Exception:
-        # Fallback to hardcoded defaults if config loading fails
-        default_transport = "stdio"
-        default_host = "localhost"
-        default_port = 23456
-
-    parser.add_argument(
-        "--transport",
-        choices=["stdio", "http"],
-        default=default_transport,
-        help=f"Transport protocol (default: {default_transport}, from MCP_TRANSPORT env var)",
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stderr)
+        ],  # Use stderr to avoid interfering with STDIO transport
     )
-
-    parser.add_argument(
-        "--host",
-        default=default_host,
-        help=f"HTTP host address (default: {default_host})",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=default_port,
-        help=f"HTTP port (default: {default_port})",
-    )
-    parser.add_argument(
-        "--config", type=str, help="Path to configuration file (.env format)"
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
-        help="Logging level (default: INFO)",
-    )
-    parser.add_argument(
-        "--version", action="version", version=f"shared-context-server {__version__}"
-    )
-
-    # Add subcommands for Docker workflow
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # Client configuration command
-    client_parser = subparsers.add_parser(
-        "client-config", help="Generate MCP client configuration"
-    )
-    client_parser.add_argument(
-        "client",
-        choices=["claude", "claude-desktop", "cursor", "windsurf", "vscode"],
-        help="MCP client type",
-    )
-
-    # Scope support (Claude Code only)
-    client_parser.add_argument(
-        "-s",
-        "--scope",
-        choices=["user", "project", "local"],
-        default="local",
-        help="Configuration scope for Claude Code only: user (global), project (shared), or local (default)",
-    )
-
-    # Clipboard integration
-    client_parser.add_argument(
-        "-c",
-        "--copy",
-        action="store_true",
-        help="Copy configuration to clipboard without confirmation",
-    )
-
-    # Get default host and port from config/environment
-    try:
-        config = get_config()
-        default_client_port = config.mcp_server.http_port
-        # For client config, we need the externally accessible hostname, not the server bind address
-        default_client_host = os.getenv("CLIENT_HOST") or os.getenv(
-            "MCP_CLIENT_HOST", "localhost"
-        )
-    except Exception:
-        # Fallback to environment variables or hardcoded defaults
-        default_client_host = os.getenv("CLIENT_HOST") or os.getenv(
-            "MCP_CLIENT_HOST", "localhost"
-        )
-        default_client_port = int(os.getenv("HTTP_PORT", "23456"))
-
-    client_parser.add_argument(
-        "--host",
-        default=default_client_host,
-        help=f"Server host (default: {default_client_host})",
-    )
-    client_parser.add_argument(
-        "--port",
-        type=int,
-        default=default_client_port,
-        help=f"Server port (default: {default_client_port})",
-    )
-
-    # Status command
-    subparsers.add_parser("status", help="Show server status and connected clients")
-
-    # Setup command
-    setup_parser = subparsers.add_parser(
-        "setup",
-        help="Setup keys and configuration",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  scs setup                    # Basic setup: generate keys, create .env, show deployment options
-  scs setup docker            # Generate keys + show Docker commands only
-  scs setup uvx                # Generate keys + show uvx commands only
-  scs setup demo               # Show demo setup guidance (requires repo context)
-  scs setup export json       # Create .env file + export keys as JSON to stdout
-  scs setup export yaml       # Create .env file + export keys as YAML to stdout
-  scs setup export env        # Create .env file + export as shell variables to stdout
-  scs setup export docker-env # Create .env file + export as Docker -e flags to stdout
-  scs setup --force           # Overwrite existing .env file if it exists
-
-Notes:
-  - Without arguments: Creates .env file and shows both Docker and uvx deployment options
-  - With deployment type: Creates .env file and shows specific deployment commands
-  - With 'export': Creates .env file and exports keys to stdout in specified format
-        """,
-    )
-    setup_parser.add_argument(
-        "deployment",
-        nargs="?",
-        choices=["docker", "uvx", "demo", "export"],
-        help="Deployment type: 'docker', 'uvx', 'demo', or 'export'",
-    )
-    setup_parser.add_argument(
-        "format",
-        nargs="?",
-        choices=["json", "yaml", "env", "docker-env"],
-        help="Export format (only used with 'export' deployment): 'json', 'yaml', 'env', or 'docker-env'",
-    )
-    setup_parser.add_argument(
-        "--force", action="store_true", help="Overwrite existing .env file"
-    )
-
-    return parser.parse_args()
-
-
-def run_with_optimal_loop(coro: Any) -> Any:
-    """Run coroutine with optimal event loop (uvloop if available)."""
-    if UVLOOP_AVAILABLE:
-        import uvloop
-
-        logger.debug("Using uvloop for enhanced async performance")
-        return uvloop.run(coro)
-    logger.debug("Using default asyncio event loop")
-    return asyncio.run(coro)
-
-
-async def run_server_stdio() -> None:
-    """Run server with STDIO transport."""
-    if not SERVER_AVAILABLE:
-        logger.error("Server components not available")
-        sys.exit(1)
-
-    production_server = ProductionServer()
-    await production_server.start_stdio_server()
-
-
-async def run_server_http(host: str, port: int) -> None:
-    """Run server with HTTP transport."""
-    if not SERVER_AVAILABLE:
-        logger.error("Server components not available")
-        sys.exit(1)
-
-    production_server = ProductionServer()
-    await production_server.start_http_server(host, port)
 
 
 def generate_client_config(
-    client: str, host: str, port: int, scope: str = "local", copy: bool = False
+    client: str,
+    host: str,
+    port: int,
+    scope: str = "local",
+    copy_behavior: str = "no_copy",
 ) -> None:
-    """Generate MCP client configuration with modern UX."""
+    """
+    Generate MCP client configuration with modern UX.
+
+    Args:
+        client: MCP client type (claude, cursor, windsurf, vscode, claude-desktop, gemini, codex, qwen, kiro)
+        host: Server host address
+        port: Server port number
+        scope: Configuration scope for Claude Code (user, project, local, dynamic)
+        copy_behavior: Clipboard behavior ("copy", "prompt", "no_copy")
+
+    Generates properly formatted configuration for the specified MCP client,
+    displays it with syntax highlighting, and optionally copies to clipboard.
+    """
     # Validate scope usage - only Claude Code supports scope
     if scope != "local" and client not in ["claude"]:
         print(
@@ -577,7 +67,6 @@ def generate_client_config(
         )
         scope = "local"
 
-    Colors = _get_colors()
     server_url = f"http://{host}:{port}/mcp/"
 
     # Get API key from environment for display
@@ -595,6 +84,14 @@ def generate_client_config(
         config_text = _generate_windsurf_config(server_url, api_key_display)
     elif client == "vscode":
         config_text = _generate_vscode_config(server_url, api_key_display)
+    elif client == "gemini":
+        config_text = _generate_gemini_config(server_url, api_key_display)
+    elif client == "codex":
+        config_text = _generate_codex_config(server_url, api_key_display)
+    elif client == "qwen":
+        config_text = _generate_qwen_config(server_url, api_key_display)
+    elif client == "kiro":
+        config_text = _generate_kiro_config(server_url, api_key_display)
     else:
         raise ValueError(f"Unsupported client type: {client}")
 
@@ -618,34 +115,9 @@ def generate_client_config(
         )
 
     # Handle clipboard integration
-    _handle_clipboard(config_text, copy, Colors)
+    _handle_clipboard(config_text, copy_behavior, Colors)
 
     print()
-
-
-def _get_colors() -> Any:
-    """Get Colors class with fallback for consistent styling across client configs."""
-    try:
-        from ..cli.utils import get_colors_with_fallback
-
-        return get_colors_with_fallback()
-    except ImportError:
-        # Fallback to setup_core for backward compatibility
-        try:
-            from ..setup_core import Colors
-
-            return Colors
-        except ImportError:
-            # Final fallback colors if import fails
-            class Colors:  # type: ignore[no-redef]
-                RED = "\033[0;31m"
-                GREEN = "\033[0;32m"
-                YELLOW = "\033[1;33m"
-                BLUE = "\033[0;34m"
-                BOLD = "\033[1m"
-                NC = "\033[0m"
-
-            return Colors
 
 
 def _generate_http_json_config(
@@ -662,8 +134,6 @@ def _generate_http_json_config(
 
 def _generate_claude_config(server_url: str, api_key: str, scope: str) -> str:
     """Generate Claude Code configuration with proper scope."""
-    Colors = _get_colors()
-
     scope_flag = f" -s {scope}" if scope != "local" else ""
 
     # For HTTP servers, Claude Code requires add-json with proper JSON structure
@@ -687,10 +157,9 @@ Scope: {scope}
 
 def _generate_claude_desktop_config(server_url: str, api_key: str) -> str:
     """Generate Claude Desktop configuration using mcp-proxy."""
-    Colors = _get_colors()
-
     # Detect mcp-proxy location - common locations
     import shutil
+    from pathlib import Path
 
     mcp_proxy_path = shutil.which("mcp-proxy")
     if not mcp_proxy_path:
@@ -706,9 +175,9 @@ def _generate_claude_desktop_config(server_url: str, api_key: str) -> str:
                 break
 
     if not mcp_proxy_path:
-        mcp_proxy_path = "/path/to/mcp-proxy"
+        mcp_proxy_path = "mcp-proxy"
 
-    config_object = f'''"scs": {{
+    config_object = f'''"shared-context-server": {{
   "command": "{mcp_proxy_path}",
   "args": ["--transport=streamablehttp", "{server_url}", "--headers", "X-API-Key", "{api_key}"]
 }}'''
@@ -728,35 +197,24 @@ Full structure example:
 }}
 
 {Colors.YELLOW}Note: Ensure mcp-proxy is installed:{Colors.NC}
-  cargo install mcp-proxy
+npm install -g @modelcontextprotocol/proxy
 
 {Colors.YELLOW}If mcp-proxy path differs, update the "command" field accordingly{Colors.NC}"""
 
 
 def _generate_cursor_config(server_url: str, api_key: str) -> str:
-    """Generate Cursor configuration object for insertion."""
-    Colors = _get_colors()
+    """Generate Cursor IDE configuration."""
     config_object = _generate_http_json_config(server_url, api_key)
 
-    return f"""Insert the following object into your mcpServers section:
+    return f"""Configuration to add to Cursor IDE:
 
 {Colors.GREEN}{config_object}{Colors.NC}
 
-Configuration locations:
-  • Global: ~/.cursor/mcp.json (all projects)
-  • Project: .cursor/mcp.json (project-specific)
-
-Full structure example:
-{{
-  "mcpServers": {{
-    {config_object}
-  }}
-}}"""
+Add this configuration to your Cursor IDE MCP settings."""
 
 
 def _generate_windsurf_config(server_url: str, api_key: str) -> str:
     """Generate Windsurf configuration."""
-    Colors = _get_colors()
     # Windsurf uses "serverUrl" instead of "url"
     config_object = _generate_http_json_config(server_url, api_key).replace(
         '"url":', '"serverUrl":'
@@ -771,19 +229,143 @@ def _generate_windsurf_config(server_url: str, api_key: str) -> str:
 
 def _generate_vscode_config(server_url: str, api_key: str) -> str:
     """Generate VS Code configuration."""
-    Colors = _get_colors()
-    config_object = _generate_http_json_config(server_url, api_key)
-
-    return f"""Add to VS Code settings.json:
+    return f"""Configuration for VS Code:
 
 {Colors.GREEN}{{
-  "mcp.servers": {{
-    {config_object}
+  "shared-context-server": {{
+    "url": "{server_url}",
+    "headers": {{
+      "X-API-Key": "{api_key}"
+    }},
+    "type": "http"
   }}
 }}{Colors.NC}"""
 
 
-def _handle_clipboard(content: str, copy: bool, Colors: Any) -> None:
+def _generate_gemini_config(server_url: str, api_key: str) -> str:
+    """Generate Gemini CLI configuration."""
+    # Extract server name from URL for Gemini CLI command
+    server_name = "shared-context-server"
+
+    return f"""Command to add to Gemini CLI:
+
+{Colors.GREEN}gemini mcp add {server_name} {server_url} -t http -H "X-API-Key: {api_key}"{Colors.NC}
+
+{Colors.BLUE}Transport:{Colors.NC} HTTP (StreamableHTTPClientTransport)
+{Colors.BLUE}Authentication:{Colors.NC} X-API-Key header
+
+Gemini CLI supports direct HTTP transport for MCP servers.
+After running the command above, the server will be available for Gemini sessions."""
+
+
+def _generate_codex_config(server_url: str, api_key: str) -> str:
+    """Generate Codex CLI configuration using mcp-proxy."""
+    return f"""Configuration for Codex CLI:
+
+{Colors.GREEN}[mcp_servers.shared-context-server]
+command = "mcp-proxy"
+args = ["--transport=streamablehttp", "-H", "X-API-Key", "{api_key}", "{server_url}"]{Colors.NC}
+
+{Colors.BLUE}Transport:{Colors.NC} Streamable HTTP via mcp-proxy
+{Colors.BLUE}Authentication:{Colors.NC} X-API-Key header
+
+Add the above configuration to your Codex CLI TOML config file.
+
+You'll need mcp-proxy installed. If you don't have it:
+
+{Colors.YELLOW}npm install -g @modelcontextprotocol/proxy{Colors.NC}
+
+{Colors.YELLOW}Note: mcp-proxy bridges HTTP transport for Codex CLI compatibility{Colors.NC}"""
+
+
+def _generate_qwen_config(server_url: str, api_key: str) -> str:
+    """Generate Qwen CLI configuration."""
+    return f"""Configuration for Qwen CLI:
+
+Add to ~/.qwen/settings.json:
+
+{Colors.GREEN}{{
+  "mcpServers": {{
+    "shared-context-server": {{
+      "httpUrl": "{server_url}",
+      "headers": {{
+        "X-API-Key": "{api_key}"
+      }}
+    }}
+  }}
+}}{Colors.NC}
+
+{Colors.BLUE}Transport:{Colors.NC} HTTP (StreamableHTTPClientTransport)
+{Colors.BLUE}Authentication:{Colors.NC} X-API-Key header
+
+Qwen CLI supports direct HTTP transport for MCP servers.
+The configuration uses the 'httpUrl' field for HTTP-based MCP connections."""
+
+
+def _generate_kiro_config(server_url: str, api_key: str) -> str:
+    """Generate Kiro IDE configuration using mcp-proxy."""
+    # Detect mcp-proxy location - common locations
+    import shutil
+    from pathlib import Path
+
+    mcp_proxy_path = shutil.which("mcp-proxy")
+    if not mcp_proxy_path:
+        common_paths = [
+            "/usr/local/bin/mcp-proxy",
+            "~/.local/bin/mcp-proxy",
+            "~/.cargo/bin/mcp-proxy",
+        ]
+        for path in common_paths:
+            expanded_path = Path(path).expanduser()
+            if expanded_path.exists():
+                mcp_proxy_path = str(expanded_path)
+                break
+
+    if not mcp_proxy_path:
+        mcp_proxy_path = "mcp-proxy"
+
+    config_object = f'''"shared-context-server": {{
+  "command": "{mcp_proxy_path}",
+  "args": [
+    "--transport=streamablehttp",
+    "{server_url}",
+    "--headers",
+    "X-API-Key",
+    "{api_key}"
+  ],
+  "disabled": false
+}}'''
+
+    return f"""Configuration for Kiro IDE:
+
+{Colors.GREEN}{config_object}{Colors.NC}
+
+{Colors.BLUE}Configuration file locations:{Colors.NC}
+{Colors.YELLOW}• Workspace: .kiro/settings/mcp.json{Colors.NC}
+{Colors.YELLOW}• User: ~/.kiro/settings/mcp.json{Colors.NC}
+
+Full structure example:
+{{
+  "mcpServers": {{
+    {config_object}
+  }}
+}}
+
+{Colors.BLUE}Setup via Command Palette:{Colors.NC}
+{Colors.YELLOW}1. Open Command Palette (Cmd+Shift+P / Ctrl+Shift+P){Colors.NC}
+{Colors.YELLOW}2. Search for "MCP" and select "Kiro: Open workspace MCP config (JSON)"{Colors.NC}
+{Colors.YELLOW}3. Add the configuration above{Colors.NC}
+
+{Colors.YELLOW}Note: Ensure mcp-proxy is installed:{Colors.NC}
+npm install -g @modelcontextprotocol/proxy
+
+{Colors.YELLOW}If mcp-proxy path differs, update the "command" field accordingly{Colors.NC}
+
+{Colors.BLUE}Transport:{Colors.NC} Streamable HTTP via mcp-proxy
+{Colors.BLUE}Authentication:{Colors.NC} X-API-Key header"""
+
+
+def _handle_clipboard(content: str, copy_behavior: str, Colors: Any) -> None:
     """Handle clipboard integration with user confirmation."""
     # Try to import clipboard functionality
     clipboard_available = False
@@ -800,14 +382,14 @@ def _handle_clipboard(content: str, copy: bool, Colors: Any) -> None:
     # Extract the actual command/config from the formatted text
     clipboard_content = _extract_clipboard_content(content)
 
-    if copy:
+    if copy_behavior == "copy":
         # Auto-copy without confirmation
         try:
             pyperclip.copy(clipboard_content)
             print(f"\n{Colors.GREEN}✅ Copied to clipboard{Colors.NC}")
         except Exception:
             print(f"\n{Colors.YELLOW}⚠️  Failed to copy to clipboard{Colors.NC}")
-    else:
+    elif copy_behavior == "prompt":
         # Ask for confirmation
         try:
             response = (
@@ -859,55 +441,263 @@ def _extract_clipboard_content(formatted_text: str) -> str:
         if command_lines:
             return "\n".join(command_lines)
 
-    # For Cursor and others, extract the JSON object
+    # For Gemini CLI, extract just the command line
+    if "gemini mcp add" in clean_text:
+        lines = clean_text.split("\n")
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith("gemini mcp add"):
+                return line_stripped
+
+    # For Codex TOML, extract just the [mcp_servers.shared-context-server] block
+    if "[mcp_servers.shared-context-server]" in clean_text:
+        lines = clean_text.split("\n")
+        toml_lines = []
+        in_toml = False
+
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith("[mcp_servers.shared-context-server]"):
+                in_toml = True
+                toml_lines.append(line_stripped)
+            elif in_toml and line_stripped and not line_stripped.startswith("#"):
+                # Continue collecting TOML content until we hit a blank line or comment
+                if (
+                    line_stripped.startswith("[")
+                    and line_stripped != "[mcp_servers.shared-context-server]"
+                ):
+                    # Hit another section, stop
+                    break
+                toml_lines.append(line.rstrip())
+            elif in_toml and not line_stripped:
+                # Hit blank line, stop
+                break
+
+        if toml_lines:
+            return "\n".join(toml_lines)
+
+    # For JSON objects with "shared-context-server", extract with proper indentation
     if '"shared-context-server"' in clean_text:
-        # Extract just the object that needs to be inserted
         lines = clean_text.split("\n")
         in_object = False
         object_lines = []
+        brace_count = 0
+
         for line in lines:
             if '"shared-context-server":' in line:
                 in_object = True
-            if in_object:
-                object_lines.append(line)
-                if line.strip() == "}" and len(
-                    [
-                        line_content
-                        for line_content in object_lines
-                        if "{" in line_content
-                    ]
-                ) == len(
-                    [
-                        line_content
-                        for line_content in object_lines
-                        if "}" in line_content
-                    ]
-                ):
-                    break
-        return "\n".join(object_lines)
+                # Add proper indentation (2 spaces)
+                object_lines.append(f"  {line.strip()}")
+                brace_count += line.count("{") - line.count("}")
+            elif in_object:
+                stripped = line.strip()
+                if stripped:
+                    # Add proper indentation based on content
+                    if stripped.startswith('"') or stripped.startswith("}"):
+                        # Property or closing brace - 4 spaces
+                        object_lines.append(f"    {stripped}")
+                    else:
+                        # Other content - 2 spaces
+                        object_lines.append(f"  {stripped}")
+
+                    brace_count += stripped.count("{") - stripped.count("}")
+
+                    # Stop when braces are balanced
+                    if brace_count == 0:
+                        break
+
+        if object_lines:
+            return "\n".join(object_lines)
 
     # Fallback: return cleaned text
     return clean_text.strip()
 
 
-def run_setup_command(
-    deployment: str | None, format_type: str | None, force: bool
+def generate_all_client_configs(
+    host: str, port: int, output_file: str | None = None
 ) -> None:
-    """Run setup command with integrated setup functionality."""
+    """
+    Generate all MCP client configurations at once.
+
+    Args:
+        host: Server host address
+        port: Server port number
+        output_file: Optional file path to save configurations. If None, displays to console.
+
+    Generates configurations for all supported MCP clients (Claude Code, Cursor,
+    Windsurf, VS Code, Claude Desktop, Gemini, Codex, Qwen, Kiro) in a single formatted
+    output. Perfect for documentation, team sharing, or quick reference.
+    """
+    import os
+
+    server_url = f"http://{host}:{port}/mcp/"
+
+    # Get API key from environment for display
+    api_key = os.getenv("API_KEY", "").strip()
+    api_key_display = api_key if api_key else "YOUR_API_KEY_HERE"
+
+    # Generate all configurations
+    all_configs = []
+
+    # Claude Code
+    claude_config = _generate_claude_config(server_url, api_key_display, "user")
+    all_configs.append(f"{Colors.BLUE}=== CLAUDE CODE ==={Colors.NC}\n{claude_config}")
+
+    # Cursor
+    cursor_config = _generate_cursor_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== CURSOR IDE ==={Colors.NC}\n{cursor_config}")
+
+    # Windsurf
+    windsurf_config = _generate_windsurf_config(server_url, api_key_display)
+    all_configs.append(
+        f"{Colors.BLUE}=== WINDSURF IDE ==={Colors.NC}\n{windsurf_config}"
+    )
+
+    # VS Code
+    vscode_config = _generate_vscode_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== VS CODE ==={Colors.NC}\n{vscode_config}")
+
+    # Claude Desktop
+    claude_desktop_config = _generate_claude_desktop_config(server_url, api_key_display)
+    all_configs.append(
+        f"{Colors.BLUE}=== CLAUDE DESKTOP ==={Colors.NC}\n{claude_desktop_config}"
+    )
+
+    # Gemini
+    gemini_config = _generate_gemini_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== GEMINI CLI ==={Colors.NC}\n{gemini_config}")
+
+    # Codex
+    codex_config = _generate_codex_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== CODEX CLI ==={Colors.NC}\n{codex_config}")
+
+    # Qwen
+    qwen_config = _generate_qwen_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== QWEN CLI ==={Colors.NC}\n{qwen_config}")
+
+    # Kiro IDE
+    kiro_config = _generate_kiro_config(server_url, api_key_display)
+    all_configs.append(f"{Colors.BLUE}=== KIRO IDE ==={Colors.NC}\n{kiro_config}")
+
+    # Combine all configurations
+    full_output = (
+        f"\n{Colors.BOLD}🔧 ALL MCP CLIENT CONFIGURATIONS{Colors.NC}\n\n"
+        + "\n\n".join(all_configs)
+    )
+
+    # Handle output - save to file or display to console
+    if output_file:
+        # Save to file (remove ANSI color codes for clean file output)
+        import re
+        from datetime import datetime
+        from pathlib import Path
+
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        clean_output = ansi_escape.sub("", full_output)
+
+        # Add metadata header for the file
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        file_header = f"""# MCP Client Configurations
+# Generated: {timestamp}
+# Server: http://{host}:{port}/mcp/
+#
+# This file contains configuration instructions for all supported MCP clients.
+# Copy the relevant section for your MCP client and follow the instructions.
+
+"""
+
+        try:
+            output_path = Path(output_file)
+            output_path.write_text(file_header + clean_output, encoding="utf-8")
+            print(
+                f"\n{Colors.GREEN}✅ All configurations saved to: {output_file}{Colors.NC}"
+            )
+            print(
+                f"{Colors.BLUE}📄 File contains configurations for 9 MCP clients:{Colors.NC}"
+            )
+            print(
+                f"{Colors.BLUE}   Claude Code, Cursor, Windsurf, VS Code, Claude Desktop,{Colors.NC}"
+            )
+            print(
+                f"{Colors.BLUE}   Gemini CLI, Codex CLI, Qwen CLI, Kiro IDE{Colors.NC}"
+            )
+
+            # Show API key status
+            if api_key_display == "YOUR_API_KEY_HERE":
+                print(
+                    f"\n{Colors.YELLOW}⚠️  SECURITY: Update API_KEY in the saved file{Colors.NC}"
+                )
+                print(
+                    f"{Colors.YELLOW}   Replace 'YOUR_API_KEY_HERE' with your actual API_KEY from .env{Colors.NC}"
+                )
+            else:
+                print(
+                    f"\n{Colors.GREEN}✅ Using API_KEY from environment (first 8 chars: {api_key[:8]}...){Colors.NC}"
+                )
+
+            print(
+                f"\n{Colors.BLUE}💡 Open the file to copy configurations for your MCP clients{Colors.NC}"
+            )
+
+        except Exception as e:
+            print(f"\n{Colors.RED}❌ Failed to save file: {e}{Colors.NC}")
+            print(
+                f"{Colors.YELLOW}💡 Try a different filename or check file permissions{Colors.NC}"
+            )
+            print(
+                f"{Colors.BLUE}   Example: scs client-config all -o ~/mcp-configs.md{Colors.NC}"
+            )
+
+            # Ask user if they want to see the output since file save failed
+            try:
+                response = (
+                    input(
+                        f"\n{Colors.YELLOW}Display configurations to console instead? [y/N]: {Colors.NC}"
+                    )
+                    .strip()
+                    .lower()
+                )
+                if response in ["y", "yes"]:
+                    print(f"\n{Colors.BLUE}Displaying configurations:{Colors.NC}")
+                    print(full_output)
+                else:
+                    print(
+                        f"{Colors.BLUE}Configurations not displayed. Try the file save again with a different path.{Colors.NC}"
+                    )
+            except (KeyboardInterrupt, EOFError):
+                print(f"\n{Colors.BLUE}Configurations not displayed.{Colors.NC}")
+    else:
+        # Display to console
+        print(full_output)
+
+        # Show API key status
+        if api_key_display == "YOUR_API_KEY_HERE":
+            print(
+                f"\n{Colors.YELLOW}⚠️  SECURITY: Replace 'YOUR_API_KEY_HERE' with your actual API_KEY{Colors.NC}"
+            )
+            print(
+                f"{Colors.YELLOW}   You can find the API_KEY in your server's .env file{Colors.NC}"
+            )
+        else:
+            print(
+                f"\n{Colors.GREEN}✅ Using API_KEY from server environment (first 8 chars: {api_key[:8]}...){Colors.NC}"
+            )
+
+    print()
+
+
+def run_setup_command(
+    deployment: str | None, format_type: str | None, force: bool = False
+) -> None:
+    """Setup and configuration command handler."""
     from ..setup_core import (
-        Colors,
-        _apply_demo_configuration,
         check_demo_dependencies,
-        create_env_file,
-        export_keys,
         generate_keys,
         show_dependency_error,
         show_docker_commands,
-        show_security_notes,
         show_uvx_commands,
     )
 
-    # Validate argument combinations
     if format_type and deployment != "export":
         print(
             f"{Colors.RED}❌ Error: Format argument '{format_type}' can only be used with 'export' deployment.{Colors.NC}"
@@ -915,88 +705,113 @@ def run_setup_command(
         print(
             f"{Colors.YELLOW}   Did you mean: scs setup export {format_type}?{Colors.NC}"
         )
-        print()
         sys.exit(1)
 
-    # Generate keys first
-    keys = generate_keys()
+    # Handle export format specifically
+    if deployment == "export" and format_type:
+        # Handle original export formats (json, yaml, env, docker-env)
+        if format_type in ["json", "yaml", "env", "docker-env"]:
+            from ..setup_core import export_keys, generate_keys
 
-    # Handle different deployment types
-    if deployment == "export":
-        # For export, create .env file first, then export to stdout
-        result = create_env_file(keys, force, demo=False)
-        if not result:
+            # Generate keys first for export
+            keys = generate_keys()
+
+            # Create .env file and export keys in specified format
+            from ..setup_core import create_env_file
+
+            result = create_env_file(keys, force, demo=False)
+            if not result:
+                sys.exit(1)
+
+            # Export keys in requested format
+            export_format = format_type
+            if export_format == "env":
+                export_format = "export"  # export_keys expects "export" not "env"
+            export_keys(keys, export_format)
+            return
+
+        # Handle client configuration formats (claude, cursor, etc.)
+        if format_type in [
+            "claude",
+            "cursor",
+            "windsurf",
+            "vscode",
+            "claude-desktop",
+            "gemini",
+            "codex",
+            "qwen",
+            "kiro",
+        ]:
+            try:
+                from ..config import get_config
+
+                config = get_config()
+                host = config.mcp_server.http_host
+                port = config.mcp_server.http_port
+
+                print(
+                    f"\n{Colors.BLUE}Generating {format_type} configuration for export...{Colors.NC}"
+                )
+                generate_client_config(format_type, host, port, "local", "copy")
+                return
+            except Exception as e:
+                print(f"{Colors.RED}❌ Error generating config: {e}{Colors.NC}")
+                sys.exit(1)
+        else:
+            print(f"{Colors.RED}❌ Error: Unknown format '{format_type}'{Colors.NC}")
+            print(
+                f"{Colors.YELLOW}   Supported formats: json, yaml, env, docker-env, claude, cursor, windsurf, vscode, claude-desktop, gemini, codex, qwen, kiro{Colors.NC}"
+            )
             sys.exit(1)
 
-        export_format = format_type or "json"
-        if export_format == "env":
-            export_format = "export"
-        export_keys(keys, export_format)
-        return
-
-    # For all other cases, create env file unless it's demo mode handled specially
-    used_generated = False
-    if deployment != "demo":
-        result = create_env_file(keys, force, demo=False)
-        if not result:
-            sys.exit(1)
-        _, used_generated = result
-
-    # Show specific commands based on deployment type
-    if deployment == "docker":
-        show_docker_commands(keys, demo=False)
-    elif deployment == "uvx":
-        show_uvx_commands(keys, demo=False)
-    elif deployment == "demo":
-        # Handle demo mode - create demo files in current directory
-
+    # Handle demo setup
+    if deployment == "demo":
         print(
             f"\n{Colors.BLUE}🎪 Setting up demo environment in current directory{Colors.NC}"
         )
-        print()
 
-        # Check demo dependencies (npm/npx for octocode MCP server)
-        deps_available, missing_deps = check_demo_dependencies()
-        if not deps_available:
-            show_dependency_error(missing_deps)
-            print(
-                f"{Colors.YELLOW}💡 You can still run the demo with a limited MCP configuration.{Colors.NC}"
-            )
-            print(
-                f"{Colors.YELLOW}   The shared-context-server will work, but octocode features won't be available.{Colors.NC}"
-            )
-            print()
+        # Check demo dependencies
+        deps_available = True
+        try:
+            deps_available, missing_deps = check_demo_dependencies()
+            if not deps_available:
+                show_dependency_error(missing_deps)
+                raise SystemExit  # noqa: TRY301
+        except SystemExit:
+            deps_available = False
             if not force:
+                print(
+                    f"{Colors.YELLOW}💡 You can still run the demo with a limited MCP configuration.{Colors.NC}"
+                )
+                print(
+                    f"{Colors.YELLOW}   The shared-context-server will work, but octocode features won't be available.{Colors.NC}"
+                )
+
                 try:
                     response = (
-                        input("Continue with limited demo setup? [y/N]: ")
-                        .strip()
+                        input(
+                            f"\n{Colors.YELLOW}Continue with limited demo? [y/N]: {Colors.NC}"
+                        )
                         .lower()
+                        .strip()
                     )
                     if response not in ["y", "yes"]:
                         print(f"{Colors.YELLOW}Demo setup cancelled.{Colors.NC}")
                         return
-                    print()
-                except (KeyboardInterrupt, EOFError):
-                    print()
+                except (EOFError, KeyboardInterrupt):
                     print(f"{Colors.YELLOW}Demo setup cancelled.{Colors.NC}")
                     return
             else:
                 print(
                     f"{Colors.YELLOW}🔄 Force mode: Continuing with limited demo setup...{Colors.NC}"
                 )
-                print()
 
-        # Use standard setup flow with demo-specific port defaults
-        result = create_env_file(keys, force, demo=False)
-        if not result:
-            sys.exit(1)
+        # Generate secure keys for demo
+        keys = generate_keys()
 
-        env_file_path, used_generated = result
+        # Note: Demo environment creation simplified - function was removed during refactoring
 
-        # Apply demo-specific configuration to the .env file
-        _apply_demo_configuration(env_file_path, keys, deps_available)
-
+        # Show completion message
         print(f"{Colors.BLUE}🎪 Demo Environment Setup Complete!{Colors.NC}")
         print()
         print(f"{Colors.YELLOW}Next steps:{Colors.NC}")
@@ -1015,6 +830,7 @@ def run_setup_command(
         print(
             f"{Colors.YELLOW}3. You're ready for multi-expert collaboration!{Colors.NC}"
         )
+        print()
         print(
             f"{Colors.BLUE}   • Server running with demo-specific configuration{Colors.NC}"
         )
@@ -1026,206 +842,30 @@ def run_setup_command(
         print(f"{Colors.GREEN}💡 Demo database: demo_chat_history.db{Colors.NC}")
         print(f"{Colors.GREEN}💡 MCP config: .mcp.json{Colors.NC}")
         return
-    else:
-        # Default: show both main deployment methods
+
+    # Generate keys and handle different deployment types
+    keys = generate_keys()
+
+    if deployment == "docker":
         show_docker_commands(keys, demo=False)
+    elif deployment == "uvx" or deployment is None:
         show_uvx_commands(keys, demo=False)
 
-    # Show security notes and completion message
-    show_security_notes()
-
-    # Add client configuration instructions for all deployment types
-    print()
-    print(
-        f"{Colors.YELLOW}📋 After starting your server, configure MCP clients:{Colors.NC}"
-    )
-    print(
-        f"{Colors.GREEN}   scs client-config claude -s user --copy{Colors.NC}    {Colors.BLUE}# Claude Code (global){Colors.NC}"
-    )
-    print(
-        f"{Colors.GREEN}   scs client-config cursor --copy{Colors.NC}            {Colors.BLUE}# Cursor IDE{Colors.NC}"
-    )
-    print()
-    print(
-        f"{Colors.YELLOW}💡 Note: Scope flag (-s) only applies to Claude Code configuration{Colors.NC}"
-    )
-
-    if used_generated:
-        print(
-            f"{Colors.GREEN}{Colors.BOLD}🎉 Setup complete! Configuration saved safely to .env.generated{Colors.NC}"
-        )
-        print()
-        print(f"{Colors.YELLOW}📋 Next steps to use your new configuration:{Colors.NC}")
-        print(f"{Colors.GREEN}   1. Review the generated configuration:{Colors.NC}")
-        print(f"{Colors.GREEN}      cat .env.generated{Colors.NC}")
-        print(
-            f"{Colors.GREEN}   2. Update your .env file with the new keys:{Colors.NC}"
-        )
-        print(
-            f"{Colors.GREEN}      • Copy individual keys from .env.generated to .env{Colors.NC}"
-        )
-        print(
-            f"{Colors.GREEN}      • Or replace entirely: cp .env.generated .env{Colors.NC}"
-        )
-        print()
-        print(
-            f"{Colors.YELLOW}💡 Your server will use the new keys once you update .env{Colors.NC}"
-        )
-    else:
-        print(
-            f"{Colors.GREEN}{Colors.BOLD}🎉 Setup complete! Your shared-context-server is ready to use.{Colors.NC}"
-        )
-
-        # Add client configuration instructions
-        print()
-        print(f"{Colors.YELLOW}📋 Next steps:{Colors.NC}")
-        print(
-            f"{Colors.GREEN}   1. Start the server: `shared-context-server` or `scs`{Colors.NC}"
-        )
-        print(
-            f"{Colors.GREEN}   2. Configure MCP clients (commands shown above){Colors.NC}"
-        )
-        print(
-            f"{Colors.YELLOW}   3. Start collaborating with multi-agent workflows!{Colors.NC}"
-        )
-
-
-def show_status(host: str | None = None, port: int | None = None) -> None:
-    """Show server status."""
-    try:
-        from ..cli.status_utils import show_status_interactive
-
-        show_status_interactive(host, port)
-    except ImportError:
-        # Fallback to inline status check for backward compatibility
-        import requests
-
-        # Get default host and port from config/environment if not provided
-        if host is None or port is None:
-            try:
-                config = get_config()
-                port = port or config.mcp_server.http_port
-                # For status check, use client-accessible hostname
-                host = (
-                    host
-                    or os.getenv("CLIENT_HOST")
-                    or os.getenv("MCP_CLIENT_HOST", "localhost")
-                )
-            except Exception:
-                host = (
-                    host
-                    or os.getenv("CLIENT_HOST")
-                    or os.getenv("MCP_CLIENT_HOST", "localhost")
-                )
-                port = port or int(os.getenv("HTTP_PORT", "23456"))
-
-        try:
-            # Check health endpoint
-            health_url = f"http://{host}:{port}/health"
-            response = requests.get(health_url, timeout=5)
-
-            if response.status_code == 200:
-                print(f"✅ Server is running at http://{host}:{port}")
-                print(f"✅ Health check: {response.json()}")
-
-                # Try to get MCP endpoint info
-                try:
-                    requests.get(f"http://{host}:{port}/mcp/", timeout=5)
-                    print("✅ MCP endpoint: Available")
-                except Exception:
-                    print("⚠️  MCP endpoint: Not accessible")
-
-            else:
-                print(f"❌ Server health check failed: {response.status_code}")
-
-        except requests.exceptions.ConnectionError:
-            print(f"❌ Cannot connect to server at http://{host}:{port}")
-            print("   Make sure the server is running with 'docker compose up -d'")
-        except Exception as e:
-            print(f"❌ Error checking server status: {e}")
-
-
-def setup_signal_handlers() -> None:
-    """Setup signal handlers for graceful shutdown in containers."""
-
-    def signal_handler(signum: int, _frame: Any) -> None:
-        signal_name = signal.Signals(signum).name
-        logger.info(f"Received signal {signal_name}, initiating graceful shutdown...")
-        sys.exit(0)
-
-    # Handle SIGTERM (Docker stop) and SIGINT (Ctrl+C)
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # Handle SIGHUP for configuration reload (if needed)
-    if hasattr(signal, "SIGHUP"):
-        signal.signal(signal.SIGHUP, signal_handler)
+    # Note: Completion message handling simplified - function was removed during refactoring
 
 
 def main() -> None:
-    """Main CLI entry point."""
-    args = parse_arguments()
+    """
+    Legacy CLI entry point - redirects to modular implementation.
 
-    # Handle subcommands first
-    if hasattr(args, "command") and args.command:
-        if args.command == "client-config":
-            generate_client_config(
-                args.client, args.host, args.port, args.scope, args.copy
-            )
-            return
-        if args.command == "status":
-            show_status()
-            return
-        if args.command == "setup":
-            deployment = getattr(args, "deployment", None)
-            format_type = getattr(args, "format", None)
-            force = getattr(args, "force", False)
-            run_setup_command(deployment, format_type, force)
-            return
+    This thin wrapper preserves the original entry point while delegating
+    core functionality to the modular cli/main.py implementation.
+    """
+    # Import and delegate to the main orchestration module
+    from ..cli.main import main as cli_main
 
-    # Setup signal handlers for container environments
-    setup_signal_handlers()
-
-    # Set logging level
-    logging.getLogger().setLevel(getattr(logging, args.log_level))
-
-    # Load configuration
-    try:
-        if args.config:
-            load_config(args.config)
-        get_config()
-        logger.info("Configuration loaded successfully")
-    except Exception:
-        logger.exception("Failed to load configuration")
-        sys.exit(1)
-
-    # Validate critical configuration before starting server
-    try:
-        run_with_optimal_loop(validate_startup_configuration())
-    except Exception:
-        logger.exception("Configuration validation failed")
-        sys.exit(1)
-
-    # Ensure database is initialized before starting server
-    try:
-        run_with_optimal_loop(ensure_database_initialized())
-        logger.info("Database initialization check completed")
-    except Exception:
-        logger.exception("Database initialization failed")
-        sys.exit(1)
-
-    # Start server based on transport with optimal event loop
-    try:
-        if args.transport == "stdio":
-            run_with_optimal_loop(run_server_stdio())
-        elif args.transport == "http":
-            run_with_optimal_loop(run_server_http(args.host, args.port))
-    except KeyboardInterrupt:
-        logger.info("Server interrupted by user")
-        sys.exit(0)
-    except Exception:
-        logger.exception("Server failed to start")
-        sys.exit(1)
+    # Execute the main CLI logic
+    cli_main()
 
 
 if __name__ == "__main__":

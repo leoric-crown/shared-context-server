@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 try:
     from cryptography.fernet import Fernet
@@ -27,21 +27,8 @@ except ImportError:
     sys.exit(1)
 
 
-class Colors:
-    """ANSI color codes for terminal output"""
-
-    RED = "\033[0;31m"
-    GREEN = "\033[0;32m"
-    YELLOW = "\033[1;33m"
-    BLUE = "\033[0;34m"
-    BOLD = "\033[1m"
-    NC = "\033[0m"  # No Color
-
-
-def print_color(color: str, *args: Any, **kwargs: Any) -> None:
-    """Print with color formatting"""
-    message = " ".join(str(arg) for arg in args)
-    print(f"{color}{message}{Colors.NC}", **kwargs)
+# Import centralized color infrastructure
+from .cli.utils import Colors, print_color
 
 
 def _raise_docker_error(return_code: int) -> None:

@@ -102,11 +102,12 @@ CORS_ORIGINS=*                      # CORS origins for web clients
 
 ### Claude Code
 ```bash
-# Add server configuration
-claude mcp add-json shared-context-server '{
-  "command": "mcp-proxy",
-  "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]
-}'
+# Generate and copy configuration automatically (recommended)
+scs client-config claude -s user -c
+
+# Or generate for specific scope
+scs client-config claude -s project -c  # Project-specific
+scs client-config claude -s local -c    # Local only
 
 # Verify connection
 claude mcp list

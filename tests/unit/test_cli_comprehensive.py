@@ -12,7 +12,7 @@ import pytest
 
 # Import the CLI module - handle import failures gracefully
 try:
-    from shared_context_server.scripts.cli import (
+    from shared_context_server.cli.main import (
         SERVER_AVAILABLE,
         UVLOOP_AVAILABLE,
         main,
@@ -155,12 +155,12 @@ class TestEventLoopSetup:
             return "test"
 
         with (
-            patch("shared_context_server.scripts.cli.UVLOOP_AVAILABLE", True),
-            patch("uvloop.run", side_effect=mock_uvloop_run) as mock_run,
+            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", True),
+            patch("uvloop.run", side_effect=mock_uvloop_run) as mock_uvloop_run,
         ):
             coro = dummy_coro()
             result = run_with_optimal_loop(coro)
-            mock_run.assert_called_once()
+            mock_uvloop_run.assert_called_once_with(coro)
             assert result == "test"
 
     def test_run_with_optimal_loop_without_uvloop(self):
@@ -176,7 +176,7 @@ class TestEventLoopSetup:
             return "test"
 
         with (
-            patch("shared_context_server.scripts.cli.UVLOOP_AVAILABLE", False),
+            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", False),
             patch("asyncio.run", side_effect=mock_asyncio_run) as mock_run,
         ):
             coro = dummy_coro()
@@ -190,22 +190,29 @@ class TestEventLoopSetup:
         async def dummy_coro():
             return "test"
 
-        coro = dummy_coro()  # Create coroutine once
+        def mock_asyncio_run(coro):
+            # Properly close the coroutine to prevent warnings
+            if asyncio.iscoroutine(coro):
+                coro.close()
+            return "test"
 
         with (
-            patch("shared_context_server.scripts.cli.UVLOOP_AVAILABLE", True),
+            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", True),
             # Even if UVLOOP_AVAILABLE is True, the import inside the function could fail
             patch("uvloop.run", side_effect=ImportError("uvloop not available")),
             # Should handle the ImportError gracefully by falling back
-            patch("asyncio.run", return_value="test"),
+            patch("asyncio.run", side_effect=mock_asyncio_run),
         ):
+            coro = dummy_coro()  # Create coroutine once
             try:
-                run_with_optimal_loop(coro)
-                # If it doesn't fall back automatically, the ImportError would propagate
+                result = run_with_optimal_loop(coro)
+                # Should fallback to asyncio.run and return "test"
+                assert result == "test"
             except ImportError:
                 # This is acceptable behavior - the function doesn't need to handle this
                 # Close the coroutine to prevent the warning
-                coro.close()
+                if asyncio.iscoroutine(coro):
+                    coro.close()
                 pass
 
 
@@ -219,7 +226,7 @@ class TestServerRunners:
             pytest.skip("Server not available")
 
         with patch(
-            "shared_context_server.scripts.cli.ProductionServer"
+            "shared_context_server.cli.main.ProductionServer"
         ) as mock_server_class:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
@@ -227,7 +234,7 @@ class TestServerRunners:
             await run_server_stdio()
 
             mock_server_class.assert_called_once()
-            mock_server.start_stdio_server.assert_called_once()
+            mock_server.start_stdio.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_server_http(self):
@@ -236,7 +243,7 @@ class TestServerRunners:
             pytest.skip("Server not available")
 
         with patch(
-            "shared_context_server.scripts.cli.ProductionServer"
+            "shared_context_server.cli.main.ProductionServer"
         ) as mock_server_class:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
@@ -244,7 +251,7 @@ class TestServerRunners:
             await run_server_http("127.0.0.1", 8080)
 
             mock_server_class.assert_called_once()
-            mock_server.start_http_server.assert_called_once_with("127.0.0.1", 8080)
+            mock_server.start_http.assert_called_once_with("127.0.0.1", 8080)
 
     @pytest.mark.asyncio
     async def test_run_server_http_with_params(self):
@@ -253,7 +260,7 @@ class TestServerRunners:
             pytest.skip("Server not available")
 
         with patch(
-            "shared_context_server.scripts.cli.ProductionServer"
+            "shared_context_server.cli.main.ProductionServer"
         ) as mock_server_class:
             mock_server = AsyncMock()
             mock_server_class.return_value = mock_server
@@ -261,7 +268,7 @@ class TestServerRunners:
             await run_server_http("localhost", 9000)
 
             mock_server_class.assert_called_once()
-            mock_server.start_http_server.assert_called_once_with("localhost", 9000)
+            mock_server.start_http.assert_called_once_with("localhost", 9000)
 
     @pytest.mark.asyncio
     async def test_run_server_stdio_exception_handling(self):
@@ -270,10 +277,10 @@ class TestServerRunners:
             pytest.skip("Server not available")
 
         with patch(
-            "shared_context_server.scripts.cli.ProductionServer"
+            "shared_context_server.cli.main.ProductionServer"
         ) as mock_server_class:
             mock_server = AsyncMock()
-            mock_server.start_stdio_server.side_effect = Exception("Server error")
+            mock_server.start_stdio.side_effect = Exception("Server error")
             mock_server_class.return_value = mock_server
 
             # Should handle exceptions gracefully
@@ -287,10 +294,10 @@ class TestServerRunners:
             pytest.skip("Server not available")
 
         with patch(
-            "shared_context_server.scripts.cli.ProductionServer"
+            "shared_context_server.cli.main.ProductionServer"
         ) as mock_server_class:
             mock_server = AsyncMock()
-            mock_server.start_http_server.side_effect = Exception("HTTP error")
+            mock_server.start_http.side_effect = Exception("HTTP error")
             mock_server_class.return_value = mock_server
 
             with pytest.raises(Exception, match="HTTP error"):
@@ -310,7 +317,7 @@ class TestMainFunction:
         with (
             patch("sys.argv", test_args),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -337,7 +344,7 @@ class TestMainFunction:
         with (
             patch("sys.argv", test_args),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -354,7 +361,7 @@ class TestMainFunction:
             patch("sys.argv", test_args),
             patch("logging.getLogger") as mock_logger,
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ),
         ):
@@ -366,7 +373,7 @@ class TestMainFunction:
     def test_main_server_not_available(self):
         """Test main function when server is not available."""
         with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             main()
@@ -393,7 +400,7 @@ class TestMainFunction:
 
         with (
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=mock_run_with_optimal_loop,
             ),
             pytest.raises(SystemExit),
@@ -413,7 +420,7 @@ class TestMainFunction:
 
         with (
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=mock_run_with_optimal_loop,
             ),
             pytest.raises(SystemExit),  # CLI main() calls sys.exit on errors
@@ -459,7 +466,7 @@ class TestEnvironmentIntegration:
 
         with (
             patch.dict(os.environ, test_env, clear=True),
-            patch("shared_context_server.scripts.cli.load_config") as mock_load,
+            patch("shared_context_server.cli.main.load_config") as mock_load,
         ):
             mock_config = MagicMock()
             mock_config.database_url = "cli_test.db"
@@ -506,7 +513,7 @@ class TestCLIEdgeCases:
         with (
             patch("sys.argv", ["cli.py"]),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -520,7 +527,7 @@ class TestCLIEdgeCases:
         assert SERVER_AVAILABLE
 
         # Test what happens when patched to False
-        with patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False):
+        with patch("shared_context_server.cli.main.SERVER_AVAILABLE", False):
             # The patch doesn't affect the imported name, so test the module state
             assert SERVER_AVAILABLE  # Original import is still True
 
@@ -537,7 +544,7 @@ class TestCLIEdgeCases:
         # Test that main() uses asyncio.run()
         with (
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
             patch("sys.argv", ["cli.py"]),
@@ -572,11 +579,11 @@ class TestCLIEdgeCases:
 
         with (
             patch(
-                "shared_context_server.scripts.cli.parse_arguments",
+                "shared_context_server.cli.main.parse_arguments",
                 return_value=mock_args,
             ),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -609,7 +616,7 @@ class TestRealWorldScenarios:
         with (
             patch("sys.argv", test_args),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -628,7 +635,7 @@ class TestRealWorldScenarios:
             patch("sys.argv", test_args),
             patch.dict(os.environ, {"LOG_LEVEL": "WARNING"}),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -652,11 +659,11 @@ class TestRealWorldScenarios:
         with (
             patch.dict(os.environ, {"ISOLATED_ENV": "true"}),
             patch(
-                "shared_context_server.scripts.cli.parse_arguments",
+                "shared_context_server.cli.main.parse_arguments",
                 return_value=mock_args,
             ),
             patch(
-                "shared_context_server.scripts.cli.run_with_optimal_loop",
+                "shared_context_server.cli.main.run_with_optimal_loop",
                 side_effect=create_async_run_mock(),
             ) as mock_run_loop,
         ):
@@ -697,7 +704,7 @@ class TestClientConfigGeneration:
         captured = capsys.readouterr()
         assert "=== CURSOR MCP Client Configuration ===" in captured.out
         assert "http://example.com:9000/mcp/" in captured.out
-        assert "mcp.json" in captured.out
+        assert "Add this configuration to your Cursor IDE MCP settings" in captured.out
 
     def test_generate_client_config_windsurf(self, capsys):
         """Test Windsurf client configuration generation."""
@@ -728,7 +735,7 @@ class TestClientConfigGeneration:
         captured = capsys.readouterr()
         assert "=== VSCODE MCP Client Configuration ===" in captured.out
         assert "http://127.0.0.1:3000/mcp/" in captured.out
-        assert "VS Code settings.json" in captured.out
+        assert "Configuration for VS Code" in captured.out
 
 
 class TestImportErrorHandling:
@@ -739,7 +746,7 @@ class TestImportErrorHandling:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import UVLOOP_AVAILABLE
+        from shared_context_server.cli.main import UVLOOP_AVAILABLE
 
         # The flag should be a boolean
         assert isinstance(UVLOOP_AVAILABLE, bool)
@@ -749,7 +756,7 @@ class TestImportErrorHandling:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import SERVER_AVAILABLE
+        from shared_context_server.cli.main import SERVER_AVAILABLE
 
         # The flag should be a boolean
         assert isinstance(SERVER_AVAILABLE, bool)
@@ -763,7 +770,7 @@ class TestProductionServerClass:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import ProductionServer
+        from shared_context_server.cli.main import ProductionServer
 
         server = ProductionServer()
         assert server.config is None
@@ -775,16 +782,16 @@ class TestProductionServerClass:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import ProductionServer
+        from shared_context_server.cli.main import ProductionServer
 
         server = ProductionServer()
 
         # Mock SERVER_AVAILABLE to False
         with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
-            await server.start_stdio_server()
+            await server.start_stdio()
 
     @pytest.mark.asyncio
     async def test_http_server_no_server_available(self):
@@ -792,16 +799,16 @@ class TestProductionServerClass:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import ProductionServer
+        from shared_context_server.cli.main import ProductionServer
 
         server = ProductionServer()
 
         # Mock SERVER_AVAILABLE to False
         with (
-            patch("shared_context_server.scripts.cli.SERVER_AVAILABLE", False),
+            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
-            await server.start_http_server("localhost", 23456)
+            await server.start_http("localhost", 23456)
 
 
 class TestSignalHandlers:
@@ -812,7 +819,7 @@ class TestSignalHandlers:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import setup_signal_handlers
+        from shared_context_server.cli.main import setup_signal_handlers
 
         # Mock signal.signal to avoid actually setting up handlers
         with patch("signal.signal") as mock_signal:
@@ -833,14 +840,14 @@ class TestConfigLoadingFallbacks:
         # Mock get_config to raise an exception, triggering fallback
         with (
             patch(
-                "shared_context_server.scripts.cli.get_config",
+                "shared_context_server.cli.main.get_config",
                 side_effect=Exception("Config error"),
             ),
             patch("sys.argv", ["cli.py", "--help"]),
         ):
             import contextlib
 
-            from shared_context_server.scripts.cli import parse_arguments
+            from shared_context_server.cli.main import parse_arguments
 
             # Should catch the exception but still try to parse arguments
             # This will trigger the fallback paths around lines 151-154 and 200-205
@@ -857,7 +864,7 @@ class TestMainFunctionPaths:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import main
+        from shared_context_server.cli.main import main
 
         # Test the client-config command path
         with (
@@ -874,12 +881,14 @@ class TestMainFunctionPaths:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import main
+        from shared_context_server.cli.main import main
 
         # Test the status command path
         with (
             patch("sys.argv", ["cli.py", "status"]),
-            patch("shared_context_server.scripts.cli.show_status") as mock_status,
+            patch(
+                "shared_context_server.cli.main.show_status_interactive"
+            ) as mock_status,
         ):
             main()
             mock_status.assert_called_once()
@@ -889,12 +898,12 @@ class TestMainFunctionPaths:
         if not CLI_AVAILABLE:
             pytest.skip("CLI module not available")
 
-        from shared_context_server.scripts.cli import main
+        from shared_context_server.cli.main import main
 
         with (
             patch("sys.argv", ["cli.py"]),
             patch(
-                "shared_context_server.scripts.cli.get_config",
+                "shared_context_server.cli.main.get_config",
                 side_effect=Exception("Config error"),
             ),
             pytest.raises(SystemExit),

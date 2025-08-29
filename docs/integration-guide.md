@@ -24,10 +24,14 @@ docker run -d --name shared-context-server -p 23456:23456 \
   -e JWT_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   ghcr.io/leoric-crown/shared-context-server:latest
 
-# Connect with Claude Code
-claude mcp add --transport http shared-context-server http://localhost:23456/mcp/ \
-  --header "X-API-Key: test-key"
+# Connect with Claude Code (recommended)
+scs client-config claude -s user -c
+
+# Or connect with other MCP clients
+scs client-config cursor -c     # Cursor IDE
+scs client-config all -c        # All supported clients
 ```
+This will generate the command to run in CLI or snippet to add to config files for different MCP clients.
 
 ### 3-Line Collaboration Test
 ```python
@@ -54,9 +58,11 @@ await client.call_tool("add_message", {
 ## 🟢 MCP Protocol Integration (Tested)
 
 ### Claude Code Integration
-```python
-# Add to Claude Code (tested and working)
-claude mcp add-json shared-context-server '{"command": "mcp-proxy", "args": ["--transport=streamablehttp", "http://localhost:23456/mcp/"]}'
+```bash
+# Generate and copy Claude Code configuration (recommended)
+scs client-config claude -s user -c
+
+# The above command generates the proper claude mcp add-json command automatically
 
 # Use MCP tools directly
 session = await client.call_tool("create_session", {"purpose": "code review"})
