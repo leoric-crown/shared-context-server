@@ -250,4 +250,4 @@ get_messages(session_id="session_4f261d2db4ae43fe", limit=50)
 get_messages(session_id="session_374657223eb14c06", limit=10)
 ```
 
-**Next Step**: Execute this PRP using `execute-prp` command with cfw-refactor agent for systematic file-by-file compliance implementation.
+**Next Step**: Execute this PRP using `run-prp` command with cfw-refactor agent for systematic file-by-file compliance implementation.

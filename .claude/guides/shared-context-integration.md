@@ -160,7 +160,7 @@ mcp_tool add_message "{
 ### Agent Coordination Patterns
 
 ```bash
-# execute-prp.md - Use shared context for agent coordination
+# run-prp.md - Use shared context for agent coordination
 # Load previous context before starting
 context_search=$(mcp_tool search_context "{
     \"session_id\": \"$session_id\",

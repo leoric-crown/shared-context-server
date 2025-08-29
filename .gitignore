@@ -1,4 +1,3 @@
-.cursor/
 .kiro/
 .gemini/*
 .DS_Store
@@ -42,7 +41,6 @@ htmlcov/
 tmp*
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo

@@ -332,4 +332,4 @@ admin_guidance = await get_usage_guidance(guidance_type="coordination")
 
 ---
 
-**Next Step**: Execute this PRP using `/execute-prp` with direct agent assignment to `@agent-developer` for efficient, expert-validated implementation.
+**Next Step**: Execute this PRP using `/run-prp` with direct agent assignment to `@agent-developer` for efficient, expert-validated implementation.

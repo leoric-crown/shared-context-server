@@ -241,4 +241,4 @@ Expected Flow:
 
 **Estimated Implementation Time**: 3-5 hours total across all phases with integration testing.
 
-**Next Step**: Execute this PRP using `execute-prp` command with cfw-developer agent coordination.
+**Next Step**: Execute this PRP using `run-prp` command with cfw-developer agent coordination.

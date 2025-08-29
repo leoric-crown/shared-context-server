@@ -350,7 +350,7 @@ Update existing commands to include browser testing:
 
 - `feature-planning`: Include UI testing requirements
 - `generate-prp`: Add browser automation specifications
-- `execute-prp`: Include browser validation steps
+- `run-prp`: Include browser validation steps
 
 ## Technology Stack Adaptation
 

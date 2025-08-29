@@ -237,4 +237,4 @@ A PRP is complete when:
 5. Success criteria are measurable and validation approaches are defined
 6. The PRP is saved to `PRPs/2-prps/` with proper naming and metadata
 
-**Next Step**: Use `execute-prp` command to implement the generated PRP with intelligent coordination.
+**Next Step**: Use `run-prp` command to implement the generated PRP with intelligent coordination.

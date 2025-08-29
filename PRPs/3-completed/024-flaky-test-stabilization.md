@@ -245,6 +245,6 @@ phases_completed: 3
 - Performance Validation: session_d63fc5e65d054868 (optimization results)
 - Historical Context: Pieces LTM integration
 
-**Next Steps**: Execute this PRP using `execute-prp PRP-024` with cfw-developer agent for focused, research-backed implementation.
+**Next Steps**: Execute this PRP using `run-prp PRP-024` with cfw-developer agent for focused, research-backed implementation.
 
 **Expected Timeline**: 5-7 hours total implementation with incremental validation, targeting test suite stabilization without compromising performance gains.

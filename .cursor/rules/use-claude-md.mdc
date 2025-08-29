@@ -1,0 +1,6 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+ALWAYS use ./CLAUDE.md as base context
