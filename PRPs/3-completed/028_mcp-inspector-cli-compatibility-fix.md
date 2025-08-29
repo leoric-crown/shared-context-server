@@ -186,4 +186,4 @@ mcp.add_middleware(MCPAuthenticationMiddleware())
 This PRP represents a classic "research-first" implementation where thorough investigation identified the exact root cause and solution approach. The selective authentication middleware pattern is a common architectural solution for protocol compatibility while maintaining security boundaries.
 `─────────────────────────────────────────────────`
 
-**Next Step**: Use `execute-prp` command to implement this PRP with the recommended cfw-developer agent coordination.
+**Next Step**: Use `run-prp` command to implement this PRP with the recommended cfw-developer agent coordination.

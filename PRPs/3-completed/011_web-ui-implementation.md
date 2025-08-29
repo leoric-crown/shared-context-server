@@ -270,4 +270,4 @@ async with get_db_connection() as conn:
 
 **Generated**: 2025-08-13
 **Context**: Tech guides validation, FastMCP integration research, dual database backend analysis
-**Next Step**: Use `execute-prp` with task-coordinator for multi-phase implementation
+**Next Step**: Use `run-prp` with task-coordinator for multi-phase implementation
