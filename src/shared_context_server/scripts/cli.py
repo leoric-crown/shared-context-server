@@ -435,7 +435,16 @@ Claude Code Integration:
     )
     client_parser.add_argument(
         "client",
-        choices=["claude", "cursor", "windsurf", "vscode", "generic"],
+        choices=[
+            "claude",
+            "cursor",
+            "windsurf",
+            "vscode",
+            "gemini",
+            "codex",
+            "qwen",
+            "generic",
+        ],
         help="MCP client type",
     )
 
@@ -591,6 +600,12 @@ def generate_client_config(
         config_text = _generate_windsurf_config(server_url, api_key_display)
     elif client == "vscode":
         config_text = _generate_vscode_config(server_url, api_key_display)
+    elif client == "gemini":
+        config_text = _generate_gemini_config(server_url, api_key_display)
+    elif client == "codex":
+        config_text = _generate_codex_config(server_url, api_key_display)
+    elif client == "qwen":
+        config_text = _generate_qwen_config(server_url, api_key_display)
     else:  # generic
         config_text = _generate_generic_config(server_url, api_key_display)
 
@@ -734,6 +749,106 @@ def _generate_vscode_config(server_url: str, api_key: str) -> str:
 }}{Colors.NC}"""
 
 
+def _generate_gemini_config(server_url: str, api_key: str) -> str:
+    """Generate Gemini CLI configuration."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            NC = "\033[0m"
+
+    # Extract server name from URL for Gemini CLI command
+    server_name = "shared-context-server"
+
+    return f"""Command to add to Gemini CLI:
+
+{Colors.GREEN}gemini mcp add {server_name} {server_url} -t http -H "X-API-Key: {api_key}"{Colors.NC}
+
+Configuration details:
+  • Server name: {server_name}
+  • Transport type: http
+  • URL: {server_url}
+  • Authentication: X-API-Key header"""
+
+
+def _generate_codex_config(server_url: str, api_key: str) -> str:
+    """Generate Codex CLI configuration with mcp-proxy bridge."""
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            YELLOW = "\033[1;33m"
+            NC = "\033[0m"
+
+    return f"""Add to ~/.codex/config.toml:
+
+{Colors.GREEN}[mcp_servers.shared-context-server]
+command = "mcp-proxy"
+args = ["--transport=streamablehttp", "-H", "X-API-Key", "{api_key}", "{server_url}"]{Colors.NC}
+
+{Colors.YELLOW}Prerequisites:{Colors.NC}
+  1. Install mcp-proxy: {Colors.GREEN}uv tool install mcp-proxy{Colors.NC}
+  2. Verify installation: {Colors.GREEN}mcp-proxy --version{Colors.NC}
+
+Configuration details:
+  • Codex CLI only supports STDIO transport
+  • mcp-proxy bridges HTTP MCP servers to STDIO
+  • Server URL: {server_url}
+  • Authentication: X-API-Key header via mcp-proxy"""
+
+
+def _generate_qwen_config(server_url: str, api_key: str) -> str:
+    """Generate Qwen CLI configuration for MCP servers.
+
+    Args:
+        server_url: The MCP server URL
+        api_key: API key for authentication (included for consistency with other generators)
+    """
+    # Import colors for this function
+    try:
+        from ..setup_core import Colors
+    except ImportError:
+
+        class Colors:  # type: ignore[no-redef]
+            GREEN = "\033[0;32m"
+            YELLOW = "\033[1;33m"
+            BLUE = "\033[0;34m"
+            NC = "\033[0m"
+
+    return f"""Add to ~/.qwen/settings.json:
+
+{Colors.GREEN}{{
+  "mcpServers": {{
+    "shared-context-server": {{
+      "httpUrl": "{server_url}",
+      "timeout": 30000
+    }}
+  }}
+}}{Colors.NC}
+
+{Colors.YELLOW}Authentication Setup:{Colors.NC}
+  Add X-API-Key header with value: {api_key}
+  (see Qwen CLI documentation for header configuration)
+
+{Colors.BLUE}Interactive Setup (Alternative):{Colors.NC}
+  1. Launch Qwen CLI: {Colors.GREEN}qwen{Colors.NC}
+  2. Run setup command: {Colors.GREEN}/setup-mcp{Colors.NC}
+  3. Use MCP management: {Colors.GREEN}/mcp{Colors.NC}
+
+Configuration details:
+  • File location: ~/.qwen/settings.json
+  • Transport: Direct HTTP (StreamableHTTPClientTransport)
+  • Server URL: {server_url}
+  • Timeout: 30 seconds
+  • Authentication: X-API-Key header (configuration needed)"""
+
+
 def _generate_generic_config(server_url: str, api_key: str) -> str:
     """Generate generic MCP configuration."""
     # Import colors for this function
@@ -805,6 +920,55 @@ def _extract_clipboard_content(formatted_text: str) -> str:
         for line in lines:
             if line.strip().startswith("claude mcp add"):
                 return line.strip()
+
+    # For Gemini CLI, extract the command line
+    if "gemini mcp add" in clean_text:
+        lines = clean_text.split("\n")
+        for line in lines:
+            if line.strip().startswith("gemini mcp add"):
+                return line.strip()
+
+    # For Codex CLI, extract the TOML configuration block
+    if "[mcp_servers.shared-context-server]" in clean_text:
+        lines = clean_text.split("\n")
+        in_toml_block = False
+        toml_lines: list[str] = []
+        for line in lines:
+            if "[mcp_servers.shared-context-server]" in line:
+                in_toml_block = True
+            if in_toml_block:
+                # Stop at empty line or next section
+                if line.strip() == "" and len(toml_lines) > 1:
+                    break
+                if (
+                    line.strip().startswith("[")
+                    and "[mcp_servers.shared-context-server]" not in line
+                ):
+                    break
+                # Skip prerequisite/description lines that start with bullet points or explanatory text
+                if not line.strip().startswith("•") and not line.strip().startswith(
+                    "Configuration details"
+                ):
+                    toml_lines.append(line)
+        return "\n".join(toml_lines).strip()
+
+    # For Qwen CLI, extract the JSON mcpServers configuration
+    if '"httpUrl"' in clean_text and '"mcpServers"' in clean_text:
+        lines = clean_text.split("\n")
+        in_json_block = False
+        json_lines = []
+        brace_count = 0
+        for line in lines:
+            if line.strip().startswith("{") and not in_json_block:
+                in_json_block = True
+                json_lines.append(line)
+                brace_count += line.count("{") - line.count("}")
+            elif in_json_block:
+                json_lines.append(line)
+                brace_count += line.count("{") - line.count("}")
+                if brace_count == 0 and len(json_lines) > 1:
+                    break
+        return "\n".join(json_lines).strip()
 
     # For Cursor and others, extract the JSON object
     if '"shared-context-server"' in clean_text:

@@ -730,6 +730,71 @@ class TestClientConfigGeneration:
         assert "http://127.0.0.1:3000/mcp/" in captured.out
         assert "VS Code settings.json" in captured.out
 
+    def test_generate_client_config_gemini(self, capsys):
+        """Test Gemini CLI client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("gemini", "localhost", 23457)
+
+        captured = capsys.readouterr()
+        assert "=== GEMINI MCP Client Configuration ===" in captured.out
+        assert "http://localhost:23457/mcp/" in captured.out
+        assert "gemini mcp add" in captured.out
+        assert "-t http" in captured.out
+        assert "X-API-Key:" in captured.out
+
+    def test_generate_client_config_codex(self, capsys):
+        """Test Codex CLI client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("codex", "localhost", 23456)
+
+        captured = capsys.readouterr()
+        assert "=== CODEX MCP Client Configuration ===" in captured.out
+        assert "~/.codex/config.toml" in captured.out
+        assert "[mcp_servers.shared-context-server]" in captured.out
+        assert 'command = "mcp-proxy"' in captured.out
+        assert "--transport=streamablehttp" in captured.out
+        assert "-H" in captured.out
+        assert "X-API-Key" in captured.out
+        assert "http://localhost:23456/mcp/" in captured.out
+        assert "Prerequisites:" in captured.out
+        assert "uv tool install mcp-proxy" in captured.out
+
+    def test_generate_client_config_qwen(self, capsys):
+        """Test Qwen CLI client configuration generation."""
+        if not CLI_AVAILABLE:
+            pytest.skip("CLI module not available")
+
+        from shared_context_server.scripts.cli import generate_client_config
+
+        # Mock input to avoid stdin reading during pytest
+        with patch("builtins.input", return_value="n"):
+            generate_client_config("qwen", "localhost", 23456)
+
+        captured = capsys.readouterr()
+        assert "=== QWEN MCP Client Configuration ===" in captured.out
+        assert "~/.qwen/settings.json" in captured.out
+        assert '"mcpServers":' in captured.out
+        assert '"shared-context-server":' in captured.out
+        assert '"httpUrl":' in captured.out
+        assert '"timeout": 30000' in captured.out
+        assert "http://localhost:23456/mcp/" in captured.out
+        assert "Authentication Setup:" in captured.out
+        assert "Interactive Setup (Alternative):" in captured.out
+        assert "/setup-mcp" in captured.out
+        assert "Direct HTTP (StreamableHTTPClientTransport)" in captured.out
+
     def test_generate_client_config_generic(self, capsys):
         """Test generic client configuration generation."""
         if not CLI_AVAILABLE:
