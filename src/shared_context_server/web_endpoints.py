@@ -18,10 +18,17 @@ if TYPE_CHECKING:
 # Set up logging
 import logging
 
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from starlette.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 
 from .config import get_config
 from .core_server import mcp, static_dir, templates
+from .dashboard_auth import dashboard_auth
 from .database import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -32,11 +39,86 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+# ============================================================================
+# AUTHENTICATION ENDPOINTS
+# ============================================================================
+
+
+@mcp.custom_route("/ui/login", methods=["GET", "POST"])
+async def login(request: Request) -> HTMLResponse | RedirectResponse:
+    """
+    Admin login page and authentication handler.
+    """
+    if request.method == "GET":
+        # Show login form
+        return templates.TemplateResponse(request, "login.html", {"request": request})
+
+    # Handle login form submission
+    form = await request.form()
+    password = str(form.get("password", ""))
+
+    if dashboard_auth.verify_password(password):
+        # Authentication successful - redirect to dashboard
+        response = RedirectResponse("/ui/", status_code=302)
+        dashboard_auth.set_auth_cookie(response)
+        logger.info("Dashboard login successful")
+        return response
+    # Authentication failed - show error
+    logger.warning("Dashboard login failed - invalid password")
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"request": request, "error": "Invalid password. Please try again."},
+    )
+
+
+@mcp.custom_route("/ui/logout", methods=["POST"])
+async def logout(_request: Request) -> RedirectResponse:
+    """
+    Logout endpoint to clear authentication.
+    """
+    response = RedirectResponse("/ui/login", status_code=302)
+    dashboard_auth.clear_auth_cookie(response)
+    logger.info("Dashboard logout")
+    return response
+
+
+def require_auth(request: Request) -> RedirectResponse | None:
+    """
+    Check authentication and redirect to login if not authenticated.
+    Returns None if authenticated, RedirectResponse if not.
+    """
+    if not dashboard_auth.is_authenticated(request):
+        return RedirectResponse("/ui/login", status_code=302)
+    return None
+
+
+# ============================================================================
+# REDIRECT HANDLERS
+# ============================================================================
+
+
+@mcp.custom_route("/ui", methods=["GET"])
+async def ui_redirect(_request: Request) -> RedirectResponse:
+    """Redirect /ui to /ui/ for consistent routing."""
+    return RedirectResponse("/ui/", status_code=301)
+
+
+# ============================================================================
+# WEB UI ENDPOINTS (PROTECTED)
+# ============================================================================
+
+
 @mcp.custom_route("/ui/", methods=["GET"])
-async def dashboard(request: Request) -> HTMLResponse:
+async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     """
     Main dashboard displaying active sessions with real-time updates.
+    ADMIN ACCESS: Shows all session data including admin_only content.
     """
+    # Check authentication
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
     try:
         from .config import get_config
 
@@ -75,6 +157,7 @@ async def dashboard(request: Request) -> HTMLResponse:
                 "sessions": sessions,
                 "total_sessions": len(sessions),
                 "websocket_port": config.mcp_server.websocket_port,
+                "admin_access": True,  # Dashboard has full admin access
             },
         )
 
@@ -94,10 +177,15 @@ async def dashboard(request: Request) -> HTMLResponse:
 
 
 @mcp.custom_route("/ui/sessions/{session_id}", methods=["GET"])
-async def session_view(request: Request) -> HTMLResponse:
+async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
     """
     Individual session message viewer with real-time updates.
+    ADMIN ACCESS: Shows ALL messages including admin_only visibility.
     """
+    # Check authentication
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
     session_id = request.path_params["session_id"]
 
     try:
@@ -123,12 +211,11 @@ async def session_view(request: Request) -> HTMLResponse:
                     status_code=404,
                 )
 
-            # Get messages for this session (showing all public + visible private/agent_only)
+            # Get ALL messages for this session (admin access - no visibility filtering)
             cursor = await conn.execute(
                 """
                 SELECT * FROM messages
                 WHERE session_id = ?
-                AND visibility IN ('public', 'private', 'agent_only')
                 ORDER BY timestamp ASC
             """,
                 (session_id,),
@@ -159,6 +246,7 @@ async def session_view(request: Request) -> HTMLResponse:
                 "session_memory": session_memory,
                 "session_id": session_id,
                 "websocket_port": config.mcp_server.websocket_port,
+                "admin_access": True,  # Dashboard has full admin access
             },
         )
 
@@ -172,11 +260,16 @@ async def session_view(request: Request) -> HTMLResponse:
 
 
 @mcp.custom_route("/ui/memory", methods=["GET"])
-async def memory_dashboard(request: Request) -> HTMLResponse:
+async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     """
     Memory dashboard displaying memory entries based on scope parameter.
     Supports scope filtering: global (default), session, or all.
+    ADMIN ACCESS: Shows all memory entries.
     """
+    # Check authentication
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
     try:
         # Get scope parameter with default to 'global' for backward compatibility
         scope = request.query_params.get("scope", "global")
@@ -241,6 +334,7 @@ async def memory_dashboard(request: Request) -> HTMLResponse:
                 "global_count": global_count,
                 "session_count": session_count,
                 "all_count": all_count,
+                "admin_access": True,  # Dashboard has full admin access
             },
         )
 

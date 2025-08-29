@@ -65,11 +65,10 @@ if MCPSOCK_AVAILABLE:
                 if hasattr(conn, "row_factory"):
                     conn.row_factory = CompatibleRow
 
-                # Build query
+                # Build query - Dashboard WebSocket gets admin access (all messages)
                 query = """
                     SELECT * FROM messages
                     WHERE session_id = ?
-                    AND visibility IN ('public', 'private', 'agent_only')
                 """
                 params = [session_id]
 

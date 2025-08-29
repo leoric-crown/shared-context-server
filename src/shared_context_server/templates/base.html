@@ -20,6 +20,12 @@
                 <a href="/ui/" class="nav-link {% if request.url.path == '/ui/' %}active{% endif %}">Dashboard</a>
                 <a href="/ui/memory" class="nav-link {% if request.url.path == '/ui/memory' %}active{% endif %}">Memory</a>
                 <a href="/health" class="nav-link" target="_blank">Health</a>
+                {% if admin_access %}
+                <span class="admin-badge">Admin</span>
+                <form method="post" action="/ui/logout" style="display: inline;">
+                    <button type="submit" class="logout-btn">Logout</button>
+                </form>
+                {% endif %}
                 <div class="status-indicator" id="connection-status">
                     <span class="status-dot online"></span>
                     <span class="status-text">Online</span>
