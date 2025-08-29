@@ -734,3 +734,63 @@ pre code {
     background: none;
     padding: 0;
 }
+
+/* Admin Authentication Styles */
+.admin-badge {
+    background: var(--primary-500);
+    color: white;
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: var(--spacing-3);
+}
+
+.logout-btn {
+    background: transparent;
+    border: 1px solid var(--gray-300);
+    color: var(--gray-700);
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-right: var(--spacing-4);
+}
+
+.logout-btn:hover {
+    background: var(--gray-50);
+    border-color: var(--gray-400);
+    color: var(--gray-800);
+}
+
+/* Message visibility indicators */
+.message-visibility.admin_only {
+    background: var(--error-500);
+    color: white;
+    font-weight: 600;
+}
+
+.message-visibility.admin_only::before {
+    content: "🔒 ";
+}
+
+/* Admin access indicator */
+.admin-access-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--primary-50);
+    border: 1px solid var(--primary-200);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    color: var(--primary-700);
+    margin-bottom: var(--spacing-4);
+}
+
+.admin-access-indicator::before {
+    content: "👑";
+}
