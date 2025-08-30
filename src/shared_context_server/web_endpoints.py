@@ -10,6 +10,7 @@ All endpoints are registered as custom routes with the FastMCP server instance.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,11 +22,11 @@ import logging
 from starlette.responses import (
     FileResponse,
     HTMLResponse,
-    JSONResponse,
     RedirectResponse,
     Response,
 )
 
+from . import __version__
 from .config import get_config
 from .core_server import mcp, static_dir, templates
 from .dashboard_auth import dashboard_auth
@@ -131,19 +132,24 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 pass
                 pass
 
-            # Get active sessions with message counts and memory counts
+            # Get active sessions with message counts, memory counts, and participant counts
             cursor = await conn.execute("""
                 SELECT s.*,
                        COUNT(DISTINCT m.id) as message_count,
                        COUNT(DISTINCT am.id) as memory_count,
-                       MAX(m.timestamp) as last_activity
+                       COUNT(DISTINCT m.sender) as participant_count,
+                       MAX(m.timestamp) as last_activity,
+                       CASE
+                           WHEN MAX(m.timestamp) IS NOT NULL THEN MAX(m.timestamp)
+                           ELSE s.created_at
+                       END as sort_timestamp
                 FROM sessions s
                 LEFT JOIN messages m ON s.id = m.session_id
                 LEFT JOIN agent_memory am ON s.id = am.session_id
-                    AND (am.expires_at IS NULL OR am.expires_at > datetime('now'))
+                    AND (am.expires_at IS NULL OR am.expires_at > unixepoch('now'))
                 WHERE s.is_active = 1
                 GROUP BY s.id
-                ORDER BY last_activity DESC, s.created_at DESC
+                ORDER BY sort_timestamp DESC
                 LIMIT 50
             """)
 
@@ -199,9 +205,18 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
                 # Row factory handled by SQLAlchemy connection wrapper
                 pass
 
-            # Get session information
+            # Get session information with last activity and participant count
             cursor = await conn.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+                """
+                SELECT s.*,
+                       MAX(m.timestamp) as last_activity,
+                       COUNT(DISTINCT m.sender) as participant_count
+                FROM sessions s
+                LEFT JOIN messages m ON s.id = m.session_id
+                WHERE s.id = ?
+                GROUP BY s.id
+                """,
+                (session_id,),
             )
             session = await cursor.fetchone()
 
@@ -226,9 +241,10 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
             # Get session-scoped memory entries for this session
             memory_cursor = await conn.execute(
                 """
-                SELECT agent_id, key, value, created_at, updated_at
+                SELECT agent_id, key, value, created_at, updated_at, expires_at
                 FROM agent_memory
                 WHERE session_id = ?
+                AND (expires_at IS NULL OR expires_at > datetime('now'))
                 ORDER BY created_at DESC
             """,
                 (session_id,),
@@ -263,7 +279,7 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
 async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     """
     Memory dashboard displaying memory entries based on scope parameter.
-    Supports scope filtering: global (default), session, or all.
+    Supports scope filtering: global, session, or all (default).
     ADMIN ACCESS: Shows all memory entries.
     """
     # Check authentication
@@ -271,12 +287,12 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     if auth_redirect:
         return auth_redirect
     try:
-        # Get scope parameter with default to 'global' for backward compatibility
-        scope = request.query_params.get("scope", "global")
+        # Get scope parameter with default to 'all' for better user experience
+        scope = request.query_params.get("scope", "all")
 
         # Validate scope parameter
         if scope not in ["global", "session", "all"]:
-            scope = "global"  # fallback to safe default
+            scope = "all"  # fallback to safe default
 
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
@@ -285,19 +301,22 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 pass
 
             # Build query based on scope parameter
+            # Note: expires_at is stored as Unix timestamp, so we compare against unixepoch('now')
             if scope == "global":
-                where_clause = "WHERE session_id IS NULL"
+                where_clause = "WHERE session_id IS NULL AND (expires_at IS NULL OR expires_at > unixepoch('now'))"
                 scope_label = "Global"
             elif scope == "session":
-                where_clause = "WHERE session_id IS NOT NULL"
+                where_clause = "WHERE session_id IS NOT NULL AND (expires_at IS NULL OR expires_at > unixepoch('now'))"
                 scope_label = "Session-Scoped"
             else:  # scope == 'all'
-                where_clause = ""
+                where_clause = (
+                    "WHERE (expires_at IS NULL OR expires_at > unixepoch('now'))"
+                )
                 scope_label = "All"
 
             # Execute query with dynamic WHERE clause
             base_query = f"""
-                SELECT agent_id, key, value, created_at, updated_at, session_id
+                SELECT agent_id, key, value, created_at, updated_at, session_id, expires_at
                 FROM agent_memory
                 {where_clause}
                 ORDER BY created_at DESC
@@ -333,7 +352,7 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 "scope_label": scope_label,
                 "global_count": global_count,
                 "session_count": session_count,
-                "all_count": all_count,
+                "total_count": all_count,
                 "admin_access": True,  # Dashboard has full admin access
             },
         )
@@ -347,20 +366,104 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         )
 
 
-@mcp.custom_route("/ui/config", methods=["GET"])
-async def ui_config(_request: Request) -> JSONResponse:
+@mcp.custom_route("/ui/health", methods=["GET"])
+async def health_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     """
-    Frontend configuration endpoint for WebSocket port and other settings.
+    Health dashboard displaying system status in a user-friendly format.
     """
+    # Check authentication
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
 
-    config = get_config()
+    try:
+        # Import here to avoid circular imports
+        from .database import health_check as db_health_check
 
-    return JSONResponse(
-        {
-            "websocket_port": config.mcp_server.websocket_port,
-            "websocket_host": config.mcp_server.websocket_host,
+        # Check database connectivity
+        db_status = await db_health_check()
+
+        # Get configuration information
+        config = get_config()
+
+        # Get activity statistics from database
+        activity_stats = {}
+        try:
+            async with get_db_connection() as conn:
+                # Count total sessions
+                sessions_cursor = await conn.execute(
+                    "SELECT COUNT(*) as count FROM sessions"
+                )
+                sessions_row = await sessions_cursor.fetchone()
+                activity_stats["total_sessions"] = (
+                    sessions_row["count"] if sessions_row else 0
+                )
+
+                # Count total messages
+                messages_cursor = await conn.execute(
+                    "SELECT COUNT(*) as count FROM messages"
+                )
+                messages_row = await messages_cursor.fetchone()
+                activity_stats["total_messages"] = (
+                    messages_row["count"] if messages_row else 0
+                )
+
+                # Count memory entries (non-expired)
+                memory_cursor = await conn.execute(
+                    "SELECT COUNT(*) as count FROM agent_memory WHERE expires_at IS NULL OR expires_at > unixepoch('now')"
+                )
+                memory_row = await memory_cursor.fetchone()
+                activity_stats["memory_entries"] = (
+                    memory_row["count"] if memory_row else 0
+                )
+        except Exception as e:
+            logger.warning(f"Failed to get activity stats: {e}")
+            activity_stats = {
+                "total_sessions": 0,
+                "total_messages": 0,
+                "memory_entries": 0,
+            }
+
+        health_data = {
+            "status": "healthy" if db_status["status"] == "healthy" else "unhealthy",
+            "timestamp": db_status["timestamp"],
+            "database": db_status,
+            "server": "shared-context-server",
+            "version": __version__,
+            "config": {
+                "websocket_port": config.mcp_server.websocket_port,
+                "websocket_host": config.mcp_server.websocket_host,
+            },
+            "activity_stats": activity_stats,
         }
-    )
+
+        return templates.TemplateResponse(
+            "health.html",
+            {
+                "request": request,
+                "health_data": health_data,
+                "admin_access": True,  # Health dashboard has full admin access
+            },
+        )
+
+    except Exception as e:
+        logger.exception("Health dashboard failed to load")
+
+        error_data = {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        return templates.TemplateResponse(
+            "health.html",
+            {
+                "request": request,
+                "health_data": error_data,
+                "admin_access": True,
+            },
+            status_code=500,
+        )
 
 
 # ============================================================================
@@ -384,6 +487,60 @@ async def serve_js(_request: Request) -> Response:
     if js_file.exists():
         return FileResponse(js_file, media_type="application/javascript")
     return Response("JS Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/scs-logo.svg", methods=["GET"])
+async def serve_logo_svg(_request: Request) -> Response:
+    """Serve SVG logo file for the Web UI."""
+    svg_file = static_dir / "scs-logo.svg"
+    if svg_file.exists():
+        return FileResponse(svg_file, media_type="image/svg+xml")
+    return Response("Logo SVG Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/favicon/favicon.ico", methods=["GET"])
+async def serve_favicon_ico(_request: Request) -> Response:
+    """Serve favicon.ico file for the Web UI."""
+    favicon_file = static_dir / "favicon" / "favicon.ico"
+    if favicon_file.exists():
+        return FileResponse(favicon_file, media_type="image/x-icon")
+    return Response("Favicon Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/favicon/favicon-32x32.png", methods=["GET"])
+async def serve_favicon_32(_request: Request) -> Response:
+    """Serve 32x32 favicon PNG file for the Web UI."""
+    favicon_file = static_dir / "favicon" / "favicon-32x32.png"
+    if favicon_file.exists():
+        return FileResponse(favicon_file, media_type="image/png")
+    return Response("Favicon 32x32 Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/favicon/favicon-16x16.png", methods=["GET"])
+async def serve_favicon_16(_request: Request) -> Response:
+    """Serve 16x16 favicon PNG file for the Web UI."""
+    favicon_file = static_dir / "favicon" / "favicon-16x16.png"
+    if favicon_file.exists():
+        return FileResponse(favicon_file, media_type="image/png")
+    return Response("Favicon 16x16 Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/favicon/apple-touch-icon.png", methods=["GET"])
+async def serve_apple_touch_icon(_request: Request) -> Response:
+    """Serve Apple touch icon file for the Web UI."""
+    icon_file = static_dir / "favicon" / "apple-touch-icon.png"
+    if icon_file.exists():
+        return FileResponse(icon_file, media_type="image/png")
+    return Response("Apple Touch Icon Not Found", status_code=404)
+
+
+@mcp.custom_route("/ui/static/favicon/site.webmanifest", methods=["GET"])
+async def serve_webmanifest(_request: Request) -> Response:
+    """Serve web manifest file for the Web UI."""
+    manifest_file = static_dir / "favicon" / "site.webmanifest"
+    if manifest_file.exists():
+        return FileResponse(manifest_file, media_type="application/manifest+json")
+    return Response("Web Manifest Not Found", status_code=404)
 
 
 # Note: WebSocket connections are handled by the separate WebSocket server on port 8080

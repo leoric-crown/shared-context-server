@@ -28,6 +28,11 @@
     --warning-500: #f59e0b;
     --error-500: #ef4444;
 
+    /* Activity Status Colors */
+    --activity-fresh: #10b981;     /* < 5 minutes - green */
+    --activity-recent: #f59e0b;    /* < 1 hour - yellow */
+    --activity-stale: #9ca3af;     /* > 1 hour - gray */
+
     /* Typography */
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-size-xs: 0.75rem;
@@ -65,7 +70,7 @@ body {
     font-size: var(--font-size-base);
     line-height: 1.6;
     color: var(--gray-700);
-    background-color: var(--gray-50);
+    background-color: #e0f2fe; /* Light blue background to identify other backgrounds */
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -89,6 +94,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    min-height: 60px;
 }
 
 .brand-link {
@@ -102,7 +108,9 @@ body {
 }
 
 .brand-icon {
-    font-size: var(--font-size-xl);
+    width: 48px;
+    height: 48px;
+    margin-right: var(--spacing-2);
 }
 
 .nav-links {
@@ -185,6 +193,38 @@ body {
     margin-bottom: var(--spacing-8);
 }
 
+.dashboard-header .header-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    margin-bottom: var(--spacing-4);
+}
+
+.dashboard-header .header-content h1 {
+    margin: 0;
+    flex: 1;
+    text-align: left;
+}
+
+.dashboard-header .refresh-btn {
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+}
+
+.dashboard-header .refresh-btn .btn-icon {
+    margin: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .dashboard-header h1 {
     font-size: var(--font-size-3xl);
     font-weight: 700;
@@ -223,17 +263,22 @@ body {
 /* Sessions Grid */
 .sessions-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: var(--spacing-6);
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: var(--spacing-4);
+    align-items: stretch;
 }
 
 .session-card {
     background: white;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    padding: var(--spacing-6);
+    padding: var(--spacing-4);
     transition: all 0.2s ease;
     border: 1px solid var(--gray-200);
+    display: flex;
+    flex-direction: column;
+    min-height: auto;
+    height: 100%;
 }
 
 .session-card:hover {
@@ -241,19 +286,18 @@ body {
     transform: translateY(-2px);
 }
 
-.session-header {
-    margin-bottom: var(--spacing-4);
-}
 
-.session-title {
-    margin-bottom: var(--spacing-2);
-}
 
 .session-link {
     color: var(--gray-900);
     text-decoration: none;
     font-weight: 600;
     font-size: var(--font-size-lg);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
 }
 
 .session-link:hover {
@@ -271,8 +315,8 @@ body {
 
 .session-stats {
     display: flex;
-    gap: var(--spacing-4);
-    margin-bottom: var(--spacing-4);
+    gap: var(--spacing-3);
+    margin-bottom: var(--spacing-2);
 }
 
 .stat-item {
@@ -292,20 +336,50 @@ body {
 }
 
 .session-timestamps {
-    margin-bottom: var(--spacing-4);
+    margin-bottom: 0;
     font-size: var(--font-size-sm);
     color: var(--gray-500);
+    flex-grow: 1;
 }
 
 .timestamp-item {
     display: flex;
     justify-content: space-between;
-    margin-bottom: var(--spacing-1);
+    margin-bottom: 2px;
+}
+
+.timestamp-value {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    position: relative;
+}
+
+.timestamp-relative {
+    font-size: var(--font-size-xs);
+    color: var(--gray-500);
+    margin-top: var(--spacing-1);
+    text-align: right;
+}
+
+.timestamp-main {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+.timestamp-relative {
+    font-size: 10px;
+    color: var(--gray-400);
+    margin-top: 2px;
+    font-family: var(--font-family);
+    line-height: 1.2;
+    text-align: right;
+    display: block;
+    width: 100%;
 }
 
 .session-actions {
     display: flex;
     gap: var(--spacing-3);
+    margin-top: auto;
+    padding-top: var(--spacing-4);
 }
 
 /* Buttons */
@@ -346,6 +420,16 @@ body {
     border-color: var(--gray-400);
 }
 
+/* Refresh buttons - remove borders */
+.refresh-btn {
+    border: none !important;
+    box-shadow: none !important;
+}
+.refresh-btn:hover {
+    border: none !important;
+    box-shadow: none !important;
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
@@ -377,6 +461,14 @@ body {
     margin: 0 auto;
 }
 
+/* Remove white background from main content on session view */
+.session-view .main-content,
+body:has(.session-view) .main-content {
+    background: transparent;
+    padding-left: 0;
+    padding-right: 0;
+}
+
 .breadcrumb {
     display: flex;
     align-items: center;
@@ -398,25 +490,227 @@ body {
     color: var(--gray-400);
 }
 
+.session-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.session-card-header {
+    margin-bottom: var(--spacing-3);
+}
+
+.session-card-title {
+    margin-bottom: var(--spacing-2);
+    margin-right: var(--spacing-4);
+    min-width: 0; /* Allow shrinking for ellipsis */
+    flex: 1; /* Take available space */
+}
+
+.session-card-meta {
+    margin-bottom: var(--spacing-2);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.copy-btn-inline {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-1);
+    border-radius: var(--radius-sm);
+    color: var(--gray-500);
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+.copy-btn-inline:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-700);
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.session-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.session-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start; /* Align to top so indicators align properly */
+    margin-bottom: var(--spacing-3);
+}
+
+.session-title-row {
+    display: flex;
+    align-items: flex-start; /* Align to top since title can now wrap */
+    gap: var(--spacing-3);
+    flex: 1;
+    min-width: 0; /* Allow shrinking for ellipsis */
+}
+
+.session-title-row .status-indicator {
+    width: 32px;
+    height: 32px; /* Make it square for better alignment */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.session-title-row .status-dot {
+    width: 16px; /* Make status dot same size as activity dot */
+    height: 16px; /* Make status dot same size as activity dot */
+    margin: 0; /* Remove any default margins */
+}
+
+.session-header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.session-header-controls .btn {
+    min-width: 32px; /* Fixed width to match status indicator */
+    width: 32px;
+    padding: 0;
+    height: 28px; /* Match status badge height */
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box; /* Include padding in height calculation */
+    background-color: var(--gray-100) !important; /* Match live updates indicator */
+    color: var(--gray-600) !important;
+    border-color: var(--gray-300) !important;
+}
+
+.session-header-controls .btn .btn-icon {
+    margin: 0; /* Remove margin for centered layout */
+    font-size: var(--font-size-sm); /* Smaller emoji size */
+}
+
+.session-header-controls .status-indicator {
+    width: 32px; /* Match button width */
+    height: 32px; /* Make it square to match left indicator */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.session-header-controls .status-dot {
+    width: 16px; /* Make status dot bigger */
+    height: 16px; /* Make status dot bigger */
+    margin: 0; /* Remove any default margins */
+}
+
+.session-header-controls .activity-indicator {
+    width: 32px; /* Match status indicator width */
+    height: 32px; /* Match status indicator height */
+    padding: 0; /* Remove default padding */
+    margin: 0; /* Remove default margin */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md); /* Add back rounded corners */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.session-header-controls .activity-indicator .activity-dot {
+    width: 16px; /* Match other dots */
+    height: 16px; /* Match other dots */
+    margin: 0; /* Remove any default margins */
+}
+
+.session-header-controls .status-badge {
+    height: 28px; /* Consistent height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box; /* Include padding in height calculation */
+    line-height: 1; /* Prevent text from affecting alignment */
+}
+
+/* Speed up tooltips for activity elements */
+.session-header-controls [data-tooltip],
+.session-title-row [data-tooltip],
+.sticky-activity-header [data-tooltip],
+.activity-indicator[data-tooltip],
+.status-badge[data-tooltip],
+.session-link[data-tooltip],
+.refresh-btn[data-tooltip] {
+    position: relative;
+}
+
+
+.session-header-controls [data-tooltip]:hover::before,
+.session-title-row [data-tooltip]:hover::before,
+.sticky-activity-header [data-tooltip]:hover::before,
+.activity-indicator[data-tooltip]:hover::before,
+.status-badge[data-tooltip]:hover::before,
+.session-link[data-tooltip]:hover::before,
+.refresh-btn[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    animation: tooltipFadeIn 0.1s ease-out;
+}
+
+
+@keyframes tooltipFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 .session-info {
-    background: white;
-    padding: var(--spacing-6);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: var(--spacing-8);
+    background: transparent; /* Remove white background */
+    padding: var(--spacing-3);
+    border-radius: 0;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--gray-200);
 }
 
 .session-title {
     font-size: var(--font-size-2xl);
     font-weight: 700;
     color: var(--gray-900);
-    margin-bottom: var(--spacing-4);
+    margin: 0; /* Remove margin for proper alignment */
+    line-height: 1.3;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    flex: 1; /* Allow title to take available space */
 }
 
 .session-meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--spacing-4);
+    align-items: start;
 }
 
 .meta-item {
@@ -426,7 +720,7 @@ body {
 }
 
 .meta-label {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs);
     color: var(--gray-500);
     font-weight: 500;
 }
@@ -435,6 +729,11 @@ body {
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
+    font-size: var(--font-size-xs);
+}
+
+.meta-value.timestamp-value {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
 .copy-btn {
@@ -453,7 +752,7 @@ body {
     display: inline-flex;
     align-items: center;
     padding: var(--spacing-1) var(--spacing-2);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-lg);
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -466,6 +765,21 @@ body {
 }
 
 .status-badge.inactive {
+    background-color: var(--gray-400);
+    color: white;
+}
+
+.status-badge.fresh {
+    background-color: var(--success-500);
+    color: white;
+}
+
+.status-badge.recent {
+    background-color: var(--warning-500);
+    color: white;
+}
+
+.status-badge.stale {
     background-color: var(--gray-400);
     color: white;
 }
@@ -485,7 +799,7 @@ body {
 }
 
 .messages-header {
-    padding: var(--spacing-6) var(--spacing-6) var(--spacing-4);
+    padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
     border-bottom: 1px solid var(--gray-200);
 }
 
@@ -501,7 +815,7 @@ body {
 }
 
 .message-item {
-    padding: var(--spacing-6);
+    padding: var(--spacing-4);
     border-bottom: 1px solid var(--gray-100);
 }
 
@@ -541,7 +855,7 @@ body {
 
 .visibility-badge {
     padding: var(--spacing-1) var(--spacing-2);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-lg);
     font-size: var(--font-size-xs);
     font-weight: 500;
     text-transform: uppercase;
@@ -740,30 +1054,37 @@ pre code {
     background: var(--primary-500);
     color: white;
     padding: var(--spacing-1) var(--spacing-3);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-xl);
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-right: var(--spacing-3);
+    box-shadow: var(--shadow-sm);
 }
 
 .logout-btn {
     background: transparent;
     border: 1px solid var(--gray-300);
     color: var(--gray-700);
-    padding: var(--spacing-1) var(--spacing-3);
-    border-radius: var(--radius-sm);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     margin-right: var(--spacing-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .logout-btn:hover {
     background: var(--gray-50);
     border-color: var(--gray-400);
     color: var(--gray-800);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 
 /* Message visibility indicators */
@@ -793,4 +1114,871 @@ pre code {
 
 .admin-access-indicator::before {
     content: "👑";
+}
+
+/* ============================================================================ */
+/* ENHANCED UI FEATURES - Phase 1 & 2 Improvements */
+/* ============================================================================ */
+
+/* Better text wrapping and overflow handling */
+.message-content,
+.value-preview {
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+/* Session titles should truncate instead of wrapping - handled in main .session-title rule */
+
+.message-content {
+    max-width: 100%;
+    line-height: 1.6;
+    padding: var(--spacing-3);
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--primary-500);
+}
+
+/* Long URL/ID handling */
+.session-id,
+code {
+    word-break: break-all;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+/* Activity indicators for session cards */
+.session-card.activity-fresh {
+    border-left: 4px solid var(--activity-fresh);
+}
+
+.session-card.activity-recent {
+    border-left: 4px solid var(--activity-recent);
+}
+
+.session-card.activity-stale {
+    border-left: 4px solid var(--activity-stale);
+}
+
+.activity-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-1) 0;
+}
+
+/* Session title row with activity indicator */
+.session-card .session-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-2);
+}
+
+.session-card .session-card-title {
+    min-width: 0; /* Allow shrinking for ellipsis */
+    flex: 1; /* Take available space */
+    margin-right: var(--spacing-3); /* Add space before indicator */
+}
+
+/* Activity dots for session cards */
+.session-card .activity-indicator {
+    padding: var(--spacing-2);
+    margin: 0;
+    margin-top: calc(-1 * var(--spacing-2));
+    margin-right: calc(-1 * var(--spacing-2));
+    flex-shrink: 0;
+}
+
+.activity-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: var(--gray-400);
+    transition: background-color 0.3s ease;
+}
+
+/* Activity dot colors based on status */
+.activity-indicator.fresh .activity-dot {
+    background-color: var(--activity-fresh);
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
+.activity-indicator.recent .activity-dot {
+    background-color: var(--activity-recent);
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+}
+
+.activity-indicator.stale .activity-dot {
+    background-color: var(--activity-stale);
+}
+
+.activity-indicator.fresh {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--activity-fresh);
+}
+
+.activity-indicator.recent {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--activity-recent);
+}
+
+.activity-indicator.stale {
+    background: rgba(156, 163, 175, 0.1);
+    color: var(--activity-stale);
+}
+
+/* Dashboard main content with no top padding for sticky header */
+.dashboard {
+    margin-top: calc(-1 * var(--spacing-8)); /* Offset main-content top padding */
+}
+
+/* Sticky Activity Header for Dashboard */
+.sticky-activity-header {
+    position: sticky;
+    top: 92px; /* Position below navbar - match session view */
+    z-index: 40;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--gray-200);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg); /* Only round bottom corners when sticky */
+    margin: 0 0 var(--spacing-4) 0; /* Remove horizontal margin */
+    padding: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+}
+
+.activity-stats {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-8);
+    flex: 1;
+}
+
+.sticky-activity-header .refresh-btn {
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+}
+
+.sticky-activity-header .refresh-btn .btn-icon {
+    margin: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.activity-stat-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.activity-stat-number {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    min-width: 24px;
+    text-align: center;
+}
+
+.activity-stat-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--gray-600);
+}
+
+/* Activity Dot Colors for Stats */
+.activity-stat-item .activity-dot.fresh {
+    background-color: var(--activity-fresh);
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
+.activity-stat-item .activity-dot.recent {
+    background-color: var(--activity-recent);
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+}
+
+.activity-stat-item .activity-dot.stale {
+    background-color: var(--activity-stale);
+}
+
+/* Copy button styles */
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin-left: var(--spacing-2);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    color: var(--gray-600);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--font-size-sm);
+    opacity: 0.7;
+}
+
+.copy-btn:hover {
+    background: var(--primary-50);
+    border-color: var(--primary-300);
+    color: var(--primary-600);
+    opacity: 1;
+}
+
+.copy-btn:active {
+    transform: scale(0.95);
+}
+
+/* Toast notification system */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: var(--spacing-3) var(--spacing-4);
+    background: var(--success-500);
+    color: white;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out;
+    z-index: 1000;
+    max-width: 300px;
+    word-wrap: break-word;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification.notification-error {
+    background: var(--error-500);
+}
+
+.notification.notification-warning {
+    background: var(--warning-500);
+}
+
+/* Loading states */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--gray-300);
+    border-radius: 50%;
+    border-top-color: var(--primary-500);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* Message filters */
+.message-filters {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-4);
+    padding: var(--spacing-3);
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.filter-btn {
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.filter-btn.active {
+    background: var(--primary-500);
+    border-color: var(--primary-500);
+    color: white;
+}
+
+.filter-btn:hover:not(.active) {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+}
+
+/* Message visibility badges */
+.message-visibility {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.message-visibility.public {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-500);
+}
+
+.message-visibility.private {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-500);
+}
+
+.message-visibility.agent_only {
+    background: rgba(14, 165, 233, 0.1);
+    color: var(--primary-500);
+}
+
+.message-visibility.admin_only {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error-500);
+}
+
+/* Enhanced table layouts */
+.memory-table {
+    font-size: var(--font-size-sm);
+    width: 100%;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.memory-table th {
+    background: var(--gray-100);
+    padding: var(--spacing-3);
+    text-align: left;
+    font-weight: 600;
+    color: var(--gray-700);
+    border-bottom: 2px solid var(--gray-200);
+    white-space: nowrap;
+}
+
+.memory-table th .th-icon {
+    margin-right: var(--spacing-2);
+    font-size: var(--font-size-base);
+}
+
+.memory-table td {
+    padding: var(--spacing-3) var(--spacing-3) var(--spacing-4) var(--spacing-3);
+    vertical-align: top;
+}
+
+.memory-table tbody tr + tr td {
+    border-top: 1px solid var(--gray-100);
+}
+
+/* Column widths handled in memory.html template to prevent text cropping */
+.memory-table .th-actions { text-align: center; }
+
+.memory-table .memory-created,
+.memory-table .memory-expires {
+    font-size: var(--font-size-xs);
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+.memory-table .timestamp-value,
+.memory-table .expires-value {
+    font-size: var(--font-size-xs);
+}
+
+.memory-table .memory-key code {
+    font-size: var(--font-size-xs);
+    background: var(--gray-50);
+    padding: var(--spacing-1);
+    border-radius: var(--radius-sm);
+    word-break: break-all;
+}
+
+.memory-table .memory-value {
+    max-width: 300px;
+    line-height: 1.5;
+    word-wrap: break-word;
+    max-height: 4em; /* Allow for 2.5+ lines */
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    border: none;
+    background: none;
+}
+
+.memory-table .value-preview {
+    font-size: var(--font-size-sm);
+    color: var(--gray-700);
+    line-height: 1.5;
+    border: none;
+    background: none;
+}
+
+.memory-table .agent-badge {
+    background: var(--primary-100);
+    color: var(--primary-700);
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.expand-indicator {
+    margin-left: var(--spacing-2);
+    opacity: 0.6;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    font-size: var(--font-size-sm);
+    animation: gentle-bounce 2s ease-in-out infinite;
+}
+
+.expand-indicator:hover {
+    opacity: 1;
+}
+
+@keyframes gentle-bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-2px);
+    }
+    60% {
+        transform: translateY(-1px);
+    }
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .sessions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .session-stats {
+        flex-wrap: wrap;
+    }
+
+    .nav-links {
+        gap: var(--spacing-3);
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .notification {
+        right: var(--spacing-3);
+        left: var(--spacing-3);
+        max-width: none;
+    }
+
+    .dashboard-stats {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .session-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .session-controls {
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Compact memory table for mobile */
+    .memory-table th .th-text {
+        display: none;
+    }
+
+    .memory-table th .th-icon {
+        margin-right: 0;
+        font-size: var(--font-size-lg);
+    }
+
+    .memory-table .th-created,
+    .memory-table .th-expires {
+        /* Combine time info on mobile */
+        position: relative;
+    }
+
+    .memory-table .th-expires {
+        display: none;
+    }
+
+    .memory-table .memory-expires {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--font-size-xs);
+        background: var(--gray-50);
+        padding: var(--spacing-1);
+        border-radius: var(--radius-sm);
+        margin-left: var(--spacing-2);
+    }
+
+    .memory-table .memory-created {
+        position: relative;
+        padding-right: 80px;
+    }
+}
+
+@media (max-width: 640px) {
+    .memory-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .memory-table {
+        min-width: 600px;
+    }
+}
+
+/* Memory Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    max-width: 80%;
+    max-height: 80%;
+    width: 600px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--header-bg);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-color);
+}
+
+.modal-close {
+    cursor: pointer;
+    font-size: 24px;
+    color: var(--text-muted);
+    font-weight: bold;
+    line-height: 1;
+    padding: 0 5px;
+}
+
+.modal-close:hover {
+    color: var(--text-color);
+}
+
+.modal-body {
+    padding: 1rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--header-bg);
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Old memory modal CSS removed - templates now use enhanced modals with proper encapsulation */
+
+/* Markdown content styling */
+.message-text ul,
+.message-text ol {
+    margin: var(--spacing-2) 0;
+    padding-left: var(--spacing-6);
+}
+
+.message-text ul ul,
+.message-text ol ol,
+.message-text ul ol,
+.message-text ol ul {
+    margin: var(--spacing-1) 0;
+    padding-left: var(--spacing-4);
+}
+
+.message-text li {
+    margin: var(--spacing-1) 0;
+    line-height: 1.6;
+}
+
+.message-text li::marker {
+    color: var(--primary-500);
+}
+
+.message-text ul li {
+    list-style-type: disc;
+}
+
+.message-text ul ul li {
+    list-style-type: circle;
+}
+
+.message-text ul ul ul li {
+    list-style-type: square;
+}
+
+.message-text ol {
+    list-style-type: decimal;
+}
+
+.message-text ol ol {
+    list-style-type: lower-alpha;
+}
+
+.message-text ol ol ol {
+    list-style-type: lower-roman;
+}
+
+/* TTL/Expiry indicators */
+.ttl-permanent {
+    color: var(--gray-500);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.ttl-days {
+    color: var(--success-500);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.ttl-hours {
+    color: var(--warning-500);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.ttl-soon {
+    color: var(--error-500);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    animation: pulse 2s infinite;
+}
+
+.ttl-expired {
+    color: var(--error-500);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* Enhanced button styling with icons */
+.btn .btn-icon {
+    margin-right: var(--spacing-2);
+    font-size: var(--font-size-sm);
+}
+
+.view-session-btn,
+.view-full-btn {
+    position: relative;
+    transition: all 0.3s ease;
+    background: var(--primary-600) !important;
+    color: white !important;
+    border: 1px solid var(--primary-600) !important;
+    box-shadow: var(--shadow-sm);
+    font-weight: 600;
+}
+
+.view-session-btn:hover,
+.view-full-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: var(--primary-700) !important;
+    border-color: var(--primary-700) !important;
+}
+
+.view-full-btn {
+    background: var(--primary-500) !important;
+    border-color: var(--primary-500) !important;
+    animation: subtle-pulse 3s infinite;
+}
+
+@keyframes subtle-pulse {
+    0%, 100% {
+        box-shadow: var(--shadow-sm), 0 0 0 0 rgba(14, 165, 233, 0.4);
+    }
+    50% {
+        box-shadow: var(--shadow-md), 0 0 0 6px rgba(14, 165, 233, 0);
+    }
+}
+
+/* Compact viewport improvements */
+@media (max-width: 480px) {
+    .view-session-btn {
+        font-size: var(--font-size-base);
+        padding: var(--spacing-3) var(--spacing-4);
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--spacing-2);
+        box-shadow: var(--shadow-md);
+        font-weight: 600;
+    }
+
+    .view-session-btn .btn-icon {
+        font-size: var(--font-size-lg);
+        margin-right: 0;
+    }
+
+    .view-full-btn {
+        min-width: 100px;
+        justify-content: center;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .view-full-btn .btn-text {
+        display: none;
+    }
+
+    .view-full-btn .btn-icon {
+        margin-right: 0;
+        font-size: var(--font-size-base);
+    }
+
+    .session-actions {
+        gap: var(--spacing-4);
+        margin-top: var(--spacing-4);
+    }
+
+    .memory-actions {
+        text-align: center;
+    }
+}
+
+@media (max-width: 320px) {
+    .view-session-btn .btn-text {
+        display: none;
+    }
+
+    .view-session-btn {
+        min-width: 50px;
+        padding: var(--spacing-3);
+    }
+}
+
+/* Simplified Sticky Navigation - Single Container */
+.sticky-nav-container {
+    position: sticky;
+    top: 92px; /* Position below navbar (navbar height) */
+    z-index: 50; /* Higher z-index to ensure it's above content */
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--gray-200);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+    margin: 0 var(--spacing-4);
+    width: calc(100% - calc(2 * var(--spacing-4))); /* Account for margins */
+}
+
+/* Session View Components - No Individual Sticky */
+.tab-container {
+    background: transparent; /* Remove white background */
+    margin: 0;
+    border-top: 1px solid var(--gray-200);
+    padding: var(--spacing-1) var(--spacing-4);
+}
+
+.message-filters {
+    background: transparent; /* Remove white background */
+    margin: 0;
+    padding: var(--spacing-1) var(--spacing-4);
+}
+
+/* Fix session-meta layout for session view */
+.session-view .session-meta {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--spacing-3);
+    align-items: start;
+}
+
+/* Remove dead space in session content */
+.session-content {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+/* Clean up tab spacing */
+.tab-content {
+    margin: 0;
+    padding: var(--spacing-4);
+}
+
+.tab-pane {
+    margin: 0;
+    padding: 0;
+}
+
+
+@media (max-width: 900px) {
+    .session-view .session-meta {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .session-view .session-meta {
+        grid-template-columns: 1fr;
+    }
 }

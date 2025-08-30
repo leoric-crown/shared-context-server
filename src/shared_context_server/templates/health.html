@@ -1,0 +1,816 @@
+{% extends "base.html" %}
+
+{% block title %}System Health - Shared Context Server{% endblock %}
+
+{% block content %}
+<div class="health-dashboard">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb">
+        <span class="breadcrumb-current">System Health</span>
+    </div>
+
+    <!-- Health Grid Layout -->
+    <div class="health-grid">
+        <!-- Top Row: System Status and Last Check -->
+        <div class="health-status-card {{ 'healthy' if health_data.status == 'healthy' else 'unhealthy' }}">
+            <div class="status-icon">
+                {% if health_data.status == 'healthy' %}
+                    ✅
+                {% else %}
+                    ❌
+                {% endif %}
+            </div>
+            <div class="status-content">
+                <h1 class="status-title">System Status</h1>
+                <div class="status-value">{{ health_data.status|title }}</div>
+                {% if health_data.error %}
+                <div class="status-error">{{ health_data.error }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="health-timestamp">
+            <span class="timestamp-label">Last Check:</span>
+            <span class="timestamp-value">
+                <script>
+                    document.write((function() {
+                        const timestamp = "{{ health_data.timestamp }}";
+                        try {
+                            const date = new Date(timestamp);
+                            if (!isNaN(date.getTime())) {
+                                const dateStr = date.toLocaleDateString(undefined, {
+                                    year: 'numeric',
+                                    month: 'numeric',
+                                    day: 'numeric'
+                                });
+                                const timeStr = date.toLocaleTimeString(undefined, {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    timeZoneName: 'short'
+                                });
+
+                                return dateStr + '<br>' + timeStr;
+                            }
+                        } catch (e) {
+                            // Fallback
+                            }
+                        return timestamp;
+                    })());
+                </script>
+            </span>
+            <div class="relative-time" id="relative-time">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+<script>
+// Function to calculate and update relative time
+function updateRelativeTime() {
+    const timestamp = "{{ health_data.timestamp }}";
+    const relativeTimeElement = document.getElementById('relative-time');
+
+    try {
+        const date = new Date(timestamp);
+        if (!isNaN(date.getTime())) {
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffSeconds = Math.floor(diffMs / 1000);
+            const diffMinutes = Math.floor(diffSeconds / 60);
+            const diffHours = Math.floor(diffMinutes / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            let relativeText = '';
+            if (diffDays > 0) {
+                relativeText = diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+            } else if (diffHours > 0) {
+                relativeText = diffHours + ' hour' + (diffHours > 1 ? 's' : '') + ' ago';
+            } else if (diffMinutes > 0) {
+                relativeText = diffMinutes + ' minute' + (diffMinutes > 1 ? 's' : '') + ' ago';
+            } else {
+                relativeText = 'Just now';
+            }
+
+            if (relativeTimeElement) {
+                relativeTimeElement.textContent = relativeText;
+            }
+        }
+    } catch (e) {
+        console.error('Error updating relative time:', e);
+        if (relativeTimeElement) {
+            relativeTimeElement.textContent = '';
+        }
+    }
+}
+
+// Initial update
+updateRelativeTime();
+
+// Update relative time every 60 seconds
+setInterval(updateRelativeTime, 60000);
+
+// Function to load activity stats
+async function loadActivityStats() {
+    try {
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadActivityStats);
+            return;
+        }
+
+        // Use real stats from server-side data
+        try {
+            const healthData = {{ health_data | tojson }};
+            console.log('Health data:', healthData);
+
+            if (healthData && healthData.activity_stats) {
+                console.log('Activity stats:', healthData.activity_stats);
+                document.getElementById('active-sessions').textContent = healthData.activity_stats.total_sessions.toLocaleString();
+                document.getElementById('total-messages').textContent = healthData.activity_stats.total_messages.toLocaleString();
+                document.getElementById('memory-entries').textContent = healthData.activity_stats.memory_entries.toLocaleString();
+            } else {
+                console.log('No activity stats in health data');
+                // Fallback if no stats available
+                document.getElementById('active-sessions').textContent = '0';
+                document.getElementById('total-messages').textContent = '0';
+                document.getElementById('memory-entries').textContent = '0';
+            }
+        } catch (jsError) {
+            console.error('JavaScript error in loadActivityStats:', jsError);
+            // Show specific error
+            document.getElementById('active-sessions').textContent = 'JS Error';
+            document.getElementById('total-messages').textContent = 'JS Error';
+            document.getElementById('memory-entries').textContent = 'JS Error';
+        }
+
+    } catch (error) {
+        console.error('Error loading activity stats:', error);
+        // Show error state
+        document.getElementById('active-sessions').textContent = 'Error';
+        document.getElementById('total-messages').textContent = 'Error';
+        document.getElementById('memory-entries').textContent = 'Error';
+    }
+}
+
+// Load activity stats when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadActivityStats);
+} else {
+    loadActivityStats();
+}
+
+// Refresh activity stats every 5 minutes
+setInterval(loadActivityStats, 300000);
+</script>
+
+        <!-- Bottom Row: Server Info, Database Status, Configuration, Activity Stats -->
+        <div class="health-details">
+            <div class="detail-section">
+                <h2>Server Information</h2>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">Server:</span>
+                        <span class="detail-value">{{ health_data.server }}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Version:</span>
+                        <span class="detail-value">{{ health_data.version }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if health_data.database %}
+            <div class="detail-section">
+                <h2>Database Status</h2>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">Status:</span>
+                        <span class="detail-value db-status {{ health_data.database.status }}">
+                            {% if health_data.database.status == 'healthy' %}
+                                ✅ {{ health_data.database.status|title }}
+                            {% else %}
+                                ❌ {{ health_data.database.status|title }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% if health_data.database.backend %}
+                    <div class="detail-item">
+                        <span class="detail-label">Backend:</span>
+                        <span class="detail-value">{{ health_data.database.backend }}</span>
+                    </div>
+                    {% endif %}
+                    {% if health_data.database.database %}
+                    <div class="detail-item">
+                        <span class="detail-label">Database:</span>
+                        <span class="detail-value">{{ health_data.database.database }}</span>
+                    </div>
+                    {% endif %}
+                    {% if health_data.database.response_time_ms %}
+                    <div class="detail-item">
+                        <span class="detail-label">Response Time:</span>
+                        <span class="detail-value">{{ health_data.database.response_time_ms }}ms</span>
+                    </div>
+                    {% endif %}
+                    {% if health_data.database.error %}
+                    <div class="detail-item">
+                        <span class="detail-label">Error:</span>
+                        <span class="detail-value error-text">{{ health_data.database.error }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if health_data.config %}
+            <div class="detail-section">
+                <h2>Configuration</h2>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">WebSocket Host:</span>
+                        <span class="detail-value">{{ health_data.config.websocket_host }}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">WebSocket Port:</span>
+                        <span class="detail-value">{{ health_data.config.websocket_port }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <!-- Full-width Activity Stats -->
+    <div class="activity-stats-section">
+        <h2>Activity Stats</h2>
+        <div class="detail-grid" id="activity-stats">
+            <div class="detail-item">
+                <span class="detail-label">Total Sessions:</span>
+                <span class="detail-value" id="active-sessions">Loading...</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Total Messages:</span>
+                <span class="detail-value" id="total-messages">Loading...</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Memory Entries:</span>
+                <span class="detail-value" id="memory-entries">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="health-actions">
+        <button class="btn btn-secondary" onclick="window.location.reload()">
+            <span class="btn-icon">🔄</span>
+            <span class="btn-text">Refresh Status</span>
+        </button>
+        <button class="btn btn-secondary" onclick="viewRawData()">
+            <span class="btn-icon">📊</span>
+            <span class="btn-text">View Raw Data</span>
+        </button>
+        <a href="/ui/" class="btn btn-primary">
+            <span class="btn-icon">🏠</span>
+            <span class="btn-text">Back to Sessions</span>
+        </a>
+    </div>
+</div>
+
+<!-- Raw Data Modal -->
+<div id="raw-data-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Raw Health Data</h3>
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <pre id="raw-data-content">{{ health_data | tojson(indent=2) }}</pre>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="copyRawData()">Copy Data</button>
+            <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    window.location.reload();
+}, 30000);
+
+function viewRawData() {
+    document.getElementById('raw-data-modal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('raw-data-modal').style.display = 'none';
+}
+
+function copyRawData() {
+    const content = document.getElementById('raw-data-content').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        // Simple notification
+        const notification = document.createElement('div');
+        notification.className = 'notification notification-success';
+        notification.textContent = 'Raw data copied to clipboard!';
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 100);
+
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('raw-data-modal');
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+
+// Close modal with ESC key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+        closeModal();
+    }
+});
+</script>
+
+<style>
+.health-dashboard {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    background: transparent;
+    min-height: calc(100vh - 120px);
+}
+
+.health-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.health-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2rem;
+    grid-column: 1 / -1;
+    grid-row: 2;
+}
+
+.health-status-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    grid-column: 1 / 3;
+    grid-row: 1;
+    transition: all 0.3s ease;
+}
+
+.health-status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+
+.status-icon {
+    font-size: 4rem;
+    line-height: 1;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.status-content {
+    flex: 1;
+}
+
+.status-title {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.125rem;
+    color: #64748b;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    line-height: 1;
+}
+
+.health-status-card.healthy .status-value {
+    color: #10b981;
+}
+
+.health-status-card.unhealthy .status-value {
+    color: #ef4444;
+}
+
+.status-error {
+    color: #ef4444;
+    font-size: 0.875rem;
+    background: #fef2f2;
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #fecaca;
+}
+
+.health-timestamp {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    text-align: center;
+    grid-column: 3;
+    grid-row: 1;
+    transition: all 0.3s ease;
+}
+
+.health-timestamp:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.timestamp-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.75rem;
+}
+
+.timestamp-value {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.relative-time {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.detail-section {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    transition: all 0.3s ease;
+}
+
+.detail-section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+
+.detail-section h2 {
+    margin: 0 0 1.25rem 0;
+    color: #1e293b;
+    font-size: 1.25rem;
+    font-weight: 700;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e2e8f0;
+    position: relative;
+}
+
+.detail-section h2::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 30px;
+    height: 2px;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    border-radius: 1px;
+}
+
+.detail-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+/* Activity stats: 3 columns, 1 row */
+#activity-stats {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr;
+}
+
+/* Fix activity stats item layout */
+#activity-stats .detail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.5rem;
+    padding: 1rem 0;
+}
+
+#activity-stats .detail-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#activity-stats .detail-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+/* Full-width activity stats section */
+.activity-stats-section {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+    margin-top: 2rem;
+}
+
+.activity-stats-section h2 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+    border-bottom: 2px solid #3b82f6;
+    padding-bottom: 0.5rem;
+    display: inline-block;
+}
+
+.detail-item {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.5rem 0;
+}
+
+.detail-label {
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.detail-value {
+    color: #1e293b;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.db-status.healthy {
+    color: #10b981;
+}
+
+.db-status.unhealthy {
+    color: #ef4444;
+}
+
+.error-text {
+    color: #ef4444;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.8rem;
+}
+
+.health-actions {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+}
+
+.btn {
+    padding: 0.875rem 2rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary {
+    background: white;
+    color: #64748b;
+    border: 2px solid #e2e8f0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #475569;
+}
+
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background-color: white;
+    margin: 5% auto;
+    padding: 0;
+    width: 80%;
+    max-width: 800px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.modal-close {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-body pre {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+    .health-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        gap: 1.5rem;
+    }
+
+    .health-status-card {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .health-timestamp {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .detail-section:nth-of-type(3) {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    .detail-section:nth-of-type(4) {
+        grid-column: 1;
+        grid-row: 4;
+    }
+}
+
+@media (max-width: 768px) {
+    .health-dashboard {
+        padding: 1rem;
+    }
+
+    .health-grid {
+        gap: 1rem;
+    }
+
+    .health-status-card,
+    .health-timestamp,
+    .detail-section {
+        padding: 1.5rem;
+    }
+
+    .status-icon {
+        font-size: 3rem;
+    }
+
+    .status-value {
+        font-size: 2rem;
+    }
+
+    .detail-item {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+        padding: 0.25rem 0;
+    }
+
+    .detail-label {
+        font-size: 0.8rem;
+    }
+
+    .detail-value {
+        font-size: 0.95rem;
+    }
+
+    .btn {
+        padding: 0.75rem 1.5rem;
+        font-size: 0.9rem;
+    }
+
+    .health-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 2% auto;
+    }
+}
+</style>
+{% endblock %}

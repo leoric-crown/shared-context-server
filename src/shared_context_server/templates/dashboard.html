@@ -1,15 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Shared Context Server{% endblock %}
+{% block title %}({{ total_sessions }}) Sessions - Shared Context Server{% endblock %}
 
 {% block content %}
 <div class="dashboard">
-    <div class="dashboard-header">
-        <h1>Active Sessions</h1>
-        <div class="dashboard-stats">
-            <div class="stat-card">
-                <span class="stat-number">{{ total_sessions }}</span>
-                <span class="stat-label">Active Sessions</span>
+    <!-- Sticky Activity Stats Header -->
+    <div class="sticky-activity-header">
+        <button class="btn btn-secondary refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh Dashboard">
+            <span class="btn-icon">🔄</span>
+        </button>
+        <div class="activity-stats">
+            <div class="activity-stat-item" data-tooltip="Fresh: Active within 5 minutes">
+                <div class="activity-dot fresh"></div>
+                <span class="activity-stat-number" id="fresh-count">0</span>
+                <span class="activity-stat-label">Fresh</span>
+            </div>
+            <div class="activity-stat-item" data-tooltip="Recent: Active within 1 hour">
+                <div class="activity-dot recent"></div>
+                <span class="activity-stat-number" id="recent-count">0</span>
+                <span class="activity-stat-label">Recent</span>
+            </div>
+            <div class="activity-stat-item" data-tooltip="Stale: No activity for over 1 hour">
+                <div class="activity-dot stale"></div>
+                <span class="activity-stat-number" id="stale-count">0</span>
+                <span class="activity-stat-label">Stale</span>
             </div>
         </div>
     </div>
@@ -17,15 +31,21 @@
     {% if sessions %}
     <div class="sessions-grid">
         {% for session in sessions %}
-        <div class="session-card" data-session-id="{{ session.id }}">
-            <div class="session-header">
-                <h3 class="session-title">
-                    <a href="/ui/sessions/{{ session.id }}" class="session-link">
-                        {{ session.purpose[:60] }}{% if session.purpose|length > 60 %}...{% endif %}
-                    </a>
-                </h3>
-                <div class="session-meta">
+        <div class="session-card clickable-card" data-session-id="{{ session.id }}" data-activity="{{ session.last_activity or session.created_at }}" onclick="handleCardClick(event, '/ui/sessions/{{ session.id }}')" style="cursor: pointer;">
+            <div class="session-card-header">
+                <div class="session-title-row">
+                    <h3 class="session-card-title">
+                        <a href="/ui/sessions/{{ session.id }}" class="session-link" data-tooltip="{{ session.purpose }}">
+                            {{ session.purpose }}
+                        </a>
+                    </h3>
+                    <div class="activity-indicator" data-activity-timestamp="{{ session.last_activity or session.created_at }}" data-tooltip="Loading activity status...">
+                        <div class="activity-dot"></div>
+                    </div>
+                </div>
+                <div class="session-card-meta">
                     <span class="session-id">{{ session.id }}</span>
+                    <button class="copy-btn-inline" onclick="copySessionId('{{ session.id }}')" title="Copy Session ID">📋</button>
                 </div>
             </div>
 
@@ -33,18 +53,19 @@
                 <div class="stat-item">
                     <span class="stat-icon">💬</span>
                     <span class="stat-value">{{ session.message_count or 0 }}</span>
-                    <span class="stat-text">messages</span>
+                    <span class="stat-text">{% if (session.message_count or 0) == 1 %}message{% else %}messages{% endif %}</span>
                 </div>
 
                 <div class="stat-item">
                     <span class="stat-icon">🧠</span>
                     <span class="stat-value">{{ session.memory_count or 0 }}</span>
-                    <span class="stat-text">memories</span>
+                    <span class="stat-text">{% if (session.memory_count or 0) == 1 %}memory{% else %}memories{% endif %}</span>
                 </div>
 
                 <div class="stat-item">
-                    <span class="stat-icon">👤</span>
-                    <span class="stat-value">{{ session.created_by[:12] }}{% if session.created_by|length > 12 %}...{% endif %}</span>
+                    <span class="stat-icon">👥</span>
+                    <span class="stat-value">{{ session.participant_count or 0 }}</span>
+                    <span class="stat-text">{% if (session.participant_count or 0) == 1 %}participant{% else %}participants{% endif %}</span>
                 </div>
             </div>
 
@@ -75,43 +96,97 @@
                     </span>
                 </div>
 
-                {% if session.last_activity %}
                 <div class="timestamp-item">
                     <span class="timestamp-label">Last Activity:</span>
                     <span class="timestamp-value">
-                        <script>
-                            document.write((function() {
-                                const timestamp = "{{ session.last_activity }}";
-                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
-                                    const date = new Date(parseFloat(timestamp) * 1000);
-                                    if (!isNaN(date.getTime())) {
-                                        return date.toLocaleString(undefined, {
-                                            year: 'numeric',
-                                            month: 'numeric',
-                                            day: 'numeric',
-                                            hour: 'numeric',
-                                            minute: '2-digit',
-                                            second: '2-digit',
-                                            timeZoneName: 'short'
-                                        });
+                        {% if session.last_activity %}
+                        <div class="timestamp-main">
+                            <script>
+                                document.write((function() {
+                                    const timestamp = "{{ session.last_activity }}";
+                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                            return date.toLocaleString(undefined, {
+                                                year: 'numeric',
+                                                month: 'numeric',
+                                                day: 'numeric',
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                timeZoneName: 'short'
+                                            });
+                                        }
                                     }
-                                }
-                                return timestamp;
-                            })());
-                        </script>
+                                    return timestamp;
+                                })());
+                            </script>
+                        </div>
+                        <div class="timestamp-relative">
+                            <script>
+                                document.write((function() {
+                                    // Use last_activity or fall back to created_at
+                                    const timestamp = "{{ session.last_activity or session.created_at }}";
+                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                            const now = new Date();
+                                            const diffMs = now - date;
+                                            const diffMins = Math.floor(diffMs / 60000);
+                                            const diffHours = Math.floor(diffMins / 60);
+                                            const diffDays = Math.floor(diffHours / 24);
+
+                                            if (diffDays > 0) {
+                                                return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+                                            } else if (diffHours > 0) {
+                                                return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+                                            } else if (diffMins > 0) {
+                                                return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+                                            } else {
+                                                return 'just now';
+                                            }
+                                        }
+                                    }
+                                    return '';
+                                })());
+                            </script>
+                        </div>
+                        {% else %}
+                        <div class="timestamp-main">No activity</div>
+                        <div class="timestamp-relative">
+                            <script>
+                                document.write((function() {
+                                    // Fall back to created_at when no activity
+                                    const timestamp = "{{ session.created_at }}";
+                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                            const now = new Date();
+                                            const diffMs = now - date;
+                                            const diffMins = Math.floor(diffMs / 60000);
+                                            const diffHours = Math.floor(diffMins / 60);
+                                            const diffDays = Math.floor(diffHours / 24);
+
+                                            if (diffDays > 0) {
+                                                return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+                                            } else if (diffHours > 0) {
+                                                return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+                                            } else if (diffMins > 0) {
+                                                return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+                                            } else {
+                                                return 'just now';
+                                            }
+                                        }
+                                    }
+                                    return '';
+                                })());
+                            </script>
+                        </div>
+                        {% endif %}
                     </span>
                 </div>
-                {% endif %}
             </div>
 
-            <div class="session-actions">
-                <a href="/ui/sessions/{{ session.id }}" class="btn btn-primary">
-                    View Session
-                </a>
-                <button class="btn btn-secondary" onclick="copySessionId('{{ session.id }}')">
-                    Copy ID
-                </button>
-            </div>
         </div>
         {% endfor %}
     </div>
@@ -134,6 +209,16 @@
 setInterval(() => {
     window.location.reload();
 }, 30000);
+
+// Handle card click navigation
+function handleCardClick(event, url) {
+    // Don't navigate if user clicked on the copy button or other interactive elements
+    if (event.target.closest('.copy-btn-inline') || event.target.closest('button')) {
+        return;
+    }
+    // Navigate to the session
+    window.location.href = url;
+}
 
 // Copy session ID to clipboard
 function copySessionId(sessionId) {
@@ -168,5 +253,78 @@ function showNotification(message, type = 'success') {
 }
 
 // Timestamps are now formatted inline during template rendering
+
+// Apply activity status indicators to session cards and update stats
+function applyActivityStatus() {
+    const activityIndicators = document.querySelectorAll('.activity-indicator[data-activity-timestamp]');
+    const now = Date.now();
+    let freshCount = 0;
+    let recentCount = 0;
+    let staleCount = 0;
+
+    activityIndicators.forEach(indicator => {
+        const activityTimestamp = indicator.dataset.activityTimestamp;
+
+        if (activityTimestamp && /^\d+(\.\d+)?$/.test(activityTimestamp)) {
+            const activityTime = parseFloat(activityTimestamp) * 1000; // Convert to milliseconds
+            const timeDiff = now - activityTime;
+
+            // Remove existing activity classes
+            indicator.classList.remove('fresh', 'recent', 'stale');
+
+            // Apply appropriate activity class based on time difference
+            if (timeDiff <= 5 * 60 * 1000) { // < 5 minutes - fresh (green)
+                indicator.classList.add('fresh');
+                indicator.setAttribute('data-tooltip', 'Fresh: Active within 5 minutes');
+                freshCount++;
+            } else if (timeDiff <= 60 * 60 * 1000) { // < 1 hour - recent (yellow)
+                indicator.classList.add('recent');
+                indicator.setAttribute('data-tooltip', 'Recent: Active within 1 hour');
+                recentCount++;
+            } else { // > 1 hour - stale (gray)
+                indicator.classList.add('stale');
+                indicator.setAttribute('data-tooltip', 'Stale: No activity for over 1 hour');
+                staleCount++;
+            }
+        } else {
+            // No activity data, mark as stale
+            indicator.classList.add('stale');
+            indicator.setAttribute('data-tooltip', 'Stale: No activity for over 1 hour');
+            staleCount++;
+        }
+    });
+
+    // Update activity stats header
+    const freshCountEl = document.getElementById('fresh-count');
+    const recentCountEl = document.getElementById('recent-count');
+    const staleCountEl = document.getElementById('stale-count');
+
+    if (freshCountEl) freshCountEl.textContent = freshCount;
+    if (recentCountEl) recentCountEl.textContent = recentCount;
+    if (staleCountEl) staleCountEl.textContent = staleCount;
+}
+
+// Prevent double tooltips by handling custom tooltip elements
+function initializeCustomTooltips() {
+    const elements = document.querySelectorAll('.sticky-activity-header [title], .activity-indicator[title]');
+    elements.forEach(element => {
+        const title = element.getAttribute('title');
+        if (title) {
+            // Store title in data attribute for CSS to use
+            element.setAttribute('data-tooltip', title);
+            // Remove title to prevent browser tooltip
+            element.removeAttribute('title');
+        }
+    });
+}
+
+// Apply activity status on page load
+document.addEventListener('DOMContentLoaded', () => {
+    applyActivityStatus();
+    initializeCustomTooltips();
+});
+
+// Reapply activity status when page refreshes (every 30 seconds)
+setInterval(applyActivityStatus, 30000);
 </script>
 {% endblock %}

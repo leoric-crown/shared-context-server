@@ -4,63 +4,105 @@
 
 {% block content %}
 <div class="memory-dashboard">
-    <div class="dashboard-header">
-        <h1>{{ scope_label }} Memory Entries</h1>
-        <div class="dashboard-stats">
-            <div class="stat-card">
-                <span class="stat-number">{{ total_entries }}</span>
-                <span class="stat-label">{{ scope_label }} Entries</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ global_count }}</span>
-                <span class="stat-label">Global</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ session_count }}</span>
-                <span class="stat-label">Session</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ all_count }}</span>
-                <span class="stat-label">Total</span>
-            </div>
+    <!-- Breadcrumb Navigation -->
+    <div class="memory-view-header">
+        <div class="breadcrumb">
+            <span class="breadcrumb-current">Memories</span>
         </div>
     </div>
 
-    <div class="memory-controls">
-        <div class="scope-filter">
-            <label class="scope-label">Memory Scope:</label>
-            <div class="radio-group">
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="global" {% if current_scope == 'global' %}checked{% endif %} onchange="changeScopeFilter('global')">
-                    <span class="radio-text">Global Only</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="session" {% if current_scope == 'session' %}checked{% endif %} onchange="changeScopeFilter('session')">
-                    <span class="radio-text">Session-Scoped Only</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="all" {% if current_scope == 'all' %}checked{% endif %} onchange="changeScopeFilter('all')">
-                    <span class="radio-text">All Memories</span>
-                </label>
+    <!-- Sticky Navigation Container -->
+    <div class="sticky-nav-container">
+        <div class="memory-info">
+            <div class="memory-header-row">
+                <div class="memory-title-row">
+                    <button class="btn btn-secondary refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh Memory Dashboard">
+                        <span class="btn-icon">🔄</span>
+                    </button>
+                    <h1 class="memory-title">{{ scope_label }} Memory Entries</h1>
+                </div>
+                <div class="memory-stats-compact">
+                    <div class="stat-item">
+                        <span class="stat-number">{{ global_count }}</span>
+                        <span class="stat-label">Global</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">{{ session_count }}</span>
+                        <span class="stat-label">Session</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">{{ total_count }}</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div class="memory-search">
-            <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+            <!-- Integrated Controls Section -->
+            <div class="memory-controls">
+                <div class="scope-filter">
+                    <label class="scope-label">Memory Scope:</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="global" {% if current_scope == 'global' %}checked{% endif %} onchange="changeScopeFilter('global')">
+                            <span class="radio-text">Global Only</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="session" {% if current_scope == 'session' %}checked{% endif %} onchange="changeScopeFilter('session')">
+                            <span class="radio-text">Session-Scoped Only</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="all" {% if current_scope == 'all' %}checked{% endif %} onchange="changeScopeFilter('all')">
+                            <span class="radio-text">All Memories</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="memory-search">
+                    <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+                </div>
+            </div>
         </div>
     </div>
 
     {% if memory_entries %}
-    <div class="memory-table-container">
-        <table class="memory-table">
-            <thead>
+    <div class="table-wrapper">
+        <div class="memory-table-container">
+            <table class="memory-table">
+            <thead class="memory-table-thead">
                 <tr>
-                    <th>Key</th>
-                    <th>Agent</th>
-                    {% if current_scope == 'all' %}<th>Scope</th>{% endif %}
-                    <th>Value Preview</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th class="th-key">
+                        <span class="th-icon">🔑</span>
+                        <span class="th-text">Key</span>
+                    </th>
+                    <th class="th-agent">
+                        <span class="th-icon">🤖</span>
+                        <span class="th-text">Agent</span>
+                    </th>
+                    <th class="th-session">
+                        <span class="th-icon">🔗</span>
+                        <span class="th-text">Session</span>
+                    </th>
+                    {% if current_scope == 'all' %}
+                    <th class="th-scope">
+                        <span class="th-icon">📂</span>
+                        <span class="th-text">Scope</span>
+                    </th>
+                    {% endif %}
+                    <th class="th-preview">
+                        <span class="th-icon">👁️</span>
+                        <span class="th-text">Preview</span>
+                    </th>
+                    <th class="th-created">
+                        <span class="th-icon">📅</span>
+                        <span class="th-text">Created</span>
+                    </th>
+                    <th class="th-expires">
+                        <span class="th-icon">⏰</span>
+                        <span class="th-text">Expires</span>
+                    </th>
+                    <th class="th-actions">
+                        <span class="th-icon">⚙️</span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="memory-table-body">
@@ -71,6 +113,15 @@
                     </td>
                     <td class="memory-agent">
                         <span class="agent-badge">{{ entry.agent_id|e }}</span>
+                    </td>
+                    <td class="memory-session">
+                        {% if entry.session_id %}
+                            <a href="/ui/sessions/{{ entry.session_id }}" class="session-link">
+                                <code class="session-id">{{ entry.session_id|e }}</code>
+                            </a>
+                        {% else %}
+                            <span class="no-session">—</span>
+                        {% endif %}
                     </td>
                     {% if current_scope == 'all' %}
                     <td class="memory-scope">
@@ -83,46 +134,117 @@
                     {% endif %}
                     <td class="memory-value">
                         {% set value_text = entry.value|e %}
-                        {% if value_text|length > 100 %}
-                            <span class="value-preview">{{ value_text[:100] }}...</span>
-                        {% else %}
-                            <span class="value-preview">{{ value_text }}</span>
+                        <span class="value-preview">{{ value_text }}</span>
+                        {% if value_text|length > 200 %}
+                            <span class="expand-indicator" title="Click 'View Full' to see complete value">🔍</span>
                         {% endif %}
                     </td>
                     <td class="memory-created">
-                        <span class="timestamp-value">
+                        <div class="timestamp-container">
+                            <span class="timestamp-value">
+                                <script>
+                                    document.write((function() {
+                                        const timestamp = "{{ entry.created_at }}";
+                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                            const date = new Date(parseFloat(timestamp) * 1000);
+                                            if (!isNaN(date.getTime())) {
+                                                // Force local timezone conversion
+                                                return date.toLocaleString(undefined, {
+                                                    year: 'numeric',
+                                                    month: 'numeric',
+                                                    day: 'numeric',
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                    timeZoneName: 'short'
+                                                });
+                                            }
+                                        }
+                                        return timestamp;
+                                    })());
+                                </script>
+                            </span>
+                            <div class="relative-time">
+                                <script>
+                                    document.write((function() {
+                                        const timestamp = "{{ entry.created_at }}";
+                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                            const date = new Date(parseFloat(timestamp) * 1000);
+                                            if (!isNaN(date.getTime())) {
+                                                const now = new Date();
+                                                const diffMs = now.getTime() - date.getTime();
+                                                const diffMins = Math.floor(diffMs / (1000 * 60));
+                                                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+                                                if (diffMins < 1) {
+                                                    return 'just now';
+                                                } else if (diffMins < 60) {
+                                                    return diffMins + ' min' + (diffMins === 1 ? '' : 's') + ' ago';
+                                                } else if (diffHours < 24) {
+                                                    const remainingMins = diffMins - (diffHours * 60);
+                                                    if (remainingMins === 0) {
+                                                        return diffHours + ' hour' + (diffHours === 1 ? '' : 's') + ' ago';
+                                                    } else {
+                                                        return diffHours + 'h ' + remainingMins + 'm ago';
+                                                    }
+                                                } else {
+                                                    return diffDays + ' day' + (diffDays === 1 ? '' : 's') + ' ago';
+                                                }
+                                            }
+                                        }
+                                        return '';
+                                    })());
+                                </script>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="memory-expires">
+                        {% if entry.expires_at %}
+                        <span class="expires-value">
                             <script>
                                 document.write((function() {
-                                    const timestamp = "{{ entry.created_at }}";
+                                    const timestamp = "{{ entry.expires_at }}";
                                     if (/^\d+(\.\d+)?$/.test(timestamp)) {
                                         const date = new Date(parseFloat(timestamp) * 1000);
                                         if (!isNaN(date.getTime())) {
-                                            // Force local timezone conversion
-                                            return date.toLocaleString(undefined, {
-                                                year: 'numeric',
-                                                month: 'numeric',
-                                                day: 'numeric',
-                                                hour: 'numeric',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                                timeZoneName: 'short'
-                                            });
+                                            const now = new Date();
+                                            const diffMs = date.getTime() - now.getTime();
+                                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+                                            if (diffMs <= 0) {
+                                                return '<span class="ttl-expired">Expired</span>';
+                                            } else if (diffHours < 1) {
+                                                return '<span class="ttl-soon">' + diffMins + 'm</span>';
+                                            } else if (diffHours < 24) {
+                                                return '<span class="ttl-hours">' + diffHours + 'h ' + diffMins + 'm</span>';
+                                            } else {
+                                                const diffDays = Math.floor(diffHours / 24);
+                                                return '<span class="ttl-days">' + diffDays + 'd ' + (diffHours % 24) + 'h</span>';
+                                            }
                                         }
                                     }
                                     return timestamp;
                                 })());
                             </script>
                         </span>
+                        {% else %}
+                        <span class="ttl-permanent">Permanent</span>
+                        {% endif %}
                     </td>
                     <td class="memory-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="viewFullValue('{{ entry.key|e }}', {{ entry.value|tojson|e }})">
-                            View Full
+                        <button class="btn btn-sm btn-secondary view-full-btn"
+                                data-key="{{ entry.key|e }}"
+                                onclick="viewFullValue('{{ entry.key|e }}')">
+                            <span class="btn-icon">👁️</span>
                         </button>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
     {% else %}
     <div class="empty-state">
@@ -143,7 +265,12 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>Memory Value</h3>
-            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div class="modal-controls">
+                <button id="view-toggle" class="btn btn-sm" onclick="toggleView()" title="Toggle between highlighted and raw view">
+                    <span id="toggle-text">Raw</span>
+                </button>
+                <span class="modal-close" onclick="closeModal()">&times;</span>
+            </div>
         </div>
         <div class="modal-body">
             <div class="modal-key">
@@ -165,6 +292,12 @@
 setInterval(() => {
     window.location.reload();
 }, 30000);
+
+// Modal view state
+let currentViewMode = 'highlighted'; // 'highlighted' or 'raw'
+let currentModalKey = null;
+let currentRawValue = null;
+let currentParsedValue = null;
 
 // Change scope filter
 function changeScopeFilter(scope) {
@@ -188,11 +321,265 @@ document.getElementById('search-input').addEventListener('input', function(e) {
     });
 });
 
-// View full value in modal
-function viewFullValue(key, value) {
-    document.getElementById('modal-key').textContent = key;
-    document.getElementById('modal-value').textContent = value;
-    document.getElementById('value-modal').style.display = 'block';
+// View full value in modal (safe version)
+function viewFullValueSafe(button) {
+    const key = button.getAttribute('data-key');
+    const valueJson = button.getAttribute('data-value');
+
+    try {
+        const value = JSON.parse(valueJson);
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = JSON.stringify(value, null, 2);
+        document.getElementById('value-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Failed to parse JSON value:', error);
+        // Fallback to showing raw value
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = valueJson;
+        document.getElementById('value-modal').style.display = 'block';
+    }
+}
+
+// View full value in modal with syntax highlighting
+function viewFullValue(key) {
+    if (window.memoryValues && window.memoryValues[key]) {
+        let value = window.memoryValues[key];
+
+        // Store current modal state
+        currentModalKey = key;
+        currentRawValue = value;
+
+        // Try to parse JSON if it's a string
+        let parsedValue = value;
+        if (typeof value === 'string') {
+            try {
+                parsedValue = JSON.parse(value);
+            } catch (e) {
+                // If JSON parsing fails, treat as plain text
+                parsedValue = value;
+            }
+        }
+        currentParsedValue = parsedValue;
+
+        // Set modal key
+        document.getElementById('modal-key').textContent = key;
+
+        // Reset view mode to highlighted
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+
+        // Render content based on current view mode
+        renderModalContent();
+
+        document.getElementById('value-modal').style.display = 'block';
+    } else {
+        console.error('Memory value not found for key:', key);
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = 'Error: Value not found';
+        document.getElementById('value-modal').style.display = 'block';
+    }
+}
+
+// Render modal content based on current view mode
+function renderModalContent() {
+    const modalValueElement = document.getElementById('modal-value');
+
+    if (currentViewMode === 'raw') {
+        // Show raw JSON
+        modalValueElement.innerHTML = `<pre><code>${escapeHtml(typeof currentRawValue === 'string' ? currentRawValue : JSON.stringify(currentRawValue, null, 2))}</code></pre>`;
+    } else {
+        // Show highlighted content
+        if (shouldApplySyntaxHighlighting(currentParsedValue)) {
+            const { code, language } = extractCodeFromValue(currentParsedValue);
+            if (code && language) {
+                modalValueElement.innerHTML = `<pre><code class="language-${language}">${escapeHtml(code)}</code></pre>`;
+                // Apply syntax highlighting
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            } else {
+                // Fallback to JSON formatting with syntax highlighting
+                modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            }
+        } else {
+            // Regular JSON display with syntax highlighting
+            modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(modalValueElement.querySelector('code'));
+            }
+        }
+    }
+}
+
+// Toggle between highlighted and raw view
+function toggleView() {
+    if (currentViewMode === 'highlighted') {
+        currentViewMode = 'raw';
+        document.getElementById('toggle-text').textContent = 'Highlighted';
+    } else {
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+    }
+    renderModalContent();
+}
+
+// Helper function to determine if value should have syntax highlighting
+function shouldApplySyntaxHighlighting(value) {
+    if (typeof value !== 'object' || value === null) return false;
+
+    // Check for code-related fields
+    return (
+        value.hasOwnProperty('code') ||
+        value.hasOwnProperty('language') ||
+        value.hasOwnProperty('file_path') ||
+        value.hasOwnProperty('function_name') ||
+        (typeof value.content === 'string' && (
+            value.content.includes('function ') ||
+            value.content.includes('def ') ||
+            value.content.includes('class ') ||
+            value.content.includes('import ') ||
+            value.content.includes('SELECT ') ||
+            value.content.includes('#include') ||
+            value.content.includes('<!DOCTYPE') ||
+            value.content.includes('<script>') ||
+            value.content.includes('```')
+        ))
+    );
+}
+
+// Helper function to extract code and language from value
+function extractCodeFromValue(value) {
+    if (!value || typeof value !== 'object') {
+        return { code: null, language: null };
+    }
+
+    // Direct code field with language
+    if (value.code && value.language) {
+        return {
+            code: value.code,
+            language: mapLanguage(value.language)
+        };
+    }
+
+    // Content field (common for markdown/documentation)
+    if (value.content && typeof value.content === 'string') {
+        // Detect language from content
+        const detectedLanguage = detectLanguageFromContent(value.content);
+        return {
+            code: value.content,
+            language: detectedLanguage
+        };
+    }
+
+    // Code field without explicit language - try to detect
+    if (value.code && typeof value.code === 'string') {
+        const detectedLanguage = detectLanguageFromContent(value.code) ||
+                                 detectLanguageFromPath(value.file_path);
+        return {
+            code: value.code,
+            language: detectedLanguage || 'javascript'
+        };
+    }
+
+    return { code: null, language: null };
+}
+
+// Map common language names to Prism.js language identifiers
+function mapLanguage(lang) {
+    const langMap = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'py': 'python',
+        'rb': 'ruby',
+        'php': 'php',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'c++': 'cpp',
+        'cs': 'csharp',
+        'go': 'go',
+        'rust': 'rust',
+        'sql': 'sql',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'markdown': 'markdown',
+        'md': 'markdown',
+        'bash': 'bash',
+        'sh': 'bash',
+        'shell': 'bash'
+    };
+    return langMap[lang.toLowerCase()] || lang.toLowerCase();
+}
+
+// Detect language from file path
+function detectLanguageFromPath(filePath) {
+    if (!filePath || typeof filePath !== 'string') return null;
+
+    const extension = filePath.split('.').pop().toLowerCase();
+    return mapLanguage(extension);
+}
+
+// Detect language from code content
+function detectLanguageFromContent(content) {
+    if (!content || typeof content !== 'string') return null;
+
+    // Python patterns
+    if (/def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import|class\s+\w+.*:/i.test(content)) {
+        return 'python';
+    }
+
+    // JavaScript patterns
+    if (/function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|=>\s*{|console\.log/i.test(content)) {
+        return 'javascript';
+    }
+
+    // SQL patterns
+    if (/SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.*SET|DELETE\s+FROM|CREATE\s+TABLE/i.test(content)) {
+        return 'sql';
+    }
+
+    // HTML patterns
+    if (/<!DOCTYPE\s+html|<html|<head>|<body>|<div/i.test(content)) {
+        return 'html';
+    }
+
+    // CSS patterns
+    if (/\{[^}]*[a-z-]+\s*:\s*[^}]+\}|\.[a-z-]+\s*\{|#[a-z-]+\s*\{/i.test(content)) {
+        return 'css';
+    }
+
+    // JSON patterns
+    if (/^\s*[\{\[]/.test(content.trim()) && /[\}\]]\s*$/.test(content.trim())) {
+        try {
+            JSON.parse(content);
+            return 'json';
+        } catch (e) {
+            // Not valid JSON
+        }
+    }
+
+    // Bash/shell patterns
+    if (/^#!\/bin\/(bash|sh)|echo\s+|ls\s+|cd\s+|mkdir\s+|rm\s+/i.test(content)) {
+        return 'bash';
+    }
+
+    // Default to plain text for unknown content
+    return null;
+}
+
+// Helper function to escape HTML (may already exist)
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Close modal
@@ -207,6 +594,16 @@ window.onclick = function(event) {
         closeModal();
     }
 }
+
+// Close modal when ESC key is pressed
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+        const modal = document.getElementById('value-modal');
+        if (modal && modal.style.display === 'block') {
+            closeModal();
+        }
+    }
+});
 
 // Format timestamps immediately when script runs
 function formatTimestamps() {
@@ -256,24 +653,28 @@ formatTimestamps();
 
 // Also run when DOM is ready as backup
 document.addEventListener('DOMContentLoaded', formatTimestamps);
+
+// Simple scrollable table - no sticky headers
 </script>
 
 <style>
 .memory-dashboard {
-    padding: 2rem;
+    padding: 0;
+    background: transparent;
+    min-height: calc(100vh - 120px);
 }
 
 .memory-controls {
-    margin-bottom: 2rem;
+    margin-bottom: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.75rem;
 }
 
 .scope-filter {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
 }
 
@@ -285,7 +686,7 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
 
 .radio-group {
     display: flex;
-    gap: 1rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
 }
 
@@ -340,30 +741,205 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     font-size: 1rem;
 }
 
+/* Sticky navigation container */
+.sticky-nav-container {
+    padding: 0;
+    position: sticky;
+    top: 80px;
+    z-index: 10;
+}
+
+/* Memory-specific styling */
+.memory-info {
+    padding: 1rem 2rem;
+    background: white;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #dee2e6;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    margin: 0;
+    width: 100%;
+}
+
+.memory-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
+.memory-title-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+
+.memory-title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.memory-stats-compact {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.stat-number {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #2563eb;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0.25rem;
+}
+
+.memory-controls {
+    padding: 0;
+    background: transparent;
+}
+
+.table-wrapper {
+    padding: 0 2rem 2rem 2rem;
+}
+
+/* Override padding for sticky nav wrapper */
+.sticky-nav-container + .table-wrapper,
+.table-wrapper:has(.sticky-nav-container) {
+    padding-bottom: 0;
+}
+
 .memory-table-container {
-    overflow-x: auto;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #dee2e6;
+    overflow-x: auto;
+    overflow-y: visible;
 }
 
 .memory-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+    width: 100% !important;
+    min-width: 800px !important;
+    border-collapse: collapse !important;
+    font-size: 0.9rem !important;
+    margin: 0 !important;
+    table-layout: auto !important;
 }
 
-.memory-table th,
+.memory-table-thead th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+}
+
+/* Flexible column widths - let content determine size */
+.th-key { min-width: 120px; }
+.th-agent { min-width: 100px; }
+.th-session { min-width: 120px; }
+.th-scope { min-width: 80px; }
+.th-preview { min-width: 250px; word-wrap: break-word; }
+.th-created { min-width: 140px; }
+.th-expires { min-width: 100px; }
+.th-actions { width: 80px; min-width: 80px; text-align: center; }
+
 .memory-table td {
     padding: 1rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
-.memory-table th {
-    background-color: #f8f9fa;
+/* Override fixed width percentages from style.css to prevent text cropping */
+.memory-table .th-key,
+.memory-table .th-agent,
+.memory-table .th-scope,
+.memory-table .th-preview,
+.memory-table .th-created,
+.memory-table .th-expires,
+.memory-table .th-actions {
+    width: auto !important;
+}
+
+/* Allow text wrapping for content columns */
+.memory-key, .memory-agent, .memory-session, .memory-scope, .memory-created, .memory-expires {
+    white-space: nowrap;
+}
+
+/* Ensure preview column content can wrap and display fully */
+.memory-preview {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: none !important;
+}
+
+/* Timestamp styling */
+.timestamp-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.relative-time {
+    font-size: 0.75rem !important;
+    color: #6b7280 !important;
+    font-weight: 400 !important;
+    opacity: 0.8;
+}
+
+.memory-value {
+    white-space: normal;
+    word-wrap: break-word;
+    max-width: 300px;
+}
+
+/* Actions column specific styling */
+.memory-actions {
+    text-align: center;
+    padding: 0.5rem;
+    width: 60px;
+}
+
+.memory-table tr:last-child td {
+    border-bottom: none;
+}
+
+.th-icon {
+    margin-right: 0.5rem;
+}
+
+.th-text {
+    font-size: 0.875rem;
     font-weight: 600;
-    color: #495057;
 }
 
 .memory-key code {
@@ -381,6 +957,38 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     border-radius: 12px;
     font-size: 0.8rem;
     font-weight: 500;
+}
+
+.session-link {
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.session-link:hover {
+    transform: translateY(-1px);
+}
+
+.session-link:hover .session-id {
+    background: #e3f2fd;
+    color: #1976d2;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.session-id {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.8rem;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.no-session {
+    color: #999;
+    font-style: italic;
 }
 
 .scope-badge {
@@ -411,6 +1019,40 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     font-size: 0.875rem;
 }
 
+.view-full-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    background: #e3f2fd !important;
+    border: 1px solid #e3f2fd !important;
+    color: #1976d2 !important;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.view-full-btn:hover {
+    background: #bbdefb !important;
+    border-color: #bbdefb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.view-full-btn .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+    font-size: 16px;
+}
+
 .modal {
     position: fixed;
     z-index: 1000;
@@ -438,6 +1080,26 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+#view-toggle {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 0.375rem;
+}
+
+#view-toggle:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
 }
 
 .modal-header h3 {
@@ -489,5 +1151,16 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     border-top: 1px solid #eee;
     text-align: right;
 }
+
+/* Clean table layout - removed duplicate CSS */
 </style>
+
+<!-- Memory values for JavaScript access -->
+<script>
+window.memoryValues = {
+    {% for entry in memory_entries %}
+    "{{ entry.key|e }}": {{ entry.value|tojson }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+</script>
 {% endblock %}

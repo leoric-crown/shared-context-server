@@ -4,15 +4,33 @@
 
 {% block content %}
 <div class="session-view">
-    <div class="session-header">
+    <div class="session-view-header">
         <div class="breadcrumb">
-            <a href="/ui/" class="breadcrumb-link">Dashboard</a>
+            <a href="/ui/" class="breadcrumb-link">Sessions</a>
             <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-current">Session View</span>
+            <span class="breadcrumb-current">{{ session.id }}</span>
         </div>
+    </div>
 
+    <!-- Sticky Navigation Container -->
+    <div class="sticky-nav-container">
         <div class="session-info">
-            <h1 class="session-title">{{ session.purpose }}</h1>
+            <div class="session-header-row">
+                <div class="session-title-row">
+                    <div class="status-indicator" data-tooltip="Live Updates">
+                        <div id="ws-indicator" class="status-dot connecting"></div>
+                    </div>
+                    <h1 class="session-title">{{ session.purpose }}</h1>
+                </div>
+                <div class="session-header-controls">
+                    <button class="btn btn-secondary" id="refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh" style="display: none;">
+                        <span class="btn-icon">🔄</span>
+                    </button>
+                    <div class="activity-indicator" id="activity-status-indicator" data-activity-timestamp="{{ session.last_activity or session.created_at }}" data-tooltip="Loading activity status...">
+                        <div class="activity-dot"></div>
+                    </div>
+                </div>
+            </div>
             <div class="session-meta">
                 <div class="meta-item">
                     <span class="meta-label">Session ID:</span>
@@ -26,8 +44,15 @@
                     <span class="meta-value">{{ session.created_by }}</span>
                 </div>
                 <div class="meta-item">
-                    <span class="meta-label">Created at:</span>
+                    <span class="meta-label">Participants:</span>
                     <span class="meta-value">
+                        <span class="stat-icon">👥</span>
+                        {{ session.participant_count or 0 }} {% if (session.participant_count or 0) == 1 %}participant{% else %}participants{% endif %}
+                    </span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created at:</span>
+                    <span class="meta-value timestamp-value">
                         <script>
                             document.write((function() {
                                 const timestamp = "{{ session.created_at }}";
@@ -49,28 +74,95 @@
                             })());
                         </script>
                     </span>
+                    <div class="timestamp-relative">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.created_at }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        const now = new Date();
+                                        const diffMs = now - date;
+                                        const diffMins = Math.floor(diffMs / 60000);
+                                        const diffHours = Math.floor(diffMins / 60);
+                                        const diffDays = Math.floor(diffHours / 24);
+
+                                        if (diffDays > 0) {
+                                            return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+                                        } else if (diffHours > 0) {
+                                            return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+                                        } else if (diffMins > 0) {
+                                            return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+                                        } else {
+                                            return 'just now';
+                                        }
+                                    }
+                                }
+                                return '';
+                            })());
+                        </script>
+                    </div>
                 </div>
                 <div class="meta-item">
-                    <span class="meta-label">Status:</span>
-                    <span class="status-badge {% if session.is_active %}active{% else %}inactive{% endif %}">
-                        {% if session.is_active %}Active{% else %}Inactive{% endif %}
+                    <span class="meta-label">Last Activity:</span>
+                    {% if session.last_activity %}
+                    <span class="meta-value timestamp-value">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.last_activity }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        return date.toLocaleString(undefined, {
+                                            year: 'numeric',
+                                            month: 'numeric',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                            timeZoneName: 'short'
+                                        });
+                                    }
+                                }
+                                return timestamp;
+                            })());
+                        </script>
                     </span>
+                    <div class="timestamp-relative">
+                        <script>
+                            document.write((function() {
+                                const timestamp = "{{ session.last_activity }}";
+                                if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                    const date = new Date(parseFloat(timestamp) * 1000);
+                                    if (!isNaN(date.getTime())) {
+                                        const now = new Date();
+                                        const diffMs = now - date;
+                                        const diffMins = Math.floor(diffMs / 60000);
+                                        const diffHours = Math.floor(diffMins / 60);
+                                        const diffDays = Math.floor(diffHours / 24);
+
+                                        if (diffDays > 0) {
+                                            return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+                                        } else if (diffHours > 0) {
+                                            return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+                                        } else if (diffMins > 0) {
+                                            return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+                                        } else {
+                                            return 'just now';
+                                        }
+                                    }
+                                }
+                                return '';
+                            })());
+                        </script>
+                    </div>
+                    {% else %}
+                    <span class="meta-value">No activity</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <div class="session-controls">
-            <div class="websocket-status" id="websocket-status">
-                <span class="status-dot" id="ws-indicator"></span>
-                <span class="status-text" id="ws-text">Connecting...</span>
-            </div>
-            <button class="btn btn-secondary" onclick="window.location.reload()">
-                🔄 Refresh
-            </button>
-        </div>
-    </div>
-
-    <div class="session-content">
         <div class="tab-container">
             <div class="tab-header">
                 <button class="tab-button active" onclick="switchTab('messages')" id="messages-tab">
@@ -80,13 +172,27 @@
                     Memory ({{ session_memory|length }})
                 </button>
             </div>
+        </div>
+
+        <!-- Message Visibility Filters (only show for messages tab) -->
+        <div class="message-filters" id="message-filters">
+            <span class="filter-label">Show:</span>
+            <button class="filter-btn active" data-visibility="all" onclick="filterMessages('all')">All</button>
+            <button class="filter-btn" data-visibility="public" onclick="filterMessages('public')">Public</button>
+            <button class="filter-btn" data-visibility="private" onclick="filterMessages('private')">Private</button>
+            <button class="filter-btn" data-visibility="agent_only" onclick="filterMessages('agent_only')">Agent Only</button>
+            <button class="filter-btn" data-visibility="admin_only" onclick="filterMessages('admin_only')">Admin Only</button>
+        </div>
+    </div>
+
+    <div class="session-content">
 
             <div class="tab-content">
                 <div class="tab-pane active" id="messages-pane">
                     <div class="messages-list" id="messages-list">
             {% if messages %}
                 {% for message in messages %}
-                <div class="message-item" data-message-id="{{ message.id }}">
+                <div class="message-item" data-message-id="{{ message.id }}" data-visibility="{{ message.visibility }}">
                     <div class="message-header">
                         <div class="message-sender">
                             <span class="sender-icon">
@@ -97,28 +203,58 @@
                             <span class="sender-name">{{ message.sender }}</span>
                         </div>
                         <div class="message-meta">
-                            <span class="message-timestamp">
-                                <script>
-                                    document.write((function() {
-                                        const timestamp = "{{ message.timestamp }}";
-                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
-                                            const date = new Date(parseFloat(timestamp) * 1000);
-                                            if (!isNaN(date.getTime())) {
-                                                return date.toLocaleString(undefined, {
-                                                    year: 'numeric',
-                                                    month: 'numeric',
-                                                    day: 'numeric',
-                                                    hour: 'numeric',
-                                                    minute: '2-digit',
-                                                    second: '2-digit',
-                                                    timeZoneName: 'short'
-                                                });
+                            <div class="message-timestamp">
+                                <div class="timestamp-main">
+                                    <script>
+                                        document.write((function() {
+                                            const timestamp = "{{ message.timestamp }}";
+                                            if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                                const date = new Date(parseFloat(timestamp) * 1000);
+                                                if (!isNaN(date.getTime())) {
+                                                    return date.toLocaleString(undefined, {
+                                                        year: 'numeric',
+                                                        month: 'numeric',
+                                                        day: 'numeric',
+                                                        hour: 'numeric',
+                                                        minute: '2-digit',
+                                                        second: '2-digit',
+                                                        timeZoneName: 'short'
+                                                    });
+                                                }
                                             }
-                                        }
-                                        return timestamp;
-                                    })());
-                                </script>
-                            </span>
+                                            return timestamp;
+                                        })());
+                                    </script>
+                                </div>
+                                <div class="timestamp-relative">
+                                    <script>
+                                        document.write((function() {
+                                            const timestamp = "{{ message.timestamp }}";
+                                            if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                                const date = new Date(parseFloat(timestamp) * 1000);
+                                                if (!isNaN(date.getTime())) {
+                                                    const now = new Date();
+                                                    const diffMs = now - date;
+                                                    const diffMins = Math.floor(diffMs / 60000);
+                                                    const diffHours = Math.floor(diffMins / 60);
+                                                    const diffDays = Math.floor(diffHours / 24);
+
+                                                    if (diffDays > 0) {
+                                                        return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+                                                    } else if (diffHours > 0) {
+                                                        return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+                                                    } else if (diffMins > 0) {
+                                                        return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+                                                    } else {
+                                                        return 'just now';
+                                                    }
+                                                }
+                                            }
+                                            return '';
+                                        })());
+                                    </script>
+                                </div>
+                            </div>
                             <span class="visibility-badge visibility-{{ message.visibility }}">
                                 {{ message.visibility }}
                             </span>
@@ -126,7 +262,7 @@
                     </div>
 
                     <div class="message-content">
-                        <div class="message-text">{{ message.content }}</div>
+                        <div class="message-text" data-markdown="{{ message.content|e }}">{{ message.content }}</div>
                         {% if message.metadata and message.metadata != '{}' %}
                         <div class="message-metadata">
                             <details>
@@ -154,11 +290,30 @@
                         <table class="memory-table">
                             <thead>
                                 <tr>
-                                    <th>Key</th>
-                                    <th>Agent</th>
-                                    <th>Value Preview</th>
-                                    <th>Created</th>
-                                    <th>Actions</th>
+                                    <th class="th-key">
+                                        <span class="th-icon">🔑</span>
+                                        <span class="th-text">Key</span>
+                                    </th>
+                                    <th class="th-agent">
+                                        <span class="th-icon">🤖</span>
+                                        <span class="th-text">Agent</span>
+                                    </th>
+                                    <th class="th-preview">
+                                        <span class="th-icon">👁️</span>
+                                        <span class="th-text">Preview</span>
+                                    </th>
+                                    <th class="th-created">
+                                        <span class="th-icon">📅</span>
+                                        <span class="th-text">Created</span>
+                                    </th>
+                                    <th class="th-expires">
+                                        <span class="th-icon">⏰</span>
+                                        <span class="th-text">Expires</span>
+                                    </th>
+                                    <th class="th-actions">
+                                        <span class="th-icon">⚙️</span>
+                                        <span class="th-text">Actions</span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -172,10 +327,9 @@
                                     </td>
                                     <td class="memory-value">
                                         {% set value_text = entry.value|e %}
-                                        {% if value_text|length > 100 %}
-                                            <span class="value-preview">{{ value_text[:100] }}...</span>
-                                        {% else %}
-                                            <span class="value-preview">{{ value_text }}</span>
+                                        <span class="value-preview">{{ value_text }}</span>
+                                        {% if value_text|length > 200 %}
+                                            <span class="expand-indicator" title="Click 'View Full' to see complete value">🔍</span>
                                         {% endif %}
                                     </td>
                                     <td class="memory-created">
@@ -202,9 +356,46 @@
                                             </script>
                                         </span>
                                     </td>
+                                    <td class="memory-expires">
+                                        {% if entry.expires_at %}
+                                        <span class="expires-value">
+                                            <script>
+                                                document.write((function() {
+                                                    const timestamp = "{{ entry.expires_at }}";
+                                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                                        if (!isNaN(date.getTime())) {
+                                                            const now = new Date();
+                                                            const diffMs = date.getTime() - now.getTime();
+                                                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                                            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+                                                            if (diffMs <= 0) {
+                                                                return '<span class="ttl-expired">Expired</span>';
+                                                            } else if (diffHours < 1) {
+                                                                return '<span class="ttl-soon">' + diffMins + 'm</span>';
+                                                            } else if (diffHours < 24) {
+                                                                return '<span class="ttl-hours">' + diffHours + 'h ' + diffMins + 'm</span>';
+                                                            } else {
+                                                                const diffDays = Math.floor(diffHours / 24);
+                                                                return '<span class="ttl-days">' + diffDays + 'd ' + (diffHours % 24) + 'h</span>';
+                                                            }
+                                                        }
+                                                    }
+                                                    return timestamp;
+                                                })());
+                                            </script>
+                                        </span>
+                                        {% else %}
+                                        <span class="ttl-permanent">Permanent</span>
+                                        {% endif %}
+                                    </td>
                                     <td class="memory-actions">
-                                        <button class="btn btn-sm btn-secondary" onclick="viewFullValue('{{ entry.key|e }}', {{ entry.value|tojson|e }})">
-                                            View Full
+                                        <button class="btn btn-sm btn-secondary view-full-btn"
+                                                data-key="{{ entry.key|e }}"
+                                                onclick="viewFullValue('{{ entry.key|e }}')">
+                                            <span class="btn-icon">👁️</span>
+                                            <span class="btn-text">View Full</span>
                                         </button>
                                     </td>
                                 </tr>
@@ -230,7 +421,12 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>Memory Value</h3>
-            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div class="modal-controls">
+                <button id="view-toggle" class="btn btn-sm" onclick="toggleView()" title="Toggle between highlighted and raw view">
+                    <span id="toggle-text">Raw</span>
+                </button>
+                <span class="modal-close" onclick="closeModal()">&times;</span>
+            </div>
         </div>
         <div class="modal-body">
             <div class="modal-key">
@@ -251,6 +447,12 @@
 let websocket;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+
+// Modal view state
+let currentViewMode = 'highlighted'; // 'highlighted' or 'raw'
+let currentModalKey = null;
+let currentRawValue = null;
+let currentParsedValue = null;
 
 // WebSocket connection management
 function connectWebSocket() {
@@ -311,26 +513,35 @@ function connectWebSocket() {
 // Update connection status indicator
 function updateConnectionStatus(status) {
     const indicator = document.getElementById('ws-indicator');
-    const text = document.getElementById('ws-text');
+    const statusIndicator = indicator.parentElement; // Get the status-indicator container
+    const refreshBtn = document.getElementById('refresh-btn');
 
     indicator.className = 'status-dot';
 
     switch (status) {
         case 'connected':
             indicator.classList.add('online');
-            text.textContent = 'Live Updates';
+            statusIndicator.setAttribute('data-tooltip', 'Live Updates');
+            // Hide refresh button when connected
+            if (refreshBtn) refreshBtn.style.display = 'none';
             break;
         case 'disconnected':
             indicator.classList.add('offline');
-            text.textContent = 'Disconnected';
+            statusIndicator.setAttribute('data-tooltip', 'Disconnected');
+            // Show refresh button when disconnected
+            if (refreshBtn) refreshBtn.style.display = 'flex';
             break;
         case 'error':
             indicator.classList.add('error');
-            text.textContent = 'Connection Error';
+            statusIndicator.setAttribute('data-tooltip', 'Connection Error');
+            // Show refresh button on error
+            if (refreshBtn) refreshBtn.style.display = 'flex';
             break;
         default:
             indicator.classList.add('connecting');
-            text.textContent = 'Connecting...';
+            statusIndicator.setAttribute('data-tooltip', 'Connecting...');
+            // Hide refresh button while connecting
+            if (refreshBtn) refreshBtn.style.display = 'none';
     }
 }
 
@@ -589,13 +800,249 @@ function switchTab(tabName) {
 
     // Add active class to selected tab button
     document.getElementById(tabName + '-tab').classList.add('active');
+
+    // Show/hide message filters based on active tab
+    const messageFilters = document.getElementById('message-filters');
+    if (tabName === 'memory') {
+        messageFilters.style.display = 'none';
+    } else {
+        messageFilters.style.display = 'flex';
+    }
 }
 
 // View full value in modal
-function viewFullValue(key, value) {
-    document.getElementById('modal-key').textContent = key;
-    document.getElementById('modal-value').textContent = value;
-    document.getElementById('value-modal').style.display = 'block';
+function viewFullValue(key) {
+    if (window.sessionMemoryValues && window.sessionMemoryValues[key]) {
+        let value = window.sessionMemoryValues[key];
+
+        // Store current modal state
+        currentModalKey = key;
+        currentRawValue = value;
+
+        // Try to parse JSON if it's a string
+        let parsedValue = value;
+        if (typeof value === 'string') {
+            try {
+                parsedValue = JSON.parse(value);
+            } catch (e) {
+                // If JSON parsing fails, treat as plain text
+                parsedValue = value;
+            }
+        }
+        currentParsedValue = parsedValue;
+
+        // Set modal key
+        document.getElementById('modal-key').textContent = key;
+
+        // Reset view mode to highlighted
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+
+        // Render content based on current view mode
+        renderModalContent();
+
+        document.getElementById('value-modal').style.display = 'block';
+    } else {
+        console.error('Session memory value not found for key:', key);
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = 'Error: Value not found';
+        document.getElementById('value-modal').style.display = 'block';
+    }
+}
+
+// Render modal content based on current view mode
+function renderModalContent() {
+    const modalValueElement = document.getElementById('modal-value');
+
+    if (currentViewMode === 'raw') {
+        // Show raw JSON
+        modalValueElement.innerHTML = `<pre><code>${escapeHtml(typeof currentRawValue === 'string' ? currentRawValue : JSON.stringify(currentRawValue, null, 2))}</code></pre>`;
+    } else {
+        // Show highlighted content
+        if (shouldApplySyntaxHighlighting(currentParsedValue)) {
+            const { code, language } = extractCodeFromValue(currentParsedValue);
+            if (code && language) {
+                modalValueElement.innerHTML = `<pre><code class="language-${language}">${escapeHtml(code)}</code></pre>`;
+                // Apply syntax highlighting
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            } else {
+                // Fallback to JSON formatting with syntax highlighting
+                modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            }
+        } else {
+            // Regular JSON display with syntax highlighting
+            modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(modalValueElement.querySelector('code'));
+            }
+        }
+    }
+}
+
+// Toggle between highlighted and raw view
+function toggleView() {
+    if (currentViewMode === 'highlighted') {
+        currentViewMode = 'raw';
+        document.getElementById('toggle-text').textContent = 'Highlighted';
+    } else {
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+    }
+    renderModalContent();
+}
+
+// Helper function to determine if value should have syntax highlighting
+function shouldApplySyntaxHighlighting(value) {
+    if (typeof value !== 'object' || value === null) return false;
+
+    // Check for code-related fields
+    return (
+        value.hasOwnProperty('code') ||
+        value.hasOwnProperty('language') ||
+        value.hasOwnProperty('file_path') ||
+        value.hasOwnProperty('function_name') ||
+        (typeof value.content === 'string' && (
+            value.content.includes('function ') ||
+            value.content.includes('def ') ||
+            value.content.includes('class ') ||
+            value.content.includes('import ') ||
+            value.content.includes('SELECT ') ||
+            value.content.includes('#include') ||
+            value.content.includes('<!DOCTYPE') ||
+            value.content.includes('<script>') ||
+            value.content.includes('```')
+        ))
+    );
+}
+
+// Helper function to extract code and language from value
+function extractCodeFromValue(value) {
+    if (!value || typeof value !== 'object') {
+        return { code: null, language: null };
+    }
+
+    // Direct code field with language
+    if (value.code && value.language) {
+        return {
+            code: value.code,
+            language: mapLanguage(value.language)
+        };
+    }
+
+    // Content field (common for markdown/documentation)
+    if (value.content && typeof value.content === 'string') {
+        // Detect language from content
+        const detectedLanguage = detectLanguageFromContent(value.content);
+        return {
+            code: value.content,
+            language: detectedLanguage
+        };
+    }
+
+    // Code field without explicit language - try to detect
+    if (value.code && typeof value.code === 'string') {
+        const detectedLanguage = detectLanguageFromContent(value.code) ||
+                                 detectLanguageFromPath(value.file_path);
+        return {
+            code: value.code,
+            language: detectedLanguage || 'javascript'
+        };
+    }
+
+    return { code: null, language: null };
+}
+
+// Map common language names to Prism.js language identifiers
+function mapLanguage(lang) {
+    const langMap = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'py': 'python',
+        'rb': 'ruby',
+        'php': 'php',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'c++': 'cpp',
+        'cs': 'csharp',
+        'go': 'go',
+        'rust': 'rust',
+        'sql': 'sql',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'markdown': 'markdown',
+        'md': 'markdown',
+        'bash': 'bash',
+        'sh': 'bash',
+        'shell': 'bash'
+    };
+    return langMap[lang.toLowerCase()] || lang.toLowerCase();
+}
+
+// Detect language from file path
+function detectLanguageFromPath(filePath) {
+    if (!filePath || typeof filePath !== 'string') return null;
+
+    const extension = filePath.split('.').pop().toLowerCase();
+    return mapLanguage(extension);
+}
+
+// Detect language from code content
+function detectLanguageFromContent(content) {
+    if (!content || typeof content !== 'string') return null;
+
+    // Python patterns
+    if (/def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import|class\s+\w+.*:/i.test(content)) {
+        return 'python';
+    }
+
+    // JavaScript patterns
+    if (/function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|=>\s*{|console\.log/i.test(content)) {
+        return 'javascript';
+    }
+
+    // SQL patterns
+    if (/SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.*SET|DELETE\s+FROM|CREATE\s+TABLE/i.test(content)) {
+        return 'sql';
+    }
+
+    // HTML patterns
+    if (/<!DOCTYPE\s+html|<html|<head>|<body>|<div/i.test(content)) {
+        return 'html';
+    }
+
+    // CSS patterns
+    if (/\{[^}]*[a-z-]+\s*:\s*[^}]+\}|\.[a-z-]+\s*\{|#[a-z-]+\s*\{/i.test(content)) {
+        return 'css';
+    }
+
+    // JSON patterns
+    if (/^\s*[\{\[]/.test(content.trim()) && /[\}\]]\s*$/.test(content.trim())) {
+        try {
+            JSON.parse(content);
+            return 'json';
+        } catch (e) {
+            // Not valid JSON
+        }
+    }
+
+    // Bash/shell patterns
+    if (/^#!\/bin\/(bash|sh)|echo\s+|ls\s+|cd\s+|mkdir\s+|rm\s+/i.test(content)) {
+        return 'bash';
+    }
+
+    // Default to plain text for unknown content
+    return null;
 }
 
 // Close modal
@@ -610,6 +1057,16 @@ window.onclick = function(event) {
         closeModal();
     }
 }
+
+// Close modal when ESC key is pressed
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+        const modal = document.getElementById('value-modal');
+        if (modal && modal.style.display === 'block') {
+            closeModal();
+        }
+    }
+});
 
 // Copy to clipboard utility
 function copyToClipboard(text) {
@@ -650,19 +1107,229 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
+// Apply activity status to the indicator
+function applyActivityStatusToIndicator() {
+    const indicator = document.getElementById('activity-status-indicator');
+    if (!indicator) return;
+
+    const activityTimestamp = indicator.dataset.activityTimestamp;
+    const now = Date.now();
+
+    if (activityTimestamp && /^\d+(\.\d+)?$/.test(activityTimestamp)) {
+        const activityTime = parseFloat(activityTimestamp) * 1000; // Convert to milliseconds
+        const timeDiff = now - activityTime;
+
+        // Remove existing activity classes
+        indicator.classList.remove('fresh', 'recent', 'stale', 'active', 'inactive');
+
+        // Apply appropriate activity class based on time difference
+        if (timeDiff <= 5 * 60 * 1000) { // < 5 minutes - fresh (green)
+            indicator.classList.add('fresh');
+            indicator.setAttribute('data-tooltip', 'Fresh: Active within 5 minutes');
+        } else if (timeDiff <= 60 * 60 * 1000) { // < 1 hour - recent (yellow)
+            indicator.classList.add('recent');
+            indicator.setAttribute('data-tooltip', 'Recent: Active within 1 hour');
+        } else { // > 1 hour - stale (gray)
+            indicator.classList.add('stale');
+            indicator.setAttribute('data-tooltip', 'Stale: No activity for over 1 hour');
+        }
+    } else {
+        // No activity data, mark as stale
+        indicator.classList.add('stale');
+        indicator.setAttribute('data-tooltip', 'Stale: No activity for over 1 hour');
+    }
+}
+
+// Prevent double tooltips by handling custom tooltip elements
+function initializeCustomTooltips() {
+    const elements = document.querySelectorAll('.session-header-controls [title], .status-badge[title]');
+    elements.forEach(element => {
+        const title = element.getAttribute('title');
+        if (title) {
+            // Store title in data attribute for CSS to use
+            element.setAttribute('data-tooltip', title);
+            // Remove title to prevent browser tooltip
+            element.removeAttribute('title');
+        }
+    });
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Apply activity status to badge
+    applyActivityStatusToIndicator();
+
+    // Initialize custom tooltips
+    initializeCustomTooltips();
+
     // Connect WebSocket
     connectWebSocket();
+
+    // Initialize markdown rendering for existing messages
+    initializeMarkdownRendering();
+
+    // Scroll to most recent message
+    scrollToLatestMessage();
 });
+
+// Scroll to the most recent message
+function scrollToLatestMessage() {
+    const messagesList = document.getElementById('messages-list');
+    const messages = messagesList.querySelectorAll('.message-item');
+
+    if (messages.length > 0) {
+        // Get the last message
+        const lastMessage = messages[messages.length - 1];
+        // Scroll to it smoothly
+        lastMessage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+// Initialize markdown rendering for message content
+function initializeMarkdownRendering() {
+    const messageElements = document.querySelectorAll('.message-text[data-markdown]');
+
+    messageElements.forEach(element => {
+        const markdownContent = element.getAttribute('data-markdown');
+        if (markdownContent && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+            try {
+                // Render markdown using marked.js (loaded from CDN in base.html)
+                const rawHtmlContent = marked.parse(markdownContent);
+
+                // Sanitize HTML to prevent XSS while preserving safe elements
+                const sanitizedHtmlContent = DOMPurify.sanitize(rawHtmlContent, {
+                    ALLOWED_TAGS: [
+                        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                        'p', 'br', 'div', 'span',
+                        'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
+                        'ul', 'ol', 'li',
+                        'blockquote',
+                        'a',
+                        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                        'input'
+                    ],
+                    ALLOWED_ATTR: [
+                        'href', 'title', 'alt', 'class', 'id',
+                        'type', 'checked', 'disabled'
+                    ],
+                    ALLOW_DATA_ATTR: false,
+                    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|#):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'src'],
+                    FORBID_TAGS: ['script', 'object', 'embed', 'form', 'button', 'img'],
+                    ADD_ATTR: ['target'],
+                    // Only allow checkbox inputs from markdown
+                    CUSTOM_ELEMENT_HANDLING: {
+                        tagNameCheck: (tagName) => {
+                            if (tagName === 'input') {
+                                return /^input$/i.test(tagName);
+                            }
+                            return false;
+                        },
+                        attributeNameCheck: (attr) => /^(type|checked|disabled)$/i.test(attr),
+                        allowCustomizedBuiltInElements: false
+                    }
+                });
+
+                element.innerHTML = sanitizedHtmlContent;
+
+                // Apply syntax highlighting if Prism is available
+                if (typeof Prism !== 'undefined') {
+                    const codeElements = element.querySelectorAll('code[class*="language-"]');
+                    codeElements.forEach(code => {
+                        Prism.highlightElement(code);
+                    });
+                }
+            } catch (error) {
+                console.error('Error rendering markdown:', error);
+            }
+        } else if (!markdownContent) {
+            console.warn('No markdown content found in data-markdown attribute');
+        } else if (typeof marked === 'undefined') {
+            console.warn('Marked.js library not available');
+        } else if (typeof DOMPurify === 'undefined') {
+            console.warn('DOMPurify library not available - HTML sanitization disabled');
+        }
+    });
+}
+
+// Message visibility filtering
+function filterMessages(visibility) {
+    const messages = document.querySelectorAll('.message-item');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+
+    // Update active button
+    filterButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.visibility === visibility);
+    });
+
+    // Filter messages
+    messages.forEach(message => {
+        const messageVisibility = message.dataset.visibility;
+        if (visibility === 'all' || messageVisibility === visibility) {
+            message.style.display = 'block';
+        } else {
+            message.style.display = 'none';
+        }
+    });
+
+    // Update count in Messages tab
+    const visibleCount = document.querySelectorAll('.message-item[style*="block"], .message-item:not([style*="none"])').length;
+    const messagesTab = document.getElementById('messages-tab');
+    if (messagesTab) {
+        const originalText = messagesTab.textContent.replace(/Messages \(\d+\)/, `Messages (${visibleCount})`);
+        messagesTab.textContent = originalText;
+    }
+}
+
+// Session memory values for JavaScript access
+window.sessionMemoryValues = {
+    {% if session_memory %}
+    {% for entry in session_memory %}
+    "{{ entry.key|e }}": {{ entry.value|tojson }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+    {% endif %}
+};
 </script>
 
 <style>
+/* Message Filters */
+.message-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #6c757d;
+    margin-right: 0.5rem;
+}
+
+.filter-btn {
+    background: transparent;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.filter-btn:hover {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.filter-btn.active {
+    background: #198754;
+    color: white;
+    border-color: #198754;
+}
+
 /* Tab container styles */
 .tab-container {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: hidden;
 }
 
@@ -824,6 +1491,26 @@ document.addEventListener('DOMContentLoaded', () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+#view-toggle {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 0.375rem;
+}
+
+#view-toggle:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
 }
 
 .modal-header h3 {
