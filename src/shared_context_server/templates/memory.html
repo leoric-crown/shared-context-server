@@ -4,8 +4,18 @@
 
 {% block content %}
 <div class="memory-dashboard">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb">
+        <span class="breadcrumb-current">Memories</span>
+    </div>
+
     <div class="dashboard-header">
-        <h1>{{ scope_label }} Memory Entries</h1>
+        <div class="header-content">
+            <button class="btn btn-secondary refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh Memory Dashboard">
+                <span class="btn-icon">🔄</span>
+            </button>
+            <h1>{{ scope_label }} Memory Entries</h1>
+        </div>
         <div class="dashboard-stats">
             <div class="stat-card">
                 <span class="stat-number">{{ total_entries }}</span>
@@ -55,12 +65,39 @@
         <table class="memory-table">
             <thead>
                 <tr>
-                    <th>Key</th>
-                    <th>Agent</th>
-                    {% if current_scope == 'all' %}<th>Scope</th>{% endif %}
-                    <th>Value Preview</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th class="th-key">
+                        <span class="th-icon">🔑</span>
+                        <span class="th-text">Key</span>
+                    </th>
+                    <th class="th-agent">
+                        <span class="th-icon">🤖</span>
+                        <span class="th-text">Agent</span>
+                    </th>
+                    <th class="th-session">
+                        <span class="th-icon">🔗</span>
+                        <span class="th-text">Session</span>
+                    </th>
+                    {% if current_scope == 'all' %}
+                    <th class="th-scope">
+                        <span class="th-icon">📂</span>
+                        <span class="th-text">Scope</span>
+                    </th>
+                    {% endif %}
+                    <th class="th-preview">
+                        <span class="th-icon">👁️</span>
+                        <span class="th-text">Preview</span>
+                    </th>
+                    <th class="th-created">
+                        <span class="th-icon">📅</span>
+                        <span class="th-text">Created</span>
+                    </th>
+                    <th class="th-expires">
+                        <span class="th-icon">⏰</span>
+                        <span class="th-text">Expires</span>
+                    </th>
+                    <th class="th-actions">
+                        <span class="th-icon">⚙️</span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="memory-table-body">
@@ -71,6 +108,15 @@
                     </td>
                     <td class="memory-agent">
                         <span class="agent-badge">{{ entry.agent_id|e }}</span>
+                    </td>
+                    <td class="memory-session">
+                        {% if entry.session_id %}
+                            <a href="/ui/sessions/{{ entry.session_id }}" class="session-link">
+                                <code class="session-id">{{ entry.session_id|e }}</code>
+                            </a>
+                        {% else %}
+                            <span class="no-session">—</span>
+                        {% endif %}
                     </td>
                     {% if current_scope == 'all' %}
                     <td class="memory-scope">
@@ -83,10 +129,9 @@
                     {% endif %}
                     <td class="memory-value">
                         {% set value_text = entry.value|e %}
-                        {% if value_text|length > 100 %}
-                            <span class="value-preview">{{ value_text[:100] }}...</span>
-                        {% else %}
-                            <span class="value-preview">{{ value_text }}</span>
+                        <span class="value-preview">{{ value_text }}</span>
+                        {% if value_text|length > 200 %}
+                            <span class="expand-indicator" title="Click 'View Full' to see complete value">🔍</span>
                         {% endif %}
                     </td>
                     <td class="memory-created">
@@ -114,9 +159,45 @@
                             </script>
                         </span>
                     </td>
+                    <td class="memory-expires">
+                        {% if entry.expires_at %}
+                        <span class="expires-value">
+                            <script>
+                                document.write((function() {
+                                    const timestamp = "{{ entry.expires_at }}";
+                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                        const date = new Date(parseFloat(timestamp) * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                            const now = new Date();
+                                            const diffMs = date.getTime() - now.getTime();
+                                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+                                            if (diffMs <= 0) {
+                                                return '<span class="ttl-expired">Expired</span>';
+                                            } else if (diffHours < 1) {
+                                                return '<span class="ttl-soon">' + diffMins + 'm</span>';
+                                            } else if (diffHours < 24) {
+                                                return '<span class="ttl-hours">' + diffHours + 'h ' + diffMins + 'm</span>';
+                                            } else {
+                                                const diffDays = Math.floor(diffHours / 24);
+                                                return '<span class="ttl-days">' + diffDays + 'd ' + (diffHours % 24) + 'h</span>';
+                                            }
+                                        }
+                                    }
+                                    return timestamp;
+                                })());
+                            </script>
+                        </span>
+                        {% else %}
+                        <span class="ttl-permanent">Permanent</span>
+                        {% endif %}
+                    </td>
                     <td class="memory-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="viewFullValue('{{ entry.key|e }}', {{ entry.value|tojson|e }})">
-                            View Full
+                        <button class="btn btn-sm btn-secondary view-full-btn"
+                                data-key="{{ entry.key|e }}"
+                                onclick="viewFullValue('{{ entry.key|e }}')">
+                            <span class="btn-icon">👁️</span>
                         </button>
                     </td>
                 </tr>
@@ -143,7 +224,12 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>Memory Value</h3>
-            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div class="modal-controls">
+                <button id="view-toggle" class="btn btn-sm" onclick="toggleView()" title="Toggle between highlighted and raw view">
+                    <span id="toggle-text">Raw</span>
+                </button>
+                <span class="modal-close" onclick="closeModal()">&times;</span>
+            </div>
         </div>
         <div class="modal-body">
             <div class="modal-key">
@@ -165,6 +251,12 @@
 setInterval(() => {
     window.location.reload();
 }, 30000);
+
+// Modal view state
+let currentViewMode = 'highlighted'; // 'highlighted' or 'raw'
+let currentModalKey = null;
+let currentRawValue = null;
+let currentParsedValue = null;
 
 // Change scope filter
 function changeScopeFilter(scope) {
@@ -188,11 +280,265 @@ document.getElementById('search-input').addEventListener('input', function(e) {
     });
 });
 
-// View full value in modal
-function viewFullValue(key, value) {
-    document.getElementById('modal-key').textContent = key;
-    document.getElementById('modal-value').textContent = value;
-    document.getElementById('value-modal').style.display = 'block';
+// View full value in modal (safe version)
+function viewFullValueSafe(button) {
+    const key = button.getAttribute('data-key');
+    const valueJson = button.getAttribute('data-value');
+
+    try {
+        const value = JSON.parse(valueJson);
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = JSON.stringify(value, null, 2);
+        document.getElementById('value-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Failed to parse JSON value:', error);
+        // Fallback to showing raw value
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = valueJson;
+        document.getElementById('value-modal').style.display = 'block';
+    }
+}
+
+// View full value in modal with syntax highlighting
+function viewFullValue(key) {
+    if (window.memoryValues && window.memoryValues[key]) {
+        let value = window.memoryValues[key];
+
+        // Store current modal state
+        currentModalKey = key;
+        currentRawValue = value;
+
+        // Try to parse JSON if it's a string
+        let parsedValue = value;
+        if (typeof value === 'string') {
+            try {
+                parsedValue = JSON.parse(value);
+            } catch (e) {
+                // If JSON parsing fails, treat as plain text
+                parsedValue = value;
+            }
+        }
+        currentParsedValue = parsedValue;
+
+        // Set modal key
+        document.getElementById('modal-key').textContent = key;
+
+        // Reset view mode to highlighted
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+
+        // Render content based on current view mode
+        renderModalContent();
+
+        document.getElementById('value-modal').style.display = 'block';
+    } else {
+        console.error('Memory value not found for key:', key);
+        document.getElementById('modal-key').textContent = key;
+        document.getElementById('modal-value').textContent = 'Error: Value not found';
+        document.getElementById('value-modal').style.display = 'block';
+    }
+}
+
+// Render modal content based on current view mode
+function renderModalContent() {
+    const modalValueElement = document.getElementById('modal-value');
+
+    if (currentViewMode === 'raw') {
+        // Show raw JSON
+        modalValueElement.innerHTML = `<pre><code>${escapeHtml(typeof currentRawValue === 'string' ? currentRawValue : JSON.stringify(currentRawValue, null, 2))}</code></pre>`;
+    } else {
+        // Show highlighted content
+        if (shouldApplySyntaxHighlighting(currentParsedValue)) {
+            const { code, language } = extractCodeFromValue(currentParsedValue);
+            if (code && language) {
+                modalValueElement.innerHTML = `<pre><code class="language-${language}">${escapeHtml(code)}</code></pre>`;
+                // Apply syntax highlighting
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            } else {
+                // Fallback to JSON formatting with syntax highlighting
+                modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalValueElement.querySelector('code'));
+                }
+            }
+        } else {
+            // Regular JSON display with syntax highlighting
+            modalValueElement.innerHTML = `<pre><code class="language-json">${escapeHtml(JSON.stringify(currentParsedValue, null, 2))}</code></pre>`;
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(modalValueElement.querySelector('code'));
+            }
+        }
+    }
+}
+
+// Toggle between highlighted and raw view
+function toggleView() {
+    if (currentViewMode === 'highlighted') {
+        currentViewMode = 'raw';
+        document.getElementById('toggle-text').textContent = 'Highlighted';
+    } else {
+        currentViewMode = 'highlighted';
+        document.getElementById('toggle-text').textContent = 'Raw';
+    }
+    renderModalContent();
+}
+
+// Helper function to determine if value should have syntax highlighting
+function shouldApplySyntaxHighlighting(value) {
+    if (typeof value !== 'object' || value === null) return false;
+
+    // Check for code-related fields
+    return (
+        value.hasOwnProperty('code') ||
+        value.hasOwnProperty('language') ||
+        value.hasOwnProperty('file_path') ||
+        value.hasOwnProperty('function_name') ||
+        (typeof value.content === 'string' && (
+            value.content.includes('function ') ||
+            value.content.includes('def ') ||
+            value.content.includes('class ') ||
+            value.content.includes('import ') ||
+            value.content.includes('SELECT ') ||
+            value.content.includes('#include') ||
+            value.content.includes('<!DOCTYPE') ||
+            value.content.includes('<script>') ||
+            value.content.includes('```')
+        ))
+    );
+}
+
+// Helper function to extract code and language from value
+function extractCodeFromValue(value) {
+    if (!value || typeof value !== 'object') {
+        return { code: null, language: null };
+    }
+
+    // Direct code field with language
+    if (value.code && value.language) {
+        return {
+            code: value.code,
+            language: mapLanguage(value.language)
+        };
+    }
+
+    // Content field (common for markdown/documentation)
+    if (value.content && typeof value.content === 'string') {
+        // Detect language from content
+        const detectedLanguage = detectLanguageFromContent(value.content);
+        return {
+            code: value.content,
+            language: detectedLanguage
+        };
+    }
+
+    // Code field without explicit language - try to detect
+    if (value.code && typeof value.code === 'string') {
+        const detectedLanguage = detectLanguageFromContent(value.code) ||
+                                 detectLanguageFromPath(value.file_path);
+        return {
+            code: value.code,
+            language: detectedLanguage || 'javascript'
+        };
+    }
+
+    return { code: null, language: null };
+}
+
+// Map common language names to Prism.js language identifiers
+function mapLanguage(lang) {
+    const langMap = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'py': 'python',
+        'rb': 'ruby',
+        'php': 'php',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'c++': 'cpp',
+        'cs': 'csharp',
+        'go': 'go',
+        'rust': 'rust',
+        'sql': 'sql',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'markdown': 'markdown',
+        'md': 'markdown',
+        'bash': 'bash',
+        'sh': 'bash',
+        'shell': 'bash'
+    };
+    return langMap[lang.toLowerCase()] || lang.toLowerCase();
+}
+
+// Detect language from file path
+function detectLanguageFromPath(filePath) {
+    if (!filePath || typeof filePath !== 'string') return null;
+
+    const extension = filePath.split('.').pop().toLowerCase();
+    return mapLanguage(extension);
+}
+
+// Detect language from code content
+function detectLanguageFromContent(content) {
+    if (!content || typeof content !== 'string') return null;
+
+    // Python patterns
+    if (/def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import|class\s+\w+.*:/i.test(content)) {
+        return 'python';
+    }
+
+    // JavaScript patterns
+    if (/function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|=>\s*{|console\.log/i.test(content)) {
+        return 'javascript';
+    }
+
+    // SQL patterns
+    if (/SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.*SET|DELETE\s+FROM|CREATE\s+TABLE/i.test(content)) {
+        return 'sql';
+    }
+
+    // HTML patterns
+    if (/<!DOCTYPE\s+html|<html|<head>|<body>|<div/i.test(content)) {
+        return 'html';
+    }
+
+    // CSS patterns
+    if (/\{[^}]*[a-z-]+\s*:\s*[^}]+\}|\.[a-z-]+\s*\{|#[a-z-]+\s*\{/i.test(content)) {
+        return 'css';
+    }
+
+    // JSON patterns
+    if (/^\s*[\{\[]/.test(content.trim()) && /[\}\]]\s*$/.test(content.trim())) {
+        try {
+            JSON.parse(content);
+            return 'json';
+        } catch (e) {
+            // Not valid JSON
+        }
+    }
+
+    // Bash/shell patterns
+    if (/^#!\/bin\/(bash|sh)|echo\s+|ls\s+|cd\s+|mkdir\s+|rm\s+/i.test(content)) {
+        return 'bash';
+    }
+
+    // Default to plain text for unknown content
+    return null;
+}
+
+// Helper function to escape HTML (may already exist)
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Close modal
@@ -207,6 +553,16 @@ window.onclick = function(event) {
         closeModal();
     }
 }
+
+// Close modal when ESC key is pressed
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' || event.keyCode === 27) {
+        const modal = document.getElementById('value-modal');
+        if (modal && modal.style.display === 'block') {
+            closeModal();
+        }
+    }
+});
 
 // Format timestamps immediately when script runs
 function formatTimestamps() {
@@ -261,6 +617,14 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
 <style>
 .memory-dashboard {
     padding: 2rem;
+}
+
+.dashboard-header {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .memory-controls {
@@ -383,6 +747,38 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     font-weight: 500;
 }
 
+.session-link {
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.session-link:hover {
+    transform: translateY(-1px);
+}
+
+.session-link:hover .session-id {
+    background: #e3f2fd;
+    color: #1976d2;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.session-id {
+    background: #f1f3f4;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.8rem;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.no-session {
+    color: #999;
+    font-style: italic;
+}
+
 .scope-badge {
     padding: 0.25rem 0.5rem;
     border-radius: 12px;
@@ -409,6 +805,34 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
 .btn-sm {
     padding: 0.375rem 0.75rem;
     font-size: 0.875rem;
+}
+
+.view-full-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0.25rem !important;
+    background: #e3f2fd !important;
+    border: 1px solid #e3f2fd !important;
+    color: #1976d2 !important;
+}
+
+.view-full-btn:hover {
+    background: #bbdefb !important;
+    border-color: #bbdefb !important;
+}
+
+.view-full-btn .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
 }
 
 .modal {
@@ -438,6 +862,26 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+#view-toggle {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 0.375rem;
+}
+
+#view-toggle:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
 }
 
 .modal-header h3 {
@@ -490,4 +934,13 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     text-align: right;
 }
 </style>
+
+<!-- Memory values for JavaScript access -->
+<script>
+window.memoryValues = {
+    {% for entry in memory_entries %}
+    "{{ entry.key|e }}": {{ entry.value|tojson }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+</script>
 {% endblock %}

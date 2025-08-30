@@ -131,19 +131,24 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 pass
                 pass
 
-            # Get active sessions with message counts and memory counts
+            # Get active sessions with message counts, memory counts, and participant counts
             cursor = await conn.execute("""
                 SELECT s.*,
                        COUNT(DISTINCT m.id) as message_count,
                        COUNT(DISTINCT am.id) as memory_count,
-                       MAX(m.timestamp) as last_activity
+                       COUNT(DISTINCT m.sender) as participant_count,
+                       MAX(m.timestamp) as last_activity,
+                       CASE
+                           WHEN MAX(m.timestamp) IS NOT NULL THEN MAX(m.timestamp)
+                           ELSE s.created_at
+                       END as sort_timestamp
                 FROM sessions s
                 LEFT JOIN messages m ON s.id = m.session_id
                 LEFT JOIN agent_memory am ON s.id = am.session_id
-                    AND (am.expires_at IS NULL OR am.expires_at > datetime('now'))
+                    AND (am.expires_at IS NULL OR am.expires_at > unixepoch('now'))
                 WHERE s.is_active = 1
                 GROUP BY s.id
-                ORDER BY last_activity DESC, s.created_at DESC
+                ORDER BY sort_timestamp DESC
                 LIMIT 50
             """)
 
@@ -199,9 +204,18 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
                 # Row factory handled by SQLAlchemy connection wrapper
                 pass
 
-            # Get session information
+            # Get session information with last activity and participant count
             cursor = await conn.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+                """
+                SELECT s.*,
+                       MAX(m.timestamp) as last_activity,
+                       COUNT(DISTINCT m.sender) as participant_count
+                FROM sessions s
+                LEFT JOIN messages m ON s.id = m.session_id
+                WHERE s.id = ?
+                GROUP BY s.id
+                """,
+                (session_id,),
             )
             session = await cursor.fetchone()
 
@@ -226,9 +240,10 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
             # Get session-scoped memory entries for this session
             memory_cursor = await conn.execute(
                 """
-                SELECT agent_id, key, value, created_at, updated_at
+                SELECT agent_id, key, value, created_at, updated_at, expires_at
                 FROM agent_memory
                 WHERE session_id = ?
+                AND (expires_at IS NULL OR expires_at > datetime('now'))
                 ORDER BY created_at DESC
             """,
                 (session_id,),
@@ -263,7 +278,7 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
 async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     """
     Memory dashboard displaying memory entries based on scope parameter.
-    Supports scope filtering: global (default), session, or all.
+    Supports scope filtering: global, session, or all (default).
     ADMIN ACCESS: Shows all memory entries.
     """
     # Check authentication
@@ -271,12 +286,12 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     if auth_redirect:
         return auth_redirect
     try:
-        # Get scope parameter with default to 'global' for backward compatibility
-        scope = request.query_params.get("scope", "global")
+        # Get scope parameter with default to 'all' for better user experience
+        scope = request.query_params.get("scope", "all")
 
         # Validate scope parameter
         if scope not in ["global", "session", "all"]:
-            scope = "global"  # fallback to safe default
+            scope = "all"  # fallback to safe default
 
         async with get_db_connection() as conn:
             # Set row factory for dict-like access
@@ -285,19 +300,22 @@ async def memory_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 pass
 
             # Build query based on scope parameter
+            # Note: expires_at is stored as Unix timestamp, so we compare against unixepoch('now')
             if scope == "global":
-                where_clause = "WHERE session_id IS NULL"
+                where_clause = "WHERE session_id IS NULL AND (expires_at IS NULL OR expires_at > unixepoch('now'))"
                 scope_label = "Global"
             elif scope == "session":
-                where_clause = "WHERE session_id IS NOT NULL"
+                where_clause = "WHERE session_id IS NOT NULL AND (expires_at IS NULL OR expires_at > unixepoch('now'))"
                 scope_label = "Session-Scoped"
             else:  # scope == 'all'
-                where_clause = ""
+                where_clause = (
+                    "WHERE (expires_at IS NULL OR expires_at > unixepoch('now'))"
+                )
                 scope_label = "All"
 
             # Execute query with dynamic WHERE clause
             base_query = f"""
-                SELECT agent_id, key, value, created_at, updated_at, session_id
+                SELECT agent_id, key, value, created_at, updated_at, session_id, expires_at
                 FROM agent_memory
                 {where_clause}
                 ORDER BY created_at DESC

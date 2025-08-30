@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeConnectionMonitor();
     initializeTimestamps();
     initializeClipboard();
+    initializeMarkdownRenderer();
+    initializeActivityIndicators();
     initializeWebSocket();
 });
 
@@ -120,6 +122,12 @@ function initializeClipboard() {
         }
     });
 }
+
+// Memory UI Functions
+
+// Memory modal functions removed - templates handle their own enhanced modals with proper encapsulation
+
+// Old modal functions removed - templates now use enhanced modals with proper encapsulation
 
 // Utility Functions
 
@@ -470,6 +478,221 @@ setInterval(() => {
     }
 }, 30000); // Ping every 30 seconds
 
+// ============================================================================
+// MARKDOWN RENDERING
+// ============================================================================
+
+function initializeMarkdownRenderer() {
+    // Configure marked for safe rendering
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (typeof Prism !== 'undefined' && Prism.languages[lang]) {
+                    return Prism.highlight(code, Prism.languages[lang], lang);
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true,
+            sanitize: false, // We'll sanitize manually
+            smartypants: true
+        });
+    }
+
+    // Render existing message content
+    renderMarkdownContent();
+}
+
+function renderMarkdownContent() {
+    const messageElements = document.querySelectorAll('.message-content[data-raw-content]');
+
+    messageElements.forEach(element => {
+        const rawContent = element.getAttribute('data-raw-content');
+        if (rawContent && typeof marked !== 'undefined') {
+            try {
+                // Render markdown
+                const htmlContent = marked.parse(rawContent);
+                element.innerHTML = htmlContent;
+
+                // Add copy buttons to code blocks
+                addCopyButtonsToCodeBlocks(element);
+
+                // Highlight code if Prism is available
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightAllUnder(element);
+                }
+            } catch (error) {
+                console.error('Failed to render markdown:', error);
+                // Fallback to plain text
+                element.textContent = rawContent;
+            }
+        }
+    });
+}
+
+function addCopyButtonsToCodeBlocks(container) {
+    const codeBlocks = container.querySelectorAll('pre > code');
+
+    codeBlocks.forEach(codeBlock => {
+        const pre = codeBlock.parentElement;
+
+        // Skip if copy button already exists
+        if (pre.querySelector('.copy-code-btn')) return;
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-code-btn';
+        copyBtn.innerHTML = '📋';
+        copyBtn.title = 'Copy code';
+        copyBtn.setAttribute('data-copy', codeBlock.textContent);
+
+        // Position button
+        pre.style.position = 'relative';
+        copyBtn.style.position = 'absolute';
+        copyBtn.style.top = '8px';
+        copyBtn.style.right = '8px';
+        copyBtn.style.background = 'rgba(0,0,0,0.1)';
+        copyBtn.style.border = 'none';
+        copyBtn.style.borderRadius = '4px';
+        copyBtn.style.padding = '4px 8px';
+        copyBtn.style.cursor = 'pointer';
+        copyBtn.style.fontSize = '12px';
+
+        copyBtn.addEventListener('click', () => {
+            copyToClipboard(codeBlock.textContent);
+        });
+
+        pre.appendChild(copyBtn);
+    });
+}
+
+// ============================================================================
+// ACTIVITY INDICATORS
+// ============================================================================
+
+function initializeActivityIndicators() {
+    updateSessionActivityIndicators();
+
+    // Update every minute
+    setInterval(updateSessionActivityIndicators, 60000);
+}
+
+function updateSessionActivityIndicators() {
+    const sessionCards = document.querySelectorAll('.session-card[data-session-id]');
+
+    sessionCards.forEach(card => {
+        const timestampElements = card.querySelectorAll('.timestamp-value');
+        let lastActivityTime = null;
+
+        // Find the most recent activity time
+        timestampElements.forEach(element => {
+            const text = element.textContent.trim();
+            // Look for "Last Activity:" timestamp
+            if (element.closest('.timestamp-item')?.querySelector('.timestamp-label')?.textContent.includes('Last Activity')) {
+                lastActivityTime = parseTimestampFromElement(element);
+            }
+        });
+
+        // If no last activity, use created time
+        if (!lastActivityTime) {
+            timestampElements.forEach(element => {
+                const text = element.textContent.trim();
+                if (element.closest('.timestamp-item')?.querySelector('.timestamp-label')?.textContent.includes('Created')) {
+                    lastActivityTime = parseTimestampFromElement(element);
+                }
+            });
+        }
+
+        if (lastActivityTime) {
+            const activityClass = getActivityClass(lastActivityTime);
+
+            // Remove existing activity classes
+            card.classList.remove('activity-fresh', 'activity-recent', 'activity-stale');
+            card.classList.add(activityClass);
+
+            // Add activity indicator badge if it doesn't exist
+            addActivityIndicator(card, activityClass);
+        }
+    });
+}
+
+function parseTimestampFromElement(element) {
+    // Try to extract timestamp from various formats
+    const text = element.textContent.trim();
+
+    // Try parsing as date
+    const date = new Date(text);
+    if (!isNaN(date.getTime())) {
+        return date;
+    }
+
+    // Try to find pattern like "X hours ago" or "X min ago"
+    const relativeMatch = text.match(/(\d+)\s*(min|minutes?|hr|hours?|day|days?)\s*ago/i);
+    if (relativeMatch) {
+        const value = parseInt(relativeMatch[1]);
+        const unit = relativeMatch[2].toLowerCase();
+        const now = new Date();
+
+        if (unit.startsWith('min')) {
+            return new Date(now.getTime() - (value * 60 * 1000));
+        } else if (unit.startsWith('hr') || unit.startsWith('hour')) {
+            return new Date(now.getTime() - (value * 60 * 60 * 1000));
+        } else if (unit.startsWith('day')) {
+            return new Date(now.getTime() - (value * 24 * 60 * 60 * 1000));
+        }
+    }
+
+    return null;
+}
+
+function getActivityClass(timestamp) {
+    const now = new Date();
+    const diffMs = now - timestamp;
+    const diffMinutes = diffMs / (1000 * 60);
+
+    if (diffMinutes < 5) {
+        return 'activity-fresh';  // < 5 minutes
+    } else if (diffMinutes < 60) {
+        return 'activity-recent'; // < 1 hour
+    } else {
+        return 'activity-stale';  // > 1 hour
+    }
+}
+
+function addActivityIndicator(card, activityClass) {
+    // Check if indicator already exists
+    if (card.querySelector('.activity-indicator')) return;
+
+    const indicator = document.createElement('span');
+    indicator.className = `activity-indicator ${activityClass.replace('activity-', '')}`;
+
+    let text, icon;
+    switch (activityClass) {
+        case 'activity-fresh':
+            text = 'Active';
+            icon = '🟢';
+            break;
+        case 'activity-recent':
+            text = 'Recent';
+            icon = '🟡';
+            break;
+        case 'activity-stale':
+            text = 'Stale';
+            icon = '⚪';
+            break;
+        default:
+            text = 'Unknown';
+            icon = '⚫';
+    }
+
+    indicator.innerHTML = `${icon} ${text}`;
+
+    // Add to session header
+    const sessionHeader = card.querySelector('.session-header');
+    if (sessionHeader) {
+        sessionHeader.appendChild(indicator);
+    }
+}
+
 // Export functions for global use
 window.SharedContextUI = {
     showNotification,
@@ -480,5 +703,7 @@ window.SharedContextUI = {
     toggleTheme,
     checkConnectionStatus,
     connectWebSocket,
-    sendWebSocketMessage
+    sendWebSocketMessage,
+    renderMarkdownContent,
+    updateSessionActivityIndicators
 };
