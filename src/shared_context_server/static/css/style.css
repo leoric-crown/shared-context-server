@@ -63,6 +63,11 @@
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+    /* Layout measurements */
+    --navbar-height: 60px;               /* .nav-container min-height */
+    --navbar-padding-y: var(--spacing-4); /* .navbar vertical padding */
+    --navbar-total-height: calc(var(--navbar-height) + (var(--navbar-padding-y) * 2));
 }
 
 body {
@@ -186,6 +191,61 @@ body {
     margin: 0 auto;
     padding: var(--spacing-8) var(--spacing-6);
     width: 100%;
+}
+
+/* Sticky actions toolbar (below sticky navbar) */
+.sticky-actions {
+    position: sticky;
+    top: var(--navbar-total-height); /* exact offset under sticky navbar */
+    z-index: 99;
+    padding: var(--spacing-2) 0;
+    margin-bottom: var(--spacing-4);
+    display: flex;
+    justify-content: center;
+}
+
+.sticky-actions-inner {
+    display: inline-flex;
+    gap: var(--spacing-2);
+    align-items: center;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 9999px; /* pill */
+    box-shadow: var(--shadow-sm);
+    padding: 8px 12px; /* more side padding */
+}
+
+.btn-sm {
+    padding: 8px 14px;
+    font-size: var(--font-size-sm);
+}
+
+#reveal-countdown {
+    font-size: var(--font-size-sm);
+    color: var(--gray-600);
+}
+
+/* Equalize sticky buttons and add spacing */
+.sticky-actions-inner .btn {
+    min-width: 200px;
+    justify-content: center;
+}
+
+/* Client Config content centering */
+.client-config-card {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--spacing-4);
+}
+
+#client-config-md.markdown-body {
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+#client-config-md.markdown-body ul,
+#client-config-md.markdown-body ol {
+    padding-left: var(--spacing-6);
 }
 
 /* Dashboard Styles */
@@ -418,6 +478,16 @@ body {
 .btn-secondary:hover {
     background-color: var(--gray-50);
     border-color: var(--gray-400);
+}
+
+.btn-warning {
+    background-color: var(--warning-500);
+    color: white;
+    border-color: var(--warning-500);
+}
+
+.btn-warning:hover {
+    filter: brightness(0.95);
 }
 
 /* Refresh buttons - remove borders */

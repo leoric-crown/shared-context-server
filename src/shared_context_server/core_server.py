@@ -87,17 +87,46 @@ async def health_check(_request: Request) -> JSONResponse:
         # Check database connectivity
         db_status = await db_health_check()
 
-        return JSONResponse(
-            {
-                "status": "healthy"
-                if db_status["status"] == "healthy"
-                else "unhealthy",
-                "timestamp": db_status["timestamp"],
-                "database": db_status,
-                "server": "shared-context-server",
-                "version": __version__,
-            }
+        # Get configuration for external port info
+        import os
+
+        from .config import get_config
+
+        config = get_config()
+
+        # External host mapping for URLs displayed to users
+        client_host = os.getenv("MCP_CLIENT_HOST", config.mcp_server.http_host)
+        external_http_port = int(
+            os.getenv("EXTERNAL_HTTP_PORT", str(config.mcp_server.http_port))
         )
+        external_websocket_port = int(
+            os.getenv("EXTERNAL_WEBSOCKET_PORT", str(config.mcp_server.websocket_port))
+        )
+
+        # Build response
+        response = {
+            "status": "healthy" if db_status["status"] == "healthy" else "unhealthy",
+            "timestamp": db_status["timestamp"],
+            "database": db_status,
+            "server": "shared-context-server",
+            "version": __version__,
+            "config": {
+                "websocket_port": external_websocket_port,
+                "websocket_host": client_host,
+            },
+            "external": {
+                "http_url": f"http://{client_host}:{external_http_port}/",
+                "dashboard_url": f"http://{client_host}:{external_http_port}/ui/",
+                "mcp_url": f"http://{client_host}:{external_http_port}/mcp/",
+            },
+        }
+
+        if config.mcp_server.websocket_enabled:
+            response["external"]["websocket_url"] = (
+                f"ws://{client_host}:{external_websocket_port}"
+            )
+
+        return JSONResponse(response)
     except Exception as e:
         logger.exception("Health check failed")
         return JSONResponse(

@@ -1,7 +1,7 @@
 # Shared Context Server - Simple Makefile
 # Essential development commands
 
-.PHONY: help install dev test test-quick format lint type pre-commit quality clean run dev-docker docker docker-local docker-fresh version-bump version-check
+.PHONY: help install dev test test-quick format lint type pre-commit quality clean run docker docker-dev docker-local docker-fresh version-bump version-check
 
 help: ## Show this help message
 	uv run python -m scripts.makefile_help
@@ -86,7 +86,17 @@ clean: ## Clean caches and temporary files
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✅ Cleanup complete"
 
-dev-docker: ## Development environment with hot reload (builds locally)
+docker: ## Production deployment using pre-built GHCR image
+	@echo "🐳 Starting production Docker environment..."
+	@echo "📦 Using pre-built image from GitHub Container Registry"
+	@echo "1/3 Stopping containers..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
+	@echo "2/3 Pulling latest image and starting..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml up -d --pull always
+	@echo "3/3 Following logs (Ctrl+C to exit)..."
+	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml logs -f
+
+docker-dev: ## Development environment with hot reload (builds locally)
 	@echo "🐳 Starting Docker development environment..."
 	@echo "🔥 Hot reload enabled - server will restart on file changes"
 	@echo "1/4 Stopping containers..."
@@ -97,16 +107,6 @@ dev-docker: ## Development environment with hot reload (builds locally)
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.dev.yml up -d --build
 	@echo "4/4 Following logs (Ctrl+C to exit)..."
 	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.dev.yml logs -f
-
-docker: ## Production deployment using pre-built GHCR image
-	@echo "🐳 Starting production Docker environment..."
-	@echo "📦 Using pre-built image from GitHub Container Registry"
-	@echo "1/3 Stopping containers..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") down || true
-	@echo "2/3 Pulling latest image and starting..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml up -d --pull always
-	@echo "3/3 Following logs (Ctrl+C to exit)..."
-	@$(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose") -f docker-compose.yml logs -f
 
 docker-local: ## Production deployment building locally
 	@echo "🐳 Starting production Docker environment (local build)..."

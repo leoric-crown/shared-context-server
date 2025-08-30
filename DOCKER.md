@@ -88,6 +88,23 @@ curl http://localhost:23456/mcp/        # MCP endpoint
 
 ## Configuration
 
+### Ports (Mapping Model)
+- Internal container ports are fixed: HTTP `23456`, WebSocket `34567`.
+- Change host-visible ports via compose env vars only:
+  - `HTTP_PORT` maps host→container `HTTP_PORT:23456`.
+  - `WEBSOCKET_PORT` maps host→container `WEBSOCKET_PORT:34567`.
+- `EXTERNAL_HTTP_PORT` and `EXTERNAL_WEBSOCKET_PORT` should match host-mapped ports so logs/links/UI are correct inside the container.
+
+Examples:
+```bash
+# Default (host HTTP 23456, WS 34567)
+docker compose up -d
+
+# Custom host ports (container internals stay fixed)
+HTTP_PORT=8080 WEBSOCKET_PORT=9090 docker compose up -d
+curl http://localhost:8080/health
+```
+
 ### Environment Variables (.env file)
 ```bash
 # Required Security

@@ -224,6 +224,8 @@ gemini mcp add scs http://localhost:23456/mcp -t http -H "X-API-Key: YOUR_API_KE
 claude mcp list  # Should show: ✓ Connected
 ```
 
+Ports note: Internal ports are fixed (HTTP 23456, WebSocket 34567). Change host ports via compose env only (e.g., `HTTP_PORT=8080 WEBSOCKET_PORT=9090 docker compose up -d`). Use `EXTERNAL_WEBSOCKET_PORT` to reflect the host WS port in links/UI.
+
 ### VS Code Configuration
 
 Add to your existing `.vscode/mcp.json` (create if it doesn't exist):

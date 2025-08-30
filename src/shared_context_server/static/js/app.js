@@ -309,14 +309,16 @@ async function connectWebSocket(sessionId) {
         return; // Already connected
     }
 
-    // Fetch WebSocket configuration from backend
-    let wsPort = '34567'; // Default fallback (matches .env)
+    // Fetch WebSocket configuration from health endpoint
+    let wsPort = '34567'; // Default fallback
     try {
-        const configResponse = await fetch('/ui/config');
-        const config = await configResponse.json();
-        wsPort = config.websocket_port.toString();
+        const healthResponse = await fetch('/health');
+        const health = await healthResponse.json();
+        if (health.config && health.config.websocket_port) {
+            wsPort = health.config.websocket_port.toString();
+        }
     } catch (error) {
-        console.warn('Failed to fetch WebSocket config, using default port:', error);
+        console.warn('Failed to fetch WebSocket config from health endpoint, using default port:', error);
     }
 
     // Connect to WebSocket server

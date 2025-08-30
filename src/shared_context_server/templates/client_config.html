@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Client Configuration · Shared Context Server{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Client Configuration</h1>
+  <p>
+    Generated instructions for connecting popular MCP clients to this server.
+    Uses the current host/port mapping so the URLs match your environment.
+  </p>
+
+  <div class="sticky-actions">
+    <div class="sticky-actions-inner">
+      <button id="reveal-btn" class="btn btn-secondary btn-sm" onclick="toggleApiKey()">
+        <span class="btn-icon">🔑</span>
+        <span class="btn-text" id="reveal-btn-text">Reveal API Key</span>
+      </button>
+      <span id="reveal-countdown" style="margin-left: 0.5rem; font-weight: 600;"></span>
+    </div>
+  </div>
+
+  <div class="card client-config-card">
+    <div id="client-config-md" class="markdown-body">Loading configuration…</div>
+  </div>
+
+  <!-- Hidden raw Markdown content -->
+  <textarea id="client-config-raw" style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true">{{ markdown_content }}</textarea>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let originalMarkdown = null;
+  let revealTimer = null;
+  let revealRemaining = 0;
+  let isRevealed = false;
+
+  (function renderMarkdown() {
+    try {
+      const raw = document.getElementById('client-config-raw').value;
+      originalMarkdown = raw; // keep original with placeholder
+      const html = DOMPurify.sanitize(marked.parse(raw, { gfm: true, breaks: true }));
+      document.getElementById('client-config-md').innerHTML = html;
+      // Trigger Prism highlighting if available
+      if (window.Prism) { Prism.highlightAll(); }
+    } catch (e) {
+      document.getElementById('client-config-md').innerText = raw;
+    }
+  })();
+
+  async function copyConfig() {
+    const text = document.getElementById('client-config-raw').value;
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Client configuration copied to clipboard');
+    } catch (e) {
+      // Fallback copy
+      const ta = document.getElementById('client-config-raw');
+      ta.select();
+      document.execCommand('copy');
+      alert('Client configuration copied to clipboard');
+    }
+  }
+
+  function setMarkdown(raw) {
+    document.getElementById('client-config-raw').value = raw;
+    const html = DOMPurify.sanitize(marked.parse(raw, { gfm: true, breaks: true }));
+    document.getElementById('client-config-md').innerHTML = html;
+    if (window.Prism) { Prism.highlightAll(); }
+  }
+
+  function startRevealCountdown(seconds) {
+    const btn = document.getElementById('reveal-btn');
+    const el = document.getElementById('reveal-countdown');
+    revealRemaining = seconds;
+    btn.disabled = false; // allow hide action while visible
+    function tick() {
+      el.textContent = `Visible for ${revealRemaining}s`;
+      if (revealRemaining <= 0) {
+        clearInterval(revealTimer);
+        revealTimer = null;
+        el.textContent = '';
+        // Auto-hide
+        hideApiKey();
+        return;
+      }
+      revealRemaining -= 1;
+    }
+    if (revealTimer) clearInterval(revealTimer);
+    tick();
+    revealTimer = setInterval(tick, 1000);
+  }
+
+  function hideApiKey() {
+    const btnText = document.getElementById('reveal-btn-text');
+    const btn = document.getElementById('reveal-btn');
+    // Revert to original (redacted) content
+    if (originalMarkdown) {
+      setMarkdown(originalMarkdown);
+    }
+    isRevealed = false;
+    btnText.textContent = 'Reveal API Key';
+    btn.classList.remove('btn-warning');
+    btn.classList.add('btn-secondary');
+  }
+
+  async function revealApiKey() {
+    try {
+      const res = await fetch('/ui/api-key', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.api_key) throw new Error(data.error || 'No key');
+
+      if (!originalMarkdown) originalMarkdown = document.getElementById('client-config-raw').value;
+      const revealed = originalMarkdown.replace(/YOUR_API_KEY_HERE/g, data.api_key);
+      setMarkdown(revealed);
+      isRevealed = true;
+      document.getElementById('reveal-btn-text').textContent = 'Hide API Key';
+      const btn = document.getElementById('reveal-btn');
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-warning');
+      startRevealCountdown(Math.max(1, data.ttl_seconds || 60));
+    } catch (e) {
+      alert('Failed to reveal API key. Are you logged in as admin?');
+      console.error(e);
+    }
+  }
+
+  function toggleApiKey() {
+    if (isRevealed) {
+      // Stop timer and hide
+      if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+      document.getElementById('reveal-countdown').textContent = '';
+      hideApiKey();
+    } else {
+      revealApiKey();
+    }
+  }
+</script>
+{% endblock %}

@@ -37,6 +37,7 @@
                 <a href="/ui/" class="nav-link {% if request.url.path == '/ui/' %}active{% endif %}">Sessions</a>
                 <a href="/ui/memory" class="nav-link {% if request.url.path == '/ui/memory' %}active{% endif %}">Memories</a>
                 <a href="/ui/health" class="nav-link {% if request.url.path == '/ui/health' %}active{% endif %}">Health</a>
+                <a href="/ui/client-config" class="nav-link {% if request.url.path == '/ui/client-config' %}active{% endif %}">Client Config</a>
                 {% if admin_access %}
                 <span class="admin-badge">Admin</span>
                 <form method="post" action="/ui/logout" style="display: inline;">

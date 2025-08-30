@@ -22,6 +22,7 @@ import logging
 from starlette.responses import (
     FileResponse,
     HTMLResponse,
+    JSONResponse,
     RedirectResponse,
     Response,
 )
@@ -155,6 +156,11 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
 
             sessions = [dict(row) for row in await cursor.fetchall()]
 
+        # Determine external websocket port for UI (supports Docker port mapping)
+        external_websocket_port = int(
+            os.getenv("EXTERNAL_WEBSOCKET_PORT", config.mcp_server.websocket_port)
+        )
+
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -162,7 +168,7 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 "request": request,
                 "sessions": sessions,
                 "total_sessions": len(sessions),
-                "websocket_port": config.mcp_server.websocket_port,
+                "websocket_port": external_websocket_port,
                 "admin_access": True,  # Dashboard has full admin access
             },
         )
@@ -252,6 +258,11 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
 
             session_memory = [dict(row) for row in await memory_cursor.fetchall()]
 
+        # Determine external websocket port for UI (supports Docker port mapping)
+        external_websocket_port = int(
+            os.getenv("EXTERNAL_WEBSOCKET_PORT", config.mcp_server.websocket_port)
+        )
+
         return templates.TemplateResponse(
             request,
             "session_view.html",
@@ -261,7 +272,7 @@ async def session_view(request: Request) -> HTMLResponse | RedirectResponse:
                 "messages": messages,
                 "session_memory": session_memory,
                 "session_id": session_id,
-                "websocket_port": config.mcp_server.websocket_port,
+                "websocket_port": external_websocket_port,
                 "admin_access": True,  # Dashboard has full admin access
             },
         )
@@ -424,6 +435,12 @@ async def health_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
                 "memory_entries": 0,
             }
 
+        # Use external websocket port and client host for display
+        external_websocket_port = int(
+            os.getenv("EXTERNAL_WEBSOCKET_PORT", config.mcp_server.websocket_port)
+        )
+        client_host = os.getenv("MCP_CLIENT_HOST", config.mcp_server.http_host)
+
         health_data = {
             "status": "healthy" if db_status["status"] == "healthy" else "unhealthy",
             "timestamp": db_status["timestamp"],
@@ -431,8 +448,8 @@ async def health_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
             "server": "shared-context-server",
             "version": __version__,
             "config": {
-                "websocket_port": config.mcp_server.websocket_port,
-                "websocket_host": config.mcp_server.websocket_host,
+                "websocket_port": external_websocket_port,
+                "websocket_host": client_host,
             },
             "activity_stats": activity_stats,
         }
@@ -496,6 +513,170 @@ async def serve_logo_svg(_request: Request) -> Response:
     if svg_file.exists():
         return FileResponse(svg_file, media_type="image/svg+xml")
     return Response("Logo SVG Not Found", status_code=404)
+
+
+# ============================================================================
+# CLIENT CONFIGURATION PAGE
+# ============================================================================
+
+
+@mcp.custom_route("/ui/client-config", methods=["GET"])
+async def client_config(request: Request) -> HTMLResponse | RedirectResponse:
+    """Serve a markdown-rendered page with MCP client configuration for all clients."""
+    # Require admin auth for now (contains API key hints); adjust if needed
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+
+    try:
+        # Determine client-facing host and port
+        config = get_config()
+        client_host = os.getenv("MCP_CLIENT_HOST", config.mcp_server.http_host)
+        external_http_port = int(
+            os.getenv("EXTERNAL_HTTP_PORT", str(config.mcp_server.http_port))
+        )
+
+        # Generate markdown to a temp file using existing CLI helper
+        import tempfile
+        from pathlib import Path
+
+        # Local import to avoid circular imports at module load time
+        from .scripts.cli import generate_all_client_configs
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "client-config.md"
+            # Reuse CLI generator to produce clean Markdown
+            # SECURITY: Do not embed API key in admin UI output by default.
+            # Temporarily replace API_KEY in environment for generation.
+            original_api_key = os.environ.get("API_KEY")
+            try:
+                os.environ["API_KEY"] = "YOUR_API_KEY_HERE"
+                generate_all_client_configs(
+                    client_host, external_http_port, str(out_path)
+                )
+            finally:
+                if original_api_key is not None:
+                    os.environ["API_KEY"] = original_api_key
+                else:
+                    os.environ.pop("API_KEY", None)
+            raw_content = out_path.read_text(encoding="utf-8")
+
+        # Transform the generated text into Markdown with per-client code blocks
+        import re
+
+        lines = raw_content.splitlines()
+        md_parts: list[str] = []
+        md_parts.append("# MCP Client Configurations\n")
+        md_parts.append(
+            "Below are ready-to-copy configurations for all supported MCP clients.\n"
+        )
+
+        content = "\n".join(lines)
+        pattern = re.compile(r"^===\s+(.*?)\s+===$", re.M)
+        sections = list(pattern.finditer(content))
+
+        def _slugify(s: str) -> str:
+            s = s.strip().lower()
+            s = re.sub(r"[^a-z0-9\s-]", "", s)
+            s = re.sub(r"\s+", "-", s)
+            s = re.sub(r"-+", "-", s)
+            return s  # noqa: RET504
+
+        def _prettify_title(raw: str) -> str:
+            """Convert all-caps section headers to nicer titles.
+
+            Applies known mappings for acronyms/brands, otherwise uses title-case.
+            """
+            base = raw.strip().lower()
+            mapping = {
+                "claude code": "Claude Code",
+                "cursor ide": "Cursor IDE",
+                "windsurf ide": "Windsurf IDE",
+                "vs code": "VS Code",
+                "vscode": "VS Code",
+                "claude desktop": "Claude Desktop",
+                "gemini cli": "Gemini CLI",
+                "codex cli": "Codex CLI",
+                "qwen cli": "Qwen CLI",
+                "kiro ide": "Kiro IDE",
+            }
+            if base in mapping:
+                return mapping[base]
+            # Fallback: simple title case
+            return base.title()
+
+        toc: list[tuple[str, str]] = []
+
+        if sections:
+            for idx, match in enumerate(sections):
+                raw_title = match.group(1).strip()
+                title = _prettify_title(raw_title)
+                anchor = _slugify(title)
+                start = match.end()
+                end = (
+                    sections[idx + 1].start()
+                    if idx + 1 < len(sections)
+                    else len(content)
+                )
+                body = content[start:end].strip("\n")
+
+                toc.append((title, anchor))
+
+                md_parts.append(f'\n<a id="{anchor}"></a>\n## {title}\n')
+                md_parts.append("```text")
+                md_parts.append(body.strip())
+                md_parts.append("```")
+
+            if toc:
+                toc_md = ["\n## Table of Contents\n"]
+                for t, a in toc:
+                    toc_md.append(f"- [{t}](#{a})")
+                # Insert after the intro (after 2 initial md_parts entries)
+                md_parts.insert(2, "\n".join(toc_md))
+        else:
+            # Fallback: show the entire content as a code block
+            md_parts.append("```text")
+            md_parts.append(content.strip())
+            md_parts.append("```")
+
+        md_content = "\n".join(md_parts)
+
+        # Render page; client-side will convert Markdown → HTML via marked.js
+        return templates.TemplateResponse(
+            "client_config.html",
+            {
+                "request": request,
+                "markdown_content": md_content,
+                "admin_access": True,
+            },
+        )
+    except Exception as e:
+        logger.exception("Failed to generate client configuration page")
+        return HTMLResponse(f"<h1>Error</h1><pre>{str(e)}</pre>", status_code=500)
+
+
+@mcp.custom_route("/ui/api-key", methods=["GET"])
+async def reveal_api_key(request: Request) -> JSONResponse | RedirectResponse:
+    """Admin-protected endpoint that returns the server API key.
+
+    The client page uses this to temporarily reveal the key for copy convenience.
+    """
+    # Require admin auth
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+
+    try:
+        config = get_config()
+        api_key = os.getenv("API_KEY") or getattr(config.security, "api_key", None)
+        if not api_key:
+            return JSONResponse({"error": "API key not configured"}, status_code=404)
+
+        logger.info("Admin requested API key reveal (60-second client window)")
+        return JSONResponse({"api_key": api_key, "ttl_seconds": 60})
+    except Exception as e:
+        logger.exception("Failed to provide API key")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @mcp.custom_route("/ui/static/favicon/favicon.ico", methods=["GET"])

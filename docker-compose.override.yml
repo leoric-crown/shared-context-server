@@ -2,6 +2,9 @@
 # Provides development-friendly configuration with hot reload support
 services:
   shared-context-server:
+    # Ports: internal ports are fixed (HTTP 23456, WS 34567).
+    # Map host ports via env only; keep container internals static.
+    # Note: ports inherited from the base compose file or dev file used.
     # Development build configuration
     build:
       context: .
@@ -20,12 +23,15 @@ services:
       - DEV_RESET_DATABASE_ON_START=false
       - ENABLE_PERFORMANCE_MONITORING=true
       - PYTHONPATH=/app/src
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-dev-admin-password}
+      - EXTERNAL_HTTP_PORT=${HTTP_PORT:-23456}
       - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
       # WebSocket configuration for development
       - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
       - WEBSOCKET_HOST=0.0.0.0
-      - WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
+      - WEBSOCKET_PORT=34567
+      - EXTERNAL_WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
 
     # Mount source code for development (hot reload)
     volumes:

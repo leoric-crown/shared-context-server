@@ -11,9 +11,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
 # Import uvloop conditionally for better performance
 try:
@@ -34,7 +38,7 @@ from .utils import Colors
 
 # Import server components
 try:
-    from ..server import initialize_server
+    from ..core_server import initialize_server
 
     SERVER_AVAILABLE = True
 except ImportError:
@@ -167,7 +171,7 @@ class ProductionServer:
     def __init__(self) -> None:
         self.config = None
         self.server = None
-        self.server_instance = None
+        self.server_instance: FastMCP | None = None
 
     async def start_http(self, host: str, port: int) -> None:
         """Start HTTP server with production configuration."""
@@ -176,7 +180,7 @@ class ProductionServer:
             sys.exit(1)
 
         # Initialize server with proper configuration
-        self.server_instance = initialize_server()
+        self.server_instance = await initialize_server()
 
         # Import config and server instance
         from ..config import get_config
@@ -210,6 +214,41 @@ class ProductionServer:
         logger.info(f"Dashboard will be available at: http://{host}:{port}/ui/")
         logger.info(f"Health check endpoint: http://{host}:{port}/health")
         logger.info(f"MCP endpoint: http://{host}:{port}/mcp/")
+
+        # If running in a container with host port mappings, log external URLs too
+        try:
+            client_host = os.getenv("MCP_CLIENT_HOST", config.mcp_server.http_host)
+            external_http_port = int(os.getenv("EXTERNAL_HTTP_PORT", str(port)))
+            external_ws_port = (
+                int(os.getenv("EXTERNAL_WEBSOCKET_PORT", str(ws_port)))
+                if config.mcp_server.websocket_enabled
+                else None
+            )
+
+            # Only log external mapping if it differs or explicitly set
+            if str(external_http_port) != str(port) or os.getenv("EXTERNAL_HTTP_PORT"):
+                logger.info(
+                    "External (host) HTTP URL: "
+                    f"http://{client_host}:{external_http_port}/"
+                )
+                logger.info(
+                    "External (host) Dashboard: "
+                    f"http://{client_host}:{external_http_port}/ui/"
+                )
+                logger.info(
+                    "External (host) MCP endpoint: "
+                    f"http://{client_host}:{external_http_port}/mcp/"
+                )
+
+            if external_ws_port is not None and (
+                str(external_ws_port) != str(ws_port)
+                or os.getenv("EXTERNAL_WEBSOCKET_PORT")
+            ):
+                logger.info(
+                    f"External (host) WebSocket: ws://{client_host}:{external_ws_port}"
+                )
+        except Exception:
+            logger.debug("External port mapping logging skipped")
 
         # Use FastMCP's native Streamable HTTP transport
         # mcp-proxy will bridge this to SSE for Claude MCP CLI compatibility
@@ -253,7 +292,7 @@ class ProductionServer:
             logger.info("Starting shared-context-server STDIO mode")
 
             # Initialize server instance
-            self.server_instance = initialize_server()
+            self.server_instance = await initialize_server()
 
             # For STDIO mode, delegate to existing server implementation
             # Import the server instance
@@ -267,7 +306,7 @@ class ProductionServer:
     async def shutdown(self) -> None:
         """Graceful server shutdown."""
         if self.server_instance:
-            logger.info("Shutting down server...")  # type: ignore[unreachable]
+            logger.info("Shutting down server...")
             # Add any cleanup logic here
             self.server_instance = None
 

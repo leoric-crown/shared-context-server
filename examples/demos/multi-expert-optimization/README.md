@@ -81,6 +81,11 @@ curl http://localhost:23432/health
 open http://localhost:23432/ui/
 ```
 
+Ports:
+- Container internal ports are fixed (HTTP 23456, WS 34567).
+- This demo maps host HTTP to 23432 and host WS to 34543.
+- If you change host ports, adjust your MCP client URL and use `EXTERNAL_WEBSOCKET_PORT` accordingly.
+
 **✅ Success**: Health endpoint returns healthy status and Claude Code shows `✓ Connected`
 
 ## ✨ What You'll Experience

@@ -7,6 +7,8 @@ services:
     image: ghcr.io/leoric-crown/shared-context-server:latest
     container_name: shared-context-server
     restart: unless-stopped
+    # Ports: internal ports are fixed (HTTP 23456, WS 34567).
+    # Map host ports via env only; keep container internals static.
     ports:
       - "${HTTP_PORT:-23456}:23456"
       - "${WEBSOCKET_PORT:-34567}:34567"
@@ -18,6 +20,7 @@ services:
       - DATABASE_PATH=/app/data/chat_history.db
 
       # Security configuration
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - API_KEY=${API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY}
@@ -27,19 +30,23 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - HTTP_PORT=23456
       - HTTP_HOST=0.0.0.0
+      # External host HTTP port (for logs/links)
+      - EXTERNAL_HTTP_PORT=${HTTP_PORT:-23456}
       - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
       # WebSocket configuration
       - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
       - WEBSOCKET_HOST=0.0.0.0
       - WEBSOCKET_PORT=34567
+      # EXTERNAL_WEBSOCKET_PORT should reflect the host-mapped port clients use
+      - EXTERNAL_WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
 
       # Environment configuration
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - DEBUG=${DEBUG:-false}
 
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f http://localhost:${HTTP_PORT:-23456}/health && curl -f http://localhost:${WEBSOCKET_PORT:-34567}/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:23456/health && curl -f http://localhost:34567/health"]
       interval: 300s
       timeout: 10s
       retries: 3

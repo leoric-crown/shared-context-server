@@ -9,9 +9,11 @@ services:
       dockerfile: Dockerfile
     container_name: shared-context-server
     restart: unless-stopped
+    # Ports: internal ports are fixed (HTTP 23456, WS 34567).
+    # Map host ports via env only; keep container internals static.
     ports:
       - "${HTTP_PORT:-23456}:23456"
-      - "${WEBSOCKET_PORT:-34567}:${WEBSOCKET_PORT:-34567}"
+      - "${WEBSOCKET_PORT:-34567}:34567"
     volumes:
       # Development: Share database with host for easy access
       - ./:/app/host
@@ -24,6 +26,7 @@ services:
       - DATABASE_PATH=/app/host/chat_history.db
 
       # Security configuration
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-dev-admin-password}
       - API_KEY=${API_KEY:-dev-key-please-change}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-please-change}
       - JWT_ENCRYPTION_KEY=${JWT_ENCRYPTION_KEY:-dev-fernet-key-please-change}
@@ -34,12 +37,15 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - HTTP_PORT=23456
       - HTTP_HOST=0.0.0.0
+      - EXTERNAL_HTTP_PORT=${HTTP_PORT:-23456}
       - MCP_CLIENT_HOST=${MCP_CLIENT_HOST:-localhost}
 
       # WebSocket configuration
       - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
       - WEBSOCKET_HOST=0.0.0.0
-      - WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
+      - WEBSOCKET_PORT=34567
+      # Reflect host-mapped port for links/UI
+      - EXTERNAL_WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567}
 
       # Development environment
       - ENVIRONMENT=development

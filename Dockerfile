@@ -76,11 +76,11 @@ VOLUME ["/app/data"]
 # Configure container - expose standard internal ports
 EXPOSE 23456 34567
 
-# Health check - verify both HTTP and WebSocket servers using dynamic ports
+# Health check - verify both HTTP and WebSocket servers on internal ports
+# Note: Uses fixed internal ports since healthcheck runs inside container
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD HTTP_PORT=${HTTP_PORT:-23456} WEBSOCKET_PORT=${WEBSOCKET_PORT:-34567} && \
-        curl -f "http://localhost:${HTTP_PORT}/health" && \
-        curl -f "http://localhost:${WEBSOCKET_PORT}/health" || exit 1
+    CMD curl -f "http://localhost:23456/health" && \
+        curl -f "http://localhost:34567/health" || exit 1
 
 # Default environment variables (can be overridden)
 ENV DATABASE_PATH=/app/data/chat_history.db \
