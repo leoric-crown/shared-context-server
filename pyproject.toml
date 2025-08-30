@@ -206,6 +206,9 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+mypy_path = ["src"]
+explicit_package_bases = false
+namespace_packages = false
 
 # Per-module options
 [[tool.mypy.overrides]]
@@ -255,7 +258,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     # Test Execution Control
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "flaky: marks tests as potentially flaky",
+    "flaky: marks tests as potentially flaky (timing-sensitive performance tests)",
 
     # Test Categories (actively used)
     "unit: marks tests as unit tests",

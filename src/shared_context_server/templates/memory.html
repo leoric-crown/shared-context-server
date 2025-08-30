@@ -5,65 +5,70 @@
 {% block content %}
 <div class="memory-dashboard">
     <!-- Breadcrumb Navigation -->
-    <div class="breadcrumb">
-        <span class="breadcrumb-current">Memories</span>
-    </div>
-
-    <div class="dashboard-header">
-        <div class="header-content">
-            <button class="btn btn-secondary refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh Memory Dashboard">
-                <span class="btn-icon">🔄</span>
-            </button>
-            <h1>{{ scope_label }} Memory Entries</h1>
-        </div>
-        <div class="dashboard-stats">
-            <div class="stat-card">
-                <span class="stat-number">{{ total_entries }}</span>
-                <span class="stat-label">{{ scope_label }} Entries</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ global_count }}</span>
-                <span class="stat-label">Global</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ session_count }}</span>
-                <span class="stat-label">Session</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number">{{ all_count }}</span>
-                <span class="stat-label">Total</span>
-            </div>
+    <div class="memory-view-header">
+        <div class="breadcrumb">
+            <span class="breadcrumb-current">Memories</span>
         </div>
     </div>
 
-    <div class="memory-controls">
-        <div class="scope-filter">
-            <label class="scope-label">Memory Scope:</label>
-            <div class="radio-group">
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="global" {% if current_scope == 'global' %}checked{% endif %} onchange="changeScopeFilter('global')">
-                    <span class="radio-text">Global Only</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="session" {% if current_scope == 'session' %}checked{% endif %} onchange="changeScopeFilter('session')">
-                    <span class="radio-text">Session-Scoped Only</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="scope" value="all" {% if current_scope == 'all' %}checked{% endif %} onchange="changeScopeFilter('all')">
-                    <span class="radio-text">All Memories</span>
-                </label>
+    <!-- Sticky Navigation Container -->
+    <div class="sticky-nav-container">
+        <div class="memory-info">
+            <div class="memory-header-row">
+                <div class="memory-title-row">
+                    <button class="btn btn-secondary refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh Memory Dashboard">
+                        <span class="btn-icon">🔄</span>
+                    </button>
+                    <h1 class="memory-title">{{ scope_label }} Memory Entries</h1>
+                </div>
+                <div class="memory-stats-compact">
+                    <div class="stat-item">
+                        <span class="stat-number">{{ global_count }}</span>
+                        <span class="stat-label">Global</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">{{ session_count }}</span>
+                        <span class="stat-label">Session</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">{{ total_count }}</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div class="memory-search">
-            <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+            <!-- Integrated Controls Section -->
+            <div class="memory-controls">
+                <div class="scope-filter">
+                    <label class="scope-label">Memory Scope:</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="global" {% if current_scope == 'global' %}checked{% endif %} onchange="changeScopeFilter('global')">
+                            <span class="radio-text">Global Only</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="session" {% if current_scope == 'session' %}checked{% endif %} onchange="changeScopeFilter('session')">
+                            <span class="radio-text">Session-Scoped Only</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="scope" value="all" {% if current_scope == 'all' %}checked{% endif %} onchange="changeScopeFilter('all')">
+                            <span class="radio-text">All Memories</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="memory-search">
+                    <input type="text" id="search-input" placeholder="Search by key name..." class="search-input">
+                </div>
+            </div>
         </div>
     </div>
 
     {% if memory_entries %}
-    <div class="memory-table-container">
-        <table class="memory-table">
-            <thead>
+    <div class="table-wrapper">
+        <div class="memory-table-container">
+            <table class="memory-table">
+            <thead class="memory-table-thead">
                 <tr>
                     <th class="th-key">
                         <span class="th-icon">🔑</span>
@@ -135,29 +140,64 @@
                         {% endif %}
                     </td>
                     <td class="memory-created">
-                        <span class="timestamp-value">
-                            <script>
-                                document.write((function() {
-                                    const timestamp = "{{ entry.created_at }}";
-                                    if (/^\d+(\.\d+)?$/.test(timestamp)) {
-                                        const date = new Date(parseFloat(timestamp) * 1000);
-                                        if (!isNaN(date.getTime())) {
-                                            // Force local timezone conversion
-                                            return date.toLocaleString(undefined, {
-                                                year: 'numeric',
-                                                month: 'numeric',
-                                                day: 'numeric',
-                                                hour: 'numeric',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                                timeZoneName: 'short'
-                                            });
+                        <div class="timestamp-container">
+                            <span class="timestamp-value">
+                                <script>
+                                    document.write((function() {
+                                        const timestamp = "{{ entry.created_at }}";
+                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                            const date = new Date(parseFloat(timestamp) * 1000);
+                                            if (!isNaN(date.getTime())) {
+                                                // Force local timezone conversion
+                                                return date.toLocaleString(undefined, {
+                                                    year: 'numeric',
+                                                    month: 'numeric',
+                                                    day: 'numeric',
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                    timeZoneName: 'short'
+                                                });
+                                            }
                                         }
-                                    }
-                                    return timestamp;
-                                })());
-                            </script>
-                        </span>
+                                        return timestamp;
+                                    })());
+                                </script>
+                            </span>
+                            <div class="relative-time">
+                                <script>
+                                    document.write((function() {
+                                        const timestamp = "{{ entry.created_at }}";
+                                        if (/^\d+(\.\d+)?$/.test(timestamp)) {
+                                            const date = new Date(parseFloat(timestamp) * 1000);
+                                            if (!isNaN(date.getTime())) {
+                                                const now = new Date();
+                                                const diffMs = now.getTime() - date.getTime();
+                                                const diffMins = Math.floor(diffMs / (1000 * 60));
+                                                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+                                                if (diffMins < 1) {
+                                                    return 'just now';
+                                                } else if (diffMins < 60) {
+                                                    return diffMins + ' min' + (diffMins === 1 ? '' : 's') + ' ago';
+                                                } else if (diffHours < 24) {
+                                                    const remainingMins = diffMins - (diffHours * 60);
+                                                    if (remainingMins === 0) {
+                                                        return diffHours + ' hour' + (diffHours === 1 ? '' : 's') + ' ago';
+                                                    } else {
+                                                        return diffHours + 'h ' + remainingMins + 'm ago';
+                                                    }
+                                                } else {
+                                                    return diffDays + ' day' + (diffDays === 1 ? '' : 's') + ' ago';
+                                                }
+                                            }
+                                        }
+                                        return '';
+                                    })());
+                                </script>
+                            </div>
+                        </div>
                     </td>
                     <td class="memory-expires">
                         {% if entry.expires_at %}
@@ -203,7 +243,8 @@
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
     {% else %}
     <div class="empty-state">
@@ -612,32 +653,28 @@ formatTimestamps();
 
 // Also run when DOM is ready as backup
 document.addEventListener('DOMContentLoaded', formatTimestamps);
+
+// Simple scrollable table - no sticky headers
 </script>
 
 <style>
 .memory-dashboard {
-    padding: 2rem;
-}
-
-.dashboard-header {
-    background: white;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 0;
+    background: transparent;
+    min-height: calc(100vh - 120px);
 }
 
 .memory-controls {
-    margin-bottom: 2rem;
+    margin-bottom: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.75rem;
 }
 
 .scope-filter {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
 }
 
@@ -649,7 +686,7 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
 
 .radio-group {
     display: flex;
-    gap: 1rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
 }
 
@@ -704,30 +741,205 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     font-size: 1rem;
 }
 
+/* Sticky navigation container */
+.sticky-nav-container {
+    padding: 0;
+    position: sticky;
+    top: 80px;
+    z-index: 10;
+}
+
+/* Memory-specific styling */
+.memory-info {
+    padding: 1rem 2rem;
+    background: white;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #dee2e6;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    margin: 0;
+    width: 100%;
+}
+
+.memory-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
+.memory-title-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+
+.memory-title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.memory-stats-compact {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.stat-number {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #2563eb;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0.25rem;
+}
+
+.memory-controls {
+    padding: 0;
+    background: transparent;
+}
+
+.table-wrapper {
+    padding: 0 2rem 2rem 2rem;
+}
+
+/* Override padding for sticky nav wrapper */
+.sticky-nav-container + .table-wrapper,
+.table-wrapper:has(.sticky-nav-container) {
+    padding-bottom: 0;
+}
+
 .memory-table-container {
-    overflow-x: auto;
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #dee2e6;
+    overflow-x: auto;
+    overflow-y: visible;
 }
 
 .memory-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+    width: 100% !important;
+    min-width: 800px !important;
+    border-collapse: collapse !important;
+    font-size: 0.9rem !important;
+    margin: 0 !important;
+    table-layout: auto !important;
 }
 
-.memory-table th,
+.memory-table-thead th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+}
+
+/* Flexible column widths - let content determine size */
+.th-key { min-width: 120px; }
+.th-agent { min-width: 100px; }
+.th-session { min-width: 120px; }
+.th-scope { min-width: 80px; }
+.th-preview { min-width: 250px; word-wrap: break-word; }
+.th-created { min-width: 140px; }
+.th-expires { min-width: 100px; }
+.th-actions { width: 80px; min-width: 80px; text-align: center; }
+
 .memory-table td {
     padding: 1rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
-.memory-table th {
-    background-color: #f8f9fa;
+/* Override fixed width percentages from style.css to prevent text cropping */
+.memory-table .th-key,
+.memory-table .th-agent,
+.memory-table .th-scope,
+.memory-table .th-preview,
+.memory-table .th-created,
+.memory-table .th-expires,
+.memory-table .th-actions {
+    width: auto !important;
+}
+
+/* Allow text wrapping for content columns */
+.memory-key, .memory-agent, .memory-session, .memory-scope, .memory-created, .memory-expires {
+    white-space: nowrap;
+}
+
+/* Ensure preview column content can wrap and display fully */
+.memory-preview {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: none !important;
+}
+
+/* Timestamp styling */
+.timestamp-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.relative-time {
+    font-size: 0.75rem !important;
+    color: #6b7280 !important;
+    font-weight: 400 !important;
+    opacity: 0.8;
+}
+
+.memory-value {
+    white-space: normal;
+    word-wrap: break-word;
+    max-width: 300px;
+}
+
+/* Actions column specific styling */
+.memory-actions {
+    text-align: center;
+    padding: 0.5rem;
+    width: 60px;
+}
+
+.memory-table tr:last-child td {
+    border-bottom: none;
+}
+
+.th-icon {
+    margin-right: 0.5rem;
+}
+
+.th-text {
+    font-size: 0.875rem;
     font-weight: 600;
-    color: #495057;
 }
 
 .memory-key code {
@@ -811,17 +1023,22 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 2rem;
-    min-height: 2rem;
-    padding: 0.25rem !important;
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
     background: #e3f2fd !important;
     border: 1px solid #e3f2fd !important;
     color: #1976d2 !important;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .view-full-btn:hover {
     background: #bbdefb !important;
     border-color: #bbdefb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .view-full-btn .btn-icon {
@@ -833,6 +1050,7 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     line-height: 1;
     margin: 0;
     padding: 0;
+    font-size: 16px;
 }
 
 .modal {
@@ -933,6 +1151,8 @@ document.addEventListener('DOMContentLoaded', formatTimestamps);
     border-top: 1px solid #eee;
     text-align: right;
 }
+
+/* Clean table layout - removed duplicate CSS */
 </style>
 
 <!-- Memory values for JavaScript access -->

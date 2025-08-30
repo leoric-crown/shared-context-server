@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Shared Context Server{% endblock %}</title>
-    <link rel="icon" href="/ui/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/ui/static/favicon/favicon.ico?v=3&t=1735588800" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="32x32" href="/ui/static/favicon/favicon-32x32.png?v=3&t=1735588800">
+    <link rel="icon" type="image/png" sizes="16x16" href="/ui/static/favicon/favicon-16x16.png?v=3&t=1735588800">
+    <link rel="apple-touch-icon" sizes="180x180" href="/ui/static/favicon/apple-touch-icon.png?v=3&t=1735588800">
+    <link rel="manifest" href="/ui/static/favicon/site.webmanifest?v=3&t=1735588800">
     <link href="/ui/static/css/style.css?v=1.2" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -25,14 +29,14 @@
         <div class="nav-container">
             <div class="nav-brand">
                 <a href="/ui/" class="brand-link">
-                    <span class="brand-icon">🔗</span>
+                    <img src="/ui/static/scs-logo.svg" alt="SCS Logo" class="brand-icon">
                     <span class="brand-text">Shared Context Server</span>
                 </a>
             </div>
             <div class="nav-links">
                 <a href="/ui/" class="nav-link {% if request.url.path == '/ui/' %}active{% endif %}">Sessions</a>
                 <a href="/ui/memory" class="nav-link {% if request.url.path == '/ui/memory' %}active{% endif %}">Memories</a>
-                <a href="/health" class="nav-link" target="_blank">Health</a>
+                <a href="/ui/health" class="nav-link {% if request.url.path == '/ui/health' %}active{% endif %}">Health</a>
                 {% if admin_access %}
                 <span class="admin-badge">Admin</span>
                 <form method="post" action="/ui/logout" style="display: inline;">

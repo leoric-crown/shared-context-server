@@ -108,7 +108,9 @@ body {
 }
 
 .brand-icon {
-    font-size: var(--font-size-xl);
+    width: 48px;
+    height: 48px;
+    margin-right: var(--spacing-2);
 }
 
 .nav-links {
@@ -416,6 +418,16 @@ body {
 .btn-secondary:hover {
     background-color: var(--gray-50);
     border-color: var(--gray-400);
+}
+
+/* Refresh buttons - remove borders */
+.refresh-btn {
+    border: none !important;
+    box-shadow: none !important;
+}
+.refresh-btn:hover {
+    border: none !important;
+    box-shadow: none !important;
 }
 
 /* Empty State */
@@ -1496,13 +1508,8 @@ code {
     border-top: 1px solid var(--gray-100);
 }
 
-.memory-table .th-key { width: 18%; }
-.memory-table .th-agent { width: 12%; }
-.memory-table .th-scope { width: 8%; }
-.memory-table .th-preview { width: 35%; }
-.memory-table .th-created { width: 15%; }
-.memory-table .th-expires { width: 10%; }
-.memory-table .th-actions { width: 12%; text-align: center; }
+/* Column widths handled in memory.html template to prevent text cropping */
+.memory-table .th-actions { text-align: center; }
 
 .memory-table .memory-created,
 .memory-table .memory-expires {
