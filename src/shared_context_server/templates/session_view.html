@@ -4,14 +4,6 @@
 
 {% block content %}
 <div class="session-view">
-    <div class="session-view-header">
-        <div class="breadcrumb">
-            <a href="/ui/" class="breadcrumb-link">Sessions</a>
-            <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-current">{{ session.id }}</span>
-        </div>
-    </div>
-
     <!-- Sticky Navigation Container -->
     <div class="sticky-nav-container">
         <div class="session-info">
@@ -23,6 +15,9 @@
                     <h1 class="session-title">{{ session.purpose }}</h1>
                 </div>
                 <div class="session-header-controls">
+                    <button class="btn btn-secondary" id="markdown-toggle-btn" onclick="toggleMarkdownRendering()" data-tooltip="Toggle Markdown/Raw">
+                        <span class="btn-icon">📝</span>
+                    </button>
                     <button class="btn btn-secondary" id="refresh-btn" onclick="window.location.reload()" data-tooltip="Refresh" style="display: none;">
                         <span class="btn-icon">🔄</span>
                     </button>
@@ -1193,6 +1188,14 @@ function initializeMarkdownRendering() {
         const markdownContent = element.getAttribute('data-markdown');
         if (markdownContent && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
             try {
+                // Configure marked.js for proper list rendering
+                marked.setOptions({
+                    gfm: true,
+                    breaks: false,
+                    pedantic: false,
+                    sanitize: false
+                });
+
                 // Render markdown using marked.js (loaded from CDN in base.html)
                 const rawHtmlContent = marked.parse(markdownContent);
 
@@ -1210,7 +1213,7 @@ function initializeMarkdownRendering() {
                     ],
                     ALLOWED_ATTR: [
                         'href', 'title', 'alt', 'class', 'id',
-                        'type', 'checked', 'disabled'
+                        'type', 'checked', 'disabled', 'start'
                     ],
                     ALLOW_DATA_ATTR: false,
                     ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|#):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
@@ -1250,6 +1253,60 @@ function initializeMarkdownRendering() {
             console.warn('DOMPurify library not available - HTML sanitization disabled');
         }
     });
+}
+
+// Global variable to track markdown rendering state
+let isMarkdownEnabled = true;
+
+// Toggle between markdown rendering and raw text
+function toggleMarkdownRendering() {
+    isMarkdownEnabled = !isMarkdownEnabled;
+    const toggleBtn = document.getElementById('markdown-toggle-btn');
+    const messageElements = document.querySelectorAll('.message-text[data-markdown]');
+
+    if (isMarkdownEnabled) {
+        // Switch to markdown rendering
+        toggleBtn.innerHTML = '<span class="btn-icon">📝</span>';
+        toggleBtn.setAttribute('data-tooltip', 'Toggle Markdown/Raw');
+        toggleBtn.classList.remove('raw-mode');
+
+        // Clean up raw text styling first
+        messageElements.forEach(element => {
+            element.classList.remove('raw-text');
+            // Remove any pre elements that were added for raw display
+            const preElements = element.querySelectorAll('pre');
+            preElements.forEach(pre => pre.remove());
+        });
+
+        // Re-render all messages as markdown
+        initializeMarkdownRendering();
+    } else {
+        // Switch to raw text display
+        toggleBtn.innerHTML = '<span class="btn-icon">📄</span>';
+        toggleBtn.setAttribute('data-tooltip', 'Show Markdown');
+        toggleBtn.classList.add('raw-mode');
+
+        // Show raw markdown content with proper formatting
+        messageElements.forEach(element => {
+            const markdownContent = element.getAttribute('data-markdown');
+            if (markdownContent) {
+                // Decode HTML entities and preserve newlines
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = markdownContent;
+                const decodedContent = tempDiv.textContent || tempDiv.innerText || markdownContent;
+
+                // Create a pre element to preserve formatting
+                element.innerHTML = '';
+                const preElement = document.createElement('pre');
+                preElement.textContent = decodedContent;
+                preElement.style.whiteSpace = 'pre-wrap';
+                preElement.style.margin = '0';
+                preElement.style.fontFamily = 'inherit';
+                element.appendChild(preElement);
+                element.classList.add('raw-text');
+            }
+        });
+    }
 }
 
 // Message visibility filtering
