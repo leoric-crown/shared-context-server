@@ -524,6 +524,13 @@ class SimpleSQLAlchemyManager:
 
     async def close(self) -> None:
         """Close the SQLAlchemy engine and clean up resources."""
+        # Cancel any pending initialization task
+        if self._initialization_task and not self._initialization_task.done():
+            self._initialization_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._initialization_task
+        self._initialization_task = None
+
         if self.engine:
             # Use optimized disposal timeout in testing environments
             is_testing = _is_testing_environment()

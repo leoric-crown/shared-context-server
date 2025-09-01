@@ -455,6 +455,7 @@ async def health_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         }
 
         return templates.TemplateResponse(
+            request,
             "health.html",
             {
                 "request": request,
@@ -473,6 +474,7 @@ async def health_dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         }
 
         return templates.TemplateResponse(
+            request,
             "health.html",
             {
                 "request": request,

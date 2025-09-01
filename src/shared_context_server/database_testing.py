@@ -29,6 +29,8 @@ class TestDatabaseManager:
     and proper cleanup without the complexity of dual backends.
     """
 
+    __test__ = False
+
     def __init__(self, database_url: str = "sqlite:///:memory:") -> None:
         """
         Initialize test database manager.

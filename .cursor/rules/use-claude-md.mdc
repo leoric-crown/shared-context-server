@@ -1,6 +1,6 @@
 ---
-description:
+description: Always use CLAUDE.md
 globs:
 alwaysApply: true
 ---
-ALWAYS use ./CLAUDE.md as base context
+Always use ./CLAUDE.md as base system prompt

@@ -10,7 +10,6 @@ Run with: pytest tests/test_smoke.py -v
 """
 
 import contextlib
-import os
 import tempfile
 from pathlib import Path
 
@@ -144,31 +143,35 @@ class TestWALSchemaSmoke:
 
     def test_environment_validation_succeeds_with_required_vars(self):
         """Test that config loads successfully when required variables are present."""
-        # Ensure required variables are set
-        required_env = {
-            "API_KEY": os.environ.get("API_KEY", "test-api-key"),
-            "DATABASE_PATH": os.environ.get("DATABASE_PATH", ":memory:"),
-            "ENVIRONMENT": os.environ.get("ENVIRONMENT", "testing"),
-        }
-
-        # Temporarily set environment
-        for key, value in required_env.items():
-            os.environ[key] = value
-
         try:
+            # Use existing global environment which already has required variables
+            # from the test fixture setup (API_KEY, JWT_SECRET_KEY, JWT_ENCRYPTION_KEY)
             config = get_config()
             assert config is not None, (
                 "❌ Configuration failed to load with required environment variables"
             )
-            assert config.security.api_key == required_env["API_KEY"]
-            # DATABASE_PATH gets resolved to absolute path by validator, so just check it's not None
+
+            # Verify that API_KEY is present (use the global test key from fixtures)
+            assert (
+                config.security.api_key is not None and len(config.security.api_key) > 0
+            ), f"❌ API_KEY should be configured, got '{config.security.api_key}'"
+
+            # Verify database path is configured
             assert config.database.database_path is not None, (
                 "❌ Database path should be configured"
             )
 
+            # Verify other essential config sections load
+            assert hasattr(config, "mcp_server"), (
+                "❌ MCP Server config should be present"
+            )
+            assert hasattr(config, "operational"), (
+                "❌ Operational config should be present"
+            )
+
         except Exception as e:
             pytest.fail(
-                f"❌ Configuration should load successfully with required vars, but failed: {e}"
+                f"❌ Configuration should load successfully with global test environment, but failed: {e}"
             )
 
 

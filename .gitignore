@@ -5,9 +5,6 @@
 postgresql
 mcp-client-configurations.md
 
-# Multi-agent Collaboration Demo MCP config
-examples/demos/multi-expert-optimization/.mcp.json
-
 # Python
 __pycache__/
 *.py[cod]
