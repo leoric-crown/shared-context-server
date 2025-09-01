@@ -677,10 +677,19 @@ def main() -> None:
         sys.exit(1)
 
 
-# Add module-level constants as function attributes for test compatibility
-# This fixes pytest-xdist worker isolation issues where tests expect these
-# to be accessible through the main function object
-main.UVLOOP_AVAILABLE = UVLOOP_AVAILABLE  # type: ignore[attr-defined]
-main.SERVER_AVAILABLE = SERVER_AVAILABLE  # type: ignore[attr-defined]
-main.get_config = get_config  # type: ignore[attr-defined]
-main.show_status_interactive = show_status_interactive  # type: ignore[attr-defined]
+# Explicit module exports for pytest-xdist compatibility
+# This ensures all symbols are properly available for module-level patching
+__all__ = [
+    "main",
+    "UVLOOP_AVAILABLE",
+    "SERVER_AVAILABLE",
+    "ProductionServer",
+    "get_config",
+    "load_config",
+    "show_status_interactive",
+    "parse_arguments",
+    "run_with_optimal_loop",
+    "run_server_http",
+    "run_server_stdio",
+    "setup_signal_handlers",
+]
