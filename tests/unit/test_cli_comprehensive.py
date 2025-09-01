@@ -12,6 +12,9 @@ import pytest
 
 # Import the CLI module - handle import failures gracefully
 try:
+    import sys
+
+    # Import functions first, then get the module object from sys.modules
     from shared_context_server.cli.main import (
         SERVER_AVAILABLE,
         UVLOOP_AVAILABLE,
@@ -21,6 +24,9 @@ try:
         run_server_stdio,
         run_with_optimal_loop,
     )
+
+    # Get the actual module object for robust patching
+    cli_main_module = sys.modules["shared_context_server.cli.main"]
 
     CLI_AVAILABLE = True
 except ImportError as e:
@@ -155,7 +161,7 @@ class TestEventLoopSetup:
             return "test"
 
         with (
-            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", True),
+            patch.object(cli_main_module, "UVLOOP_AVAILABLE", True),
             patch("uvloop.run", side_effect=mock_uvloop_run) as mock_uvloop_run,
         ):
             coro = dummy_coro()
@@ -176,7 +182,7 @@ class TestEventLoopSetup:
             return "test"
 
         with (
-            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", False),
+            patch.object(cli_main_module, "UVLOOP_AVAILABLE", False),
             patch("asyncio.run", side_effect=mock_asyncio_run) as mock_run,
         ):
             coro = dummy_coro()
@@ -197,7 +203,7 @@ class TestEventLoopSetup:
             return "test"
 
         with (
-            patch("shared_context_server.cli.main.UVLOOP_AVAILABLE", True),
+            patch.object(cli_main_module, "UVLOOP_AVAILABLE", True),
             # Even if UVLOOP_AVAILABLE is True, the import inside the function could fail
             patch("uvloop.run", side_effect=ImportError("uvloop not available")),
             # Should handle the ImportError gracefully by falling back
@@ -373,7 +379,7 @@ class TestMainFunction:
     def test_main_server_not_available(self):
         """Test main function when server is not available."""
         with (
-            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
+            patch.object(cli_main_module, "SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             main()
@@ -466,7 +472,7 @@ class TestEnvironmentIntegration:
 
         with (
             patch.dict(os.environ, test_env, clear=True),
-            patch("shared_context_server.cli.main.load_config") as mock_load,
+            patch.object(cli_main_module, "load_config") as mock_load,
         ):
             mock_config = MagicMock()
             mock_config.database_url = "cli_test.db"
@@ -527,7 +533,7 @@ class TestCLIEdgeCases:
         assert SERVER_AVAILABLE
 
         # Test what happens when patched to False
-        with patch("shared_context_server.cli.main.SERVER_AVAILABLE", False):
+        with patch.object(cli_main_module, "SERVER_AVAILABLE", False):
             # The patch doesn't affect the imported name, so test the module state
             assert SERVER_AVAILABLE  # Original import is still True
 
@@ -788,7 +794,7 @@ class TestProductionServerClass:
 
         # Mock SERVER_AVAILABLE to False
         with (
-            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
+            patch.object(cli_main_module, "SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             await server.start_stdio()
@@ -805,7 +811,7 @@ class TestProductionServerClass:
 
         # Mock SERVER_AVAILABLE to False
         with (
-            patch("shared_context_server.cli.main.SERVER_AVAILABLE", False),
+            patch.object(cli_main_module, "SERVER_AVAILABLE", False),
             pytest.raises(SystemExit),
         ):
             await server.start_http("localhost", 23456)
@@ -839,8 +845,9 @@ class TestConfigLoadingFallbacks:
 
         # Mock get_config to raise an exception, triggering fallback
         with (
-            patch(
-                "shared_context_server.cli.main.get_config",
+            patch.object(
+                cli_main_module,
+                "get_config",
                 side_effect=Exception("Config error"),
             ),
             patch("sys.argv", ["cli.py", "--help"]),
@@ -902,8 +909,9 @@ class TestMainFunctionPaths:
 
         with (
             patch("sys.argv", ["cli.py"]),
-            patch(
-                "shared_context_server.cli.main.get_config",
+            patch.object(
+                cli_main_module,
+                "get_config",
                 side_effect=Exception("Config error"),
             ),
             pytest.raises(SystemExit),
