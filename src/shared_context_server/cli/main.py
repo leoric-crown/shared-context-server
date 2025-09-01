@@ -675,3 +675,12 @@ def main() -> None:
     except Exception:
         logger.exception("Server failed to start")
         sys.exit(1)
+
+
+# Add module-level constants as function attributes for test compatibility
+# This fixes pytest-xdist worker isolation issues where tests expect these
+# to be accessible through the main function object
+main.UVLOOP_AVAILABLE = UVLOOP_AVAILABLE  # type: ignore[attr-defined]
+main.SERVER_AVAILABLE = SERVER_AVAILABLE  # type: ignore[attr-defined]
+main.get_config = get_config  # type: ignore[attr-defined]
+main.show_status_interactive = show_status_interactive  # type: ignore[attr-defined]
