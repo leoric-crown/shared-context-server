@@ -284,11 +284,13 @@ class TestKeyGenerationUtilities:
         test_keys = {"API_KEY": "test-key"}
 
         # Simulate ImportError when importing yaml
+        # Important: Patch print before patching __import__ to avoid
+        # Python 3.10 resolving 'builtins' via the patched importer.
         with (
+            patch("builtins.print") as mock_print,
             patch(
                 "builtins.__import__", side_effect=ImportError("No module named 'yaml'")
             ),
-            patch("builtins.print") as mock_print,
         ):
             export_keys(test_keys, "yaml")
 

@@ -7,8 +7,6 @@ used by both the CLI interface and the standalone setup script.
 """
 
 import base64
-import builtins
-import inspect
 import re
 import secrets
 import socket
