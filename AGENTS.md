@@ -39,3 +39,5 @@
 - Run `uv run scs setup` to generate an .env file with fresh keys.
 - Generate MCP client config via CLI, e.g.: `uv run scs client-config claude -s user --copy`.
 - Prefer `docker-compose.dev.yml` for isolated local runs.
+
+WebUI debug logs: enable with `?debug=1`, `window.SCS_DEBUG=true`, or `localStorage.setItem('scs_debug','1')`.

@@ -111,3 +111,5 @@ See `.claude/guides/` for comprehensive patterns:
 - `development-standards.md` - Code standards & file limits
 - `testing-architecture-stability.md` - Test patterns
 - `mcp-toolkit-architecture.md` - MCP integration patterns
+
+WebUI debug logs: enable with `?debug=1`, `window.SCS_DEBUG=true`, or `localStorage.setItem('scs_debug','1')`.
