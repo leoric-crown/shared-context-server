@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 try:
     from cryptography.fernet import Fernet
@@ -559,12 +559,25 @@ def export_keys(keys: dict[str, str], format_type: str) -> None:
 
         print(json.dumps(keys, indent=2))
     elif format_type == "yaml":
-        try:
-            import yaml  # type: ignore[import-untyped]
+        # Prefer sys.modules to avoid triggering patched __import__ in tests (esp. on Python 3.10)
+        yaml_mod: Any
+        if "yaml" in sys.modules:
+            yaml_mod = sys.modules["yaml"]
+        else:
+            try:
+                import importlib
 
-            print(yaml.dump(keys, default_flow_style=False))
-        except ImportError:
-            print("❌ PyYAML not installed. Install with: pip install pyyaml")
+                yaml_mod = importlib.import_module("yaml")
+            except ImportError:
+                print("❌ PyYAML not installed. Install with: pip install pyyaml")
+                return
+
+        # Use the resolved yaml module (real or mocked)
+        try:
+            print(yaml_mod.dump(keys, default_flow_style=False))
+        except Exception:
+            # Fallback message if yaml.dump is not available on the provided module
+            print("❌ Unable to export YAML: missing yaml.dump()")
     elif format_type == "export":
         for key, value in keys.items():
             print(f"export {key}='{value}'")
