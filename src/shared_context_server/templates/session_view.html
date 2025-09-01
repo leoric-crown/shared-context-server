@@ -15,6 +15,9 @@
                     <h1 class="session-title">{{ session.purpose }}</h1>
                 </div>
                 <div class="session-header-controls">
+                    <button class="btn btn-primary auto-scroll-toggle" id="auto-scroll-toggle" onclick="toggleAutoScroll()" data-tooltip="Disable auto-scroll" style="display: none;">
+                        <span class="btn-icon">⏸️</span>
+                    </button>
                     <button class="btn btn-secondary" id="markdown-toggle-btn" onclick="toggleMarkdownRendering()" data-tooltip="Toggle Markdown/Raw">
                         <span class="btn-icon">📝</span>
                     </button>
@@ -69,7 +72,7 @@
                             })());
                         </script>
                     </span>
-                    <div class="timestamp-relative">
+                    <div class="timestamp-relative session-created-relative" data-original-timestamp="{{ session.created_at }}">
                         <script>
                             document.write((function() {
                                 const timestamp = "{{ session.created_at }}";
@@ -123,7 +126,7 @@
                             })());
                         </script>
                     </span>
-                    <div class="timestamp-relative">
+                    <div class="timestamp-relative session-activity-relative" data-original-timestamp="{{ session.last_activity }}">
                         <script>
                             document.write((function() {
                                 const timestamp = "{{ session.last_activity }}";
@@ -439,15 +442,29 @@
 </div>
 
 <script>
+// This page manages its own WebSocket; disable global init
+window.SCS_DISABLE_GLOBAL_WS = true;
+// Debug control: enable with window.SCS_DEBUG=true, ?debug=1 or localStorage('scs_debug')==='1'
+const SCS_DEBUG = (window.SCS_DEBUG === true)
+    || (new URLSearchParams(window.location.search).get('debug') === '1')
+    || (localStorage.getItem('scs_debug') === '1');
+const dlog = (...args) => { if (SCS_DEBUG) console.debug(...args); };
 let websocket;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+let pingIntervalId = null;
 
 // Modal view state
 let currentViewMode = 'highlighted'; // 'highlighted' or 'raw'
 let currentModalKey = null;
 let currentRawValue = null;
 let currentParsedValue = null;
+
+// Auto-scroll state management
+let isAtBottom = true;           // Track user scroll position
+let autoScrollEnabled = true;    // Track auto-scroll preference
+let unreadCount = 0;            // Count messages when scrolled up
+let scrollDetectionTimeout;     // Debounce scroll events
 
 // WebSocket connection management
 function connectWebSocket() {
@@ -456,17 +473,18 @@ function connectWebSocket() {
     const wsPort = '{{ websocket_port }}'; // WebSocket server port from config
     const wsUrl = `${protocol}//${wsHost}:${wsPort}/ws/{{ session_id }}`;
 
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
     websocket = new WebSocket(wsUrl);
 
     websocket.onopen = function(event) {
-        console.log('WebSocket connected');
         updateConnectionStatus('connected');
         reconnectAttempts = 0;
 
         // Send periodic heartbeat
-        setInterval(() => {
-            if (websocket.readyState === WebSocket.OPEN) {
+        if (pingIntervalId) {
+            clearInterval(pingIntervalId);
+        }
+        pingIntervalId = setInterval(() => {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
                 websocket.send('ping');
             }
         }, 30000);
@@ -486,14 +504,16 @@ function connectWebSocket() {
     };
 
     websocket.onclose = function(event) {
-        console.log('WebSocket closed');
         updateConnectionStatus('disconnected');
+        if (pingIntervalId) {
+            clearInterval(pingIntervalId);
+            pingIntervalId = null;
+        }
 
         // Attempt to reconnect
         if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++;
             setTimeout(() => {
-                console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
                 connectWebSocket();
             }, 2000 * reconnectAttempts);
         }
@@ -502,6 +522,10 @@ function connectWebSocket() {
     websocket.onerror = function(error) {
         console.error('WebSocket error:', error);
         updateConnectionStatus('error');
+        if (pingIntervalId) {
+            clearInterval(pingIntervalId);
+            pingIntervalId = null;
+        }
     };
 }
 
@@ -547,8 +571,9 @@ function handleRealtimeMessage(message) {
     } else if (message.type === 'memory_update') {
         handleMemoryUpdate(message.data);
     } else if (message.type === 'session_update') {
-        // Refresh the page for session updates
-        window.location.reload();
+        // Only reload for structural changes, not normal message additions
+        // This prevents jarring page reloads during normal conversation
+        // Session structural update received - consider manual refresh if needed
     }
 }
 
@@ -696,7 +721,7 @@ function updateMemoryRow(row, memoryData) {
     }
 }
 
-// Add new message to the UI
+// Add new message to the UI with cross-tab awareness
 function addNewMessage(messageData) {
     const messagesList = document.getElementById('messages-list');
     const emptyMessages = messagesList.querySelector('.empty-messages');
@@ -710,11 +735,67 @@ function addNewMessage(messageData) {
     const messageElement = createMessageElement(messageData);
     messagesList.appendChild(messageElement);
 
-    // Scroll to bottom
-    messageElement.scrollIntoView({ behavior: 'smooth' });
+    // Check if we're on messages tab
+    const isOnMessagesTab = isMessagesTabActive();
+
+    if (isOnMessagesTab) {
+        // Normal auto-scroll handling when on messages tab
+        handleSmartAutoScroll(messageElement);
+    } else {
+        // Handle cross-tab message arrival - ALWAYS show notification when not on messages tab
+        // This promotes users that there are new messages regardless of auto-scroll state
+        incrementUnreadCount();
+        addToggleNotification();
+
+        if (autoScrollEnabled) {
+            // Auto-scroll is enabled - when they return to messages tab, they'll auto-scroll to latest
+            // New message arrived while on other tab - will auto-scroll when returning to messages tab
+        } else {
+            // Auto-scroll is disabled - notification will persist until manually cleared
+            // New message arrived while on other tab with auto-scroll disabled - added persistent notification
+        }
+    }
 
     // Update message count in header
     updateMessageCount();
+
+    // Update activity indicator with current timestamp for new messages
+    updateActivityIndicatorForNewMessage();
+
+    // Update session header Last Activity timestamp from message data
+    updateSessionActivityTimestampFromMessage(messageData);
+}
+
+// Helper function to get relative timestamp ("just now", "5 minutes ago", etc.)
+function getRelativeTimestamp(timestamp) {
+    let date;
+
+    // Handle both Unix timestamp (numeric) and ISO string formats
+    if (/^\d+(\.\d+)?$/.test(timestamp)) {
+        date = new Date(parseFloat(timestamp) * 1000);
+    } else {
+        date = new Date(timestamp);
+    }
+
+    if (isNaN(date.getTime())) {
+        return '';
+    }
+
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) {
+        return diffDays + (diffDays === 1 ? ' day ago' : ' days ago');
+    } else if (diffHours > 0) {
+        return diffHours + (diffHours === 1 ? ' hour ago' : ' hours ago');
+    } else if (diffMins > 0) {
+        return diffMins + (diffMins === 1 ? ' minute ago' : ' minutes ago');
+    } else {
+        return 'just now';
+    }
 }
 
 // Create message element
@@ -722,25 +803,35 @@ function createMessageElement(message) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message-item';
     messageDiv.setAttribute('data-message-id', message.id);
+    messageDiv.setAttribute('data-visibility', message.visibility);
 
     const senderIcon = getSenderIcon(message.sender_type);
     const timestamp = (function() {
         const ts = message.timestamp;
+        let date;
+
+        // Handle both Unix timestamp (numeric) and ISO string formats
         if (/^\d+(\.\d+)?$/.test(ts)) {
-            const date = new Date(parseFloat(ts) * 1000);
-            if (!isNaN(date.getTime())) {
-                return date.toLocaleString(undefined, {
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    timeZoneName: 'short'
-                });
-            }
+            // Unix timestamp format (seconds)
+            date = new Date(parseFloat(ts) * 1000);
+        } else {
+            // ISO string format or other date string
+            date = new Date(ts);
         }
-        return ts;
+
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short'
+            });
+        }
+
+        return ts; // Fallback to raw timestamp if parsing fails
     })();
 
     messageDiv.innerHTML = `
@@ -750,16 +841,69 @@ function createMessageElement(message) {
                 <span class="sender-name">${message.sender}</span>
             </div>
             <div class="message-meta">
-                <span class="message-timestamp">${timestamp}</span>
+                <div class="message-timestamp">
+                    <div class="timestamp-main">${timestamp}</div>
+                    <div class="timestamp-relative">${getRelativeTimestamp(message.timestamp)}</div>
+                </div>
                 <span class="visibility-badge visibility-${message.visibility}">
                     ${message.visibility}
                 </span>
             </div>
         </div>
         <div class="message-content">
-            <div class="message-text">${escapeHtml(message.content)}</div>
+            <div class="message-text" data-markdown="${escapeHtml(message.content)}">${escapeHtml(message.content)}</div>
         </div>
     `;
+
+    // Apply markdown rendering to new message if enabled
+    if (isMarkdownEnabled && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+        try {
+            const messageTextEl = messageDiv.querySelector('.message-text');
+            const markdownContent = message.content;
+
+            marked.setOptions({
+                gfm: true,
+                breaks: false,
+                pedantic: false,
+                sanitize: false
+            });
+
+            const rawHtmlContent = marked.parse(markdownContent);
+            const sanitizedHtmlContent = DOMPurify.sanitize(rawHtmlContent, {
+                ALLOWED_TAGS: [
+                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                    'p', 'br', 'div', 'span',
+                    'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
+                    'ul', 'ol', 'li',
+                    'blockquote',
+                    'a',
+                    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                    'input'
+                ],
+                ALLOWED_ATTR: [
+                    'href', 'title', 'alt', 'class', 'id',
+                    'type', 'checked', 'disabled', 'start'
+                ],
+                ALLOW_DATA_ATTR: false,
+                ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|#):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'src'],
+                FORBID_TAGS: ['script', 'object', 'embed', 'form', 'button', 'img'],
+                ADD_ATTR: ['target']
+            });
+
+            messageTextEl.innerHTML = sanitizedHtmlContent;
+
+            // Apply syntax highlighting if Prism is available
+            if (typeof Prism !== 'undefined') {
+                const codeElements = messageTextEl.querySelectorAll('code[class*="language-"]');
+                codeElements.forEach(code => {
+                    Prism.highlightElement(code);
+                });
+            }
+        } catch (error) {
+            console.error('Error rendering markdown for new message:', error);
+        }
+    }
 
     return messageDiv;
 }
@@ -773,6 +917,187 @@ function getSenderIcon(senderType) {
     }
 }
 
+// Smart auto-scroll functionality
+function isAtBottomOfContainer(element, threshold = 64) {
+    return (element.scrollHeight - element.scrollTop - element.clientHeight) < threshold;
+}
+
+function handleSmartAutoScroll(messageElement) {
+    const messagesList = document.getElementById('messages-list');
+    const wasAtBottom = isAtBottomOfContainer(messagesList);
+
+    isAtBottom = wasAtBottom;
+
+    if (autoScrollEnabled) {
+        // Auto-scroll is enabled - always scroll to new message
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        hideAutoScrollToggle();
+    } else {
+        // Auto-scroll is disabled - show toggle button
+        showAutoScrollToggle();
+        incrementUnreadCount();
+        addToggleNotification();
+    }
+}
+
+function showAutoScrollToggle() {
+    const toggleButton = document.getElementById('auto-scroll-toggle');
+    if (toggleButton) {
+        toggleButton.style.display = 'flex';
+        updateAutoScrollToggleUI();
+    }
+}
+
+function hideAutoScrollToggle() {
+    const toggleButton = document.getElementById('auto-scroll-toggle');
+    if (toggleButton) {
+        toggleButton.style.display = 'none';
+        unreadCount = 0;
+    }
+}
+
+function incrementUnreadCount() {
+    unreadCount++;
+    updateAutoScrollToggleUI();
+}
+
+function updateAutoScrollToggleUI() {
+    const toggleButton = document.getElementById('auto-scroll-toggle');
+    const toggleIcon = toggleButton?.querySelector('.btn-icon');
+
+    if (!toggleButton || !toggleIcon) return;
+
+    // Check if we're in memory view
+    const isInMemoryView = !isMessagesTabActive();
+
+    if (isInMemoryView) {
+        // In memory view - always show return arrow and preserve glow effect
+        toggleIcon.textContent = '↩️';
+        const tooltipText = unreadCount > 0 ? `Return to messages (${unreadCount} new messages)` : 'Return to messages';
+        toggleButton.setAttribute('data-tooltip', tooltipText);
+
+        // Keep the current class to preserve any glow effects, but ensure secondary styling
+        const hasNotification = toggleButton.classList.contains('new-messages-notification');
+        toggleButton.className = 'btn btn-secondary auto-scroll-toggle';
+        if (hasNotification) {
+            toggleButton.classList.add('new-messages-notification'); // Restore glow effect
+        }
+    } else {
+        // In messages view - normal auto-scroll toggle behavior
+        if (autoScrollEnabled) {
+            toggleIcon.textContent = '⏸️';
+            toggleButton.setAttribute('data-tooltip', 'Disable auto-scroll');
+            toggleButton.className = 'btn btn-primary auto-scroll-toggle';
+        } else {
+            toggleIcon.textContent = '▶️';
+            const tooltipText = unreadCount > 0 ? `Enable auto-scroll (${unreadCount} new messages)` : 'Enable auto-scroll';
+            toggleButton.setAttribute('data-tooltip', tooltipText);
+            toggleButton.className = 'btn btn-secondary auto-scroll-toggle';
+        }
+    }
+}
+
+function toggleAutoScroll() {
+    // Check if we're currently on the messages tab
+    const isOnMessagesTab = isMessagesTabActive();
+
+    if (!isOnMessagesTab) {
+        // If not on messages tab, switch to messages tab first
+        switchTab('messages');
+
+        // Clear notifications since user is navigating to messages
+        clearToggleNotification();
+        unreadCount = 0;
+
+        // Auto-enable scroll and scroll to latest message
+        autoScrollEnabled = true;
+
+        // Brief delay to ensure tab switch completes, then scroll
+        setTimeout(() => {
+            const messagesList = document.getElementById('messages-list');
+            const messages = messagesList.querySelectorAll('.message-item');
+
+            if (messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+
+            isAtBottom = true;
+            hideAutoScrollToggle();
+        }, 100);
+
+        return; // Exit early since we handled the cross-tab case
+    }
+
+    // Normal toggle behavior when already on messages tab
+    autoScrollEnabled = !autoScrollEnabled;
+
+    if (autoScrollEnabled) {
+        // Auto-scroll was just enabled - scroll to latest and hide toggle
+        const messagesList = document.getElementById('messages-list');
+        const messages = messagesList.querySelectorAll('.message-item');
+
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        isAtBottom = true;
+        hideAutoScrollToggle();
+        clearToggleNotification(); // Clear any notifications
+        unreadCount = 0; // Reset unread count
+    } else {
+        // Auto-scroll was just disabled - show toggle button
+        showAutoScrollToggle();
+    }
+}
+
+function initializeScrollDetection() {
+    const messagesList = document.getElementById('messages-list');
+    if (!messagesList) return;
+
+    // Immediate scroll event handler (minimal debounce for performance)
+    const handleScroll = () => {
+        clearTimeout(scrollDetectionTimeout);
+        scrollDetectionTimeout = setTimeout(() => {
+            const wasAtBottom = isAtBottomOfContainer(messagesList, 20); // More strict threshold
+            const scrollDistance = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight;
+            isAtBottom = wasAtBottom;
+
+            // Debug logging to understand scroll behavior
+            // Scroll detection logic
+
+            if (wasAtBottom) {
+                // User scrolled back to bottom
+                if (autoScrollEnabled) {
+                    // Auto-scroll is enabled - hide toggle button
+                    hideAutoScrollToggle();
+                    // At bottom with auto-scroll enabled - hiding toggle
+                } else {
+                    // Auto-scroll is disabled - keep toggle visible but update UI
+                    showAutoScrollToggle();
+                    // At bottom but auto-scroll disabled - showing toggle
+                }
+            } else {
+                // User scrolled up (away from bottom)
+                if (autoScrollEnabled) {
+                    // User manually scrolled away from bottom while auto-scroll was enabled
+                    // Automatically disable auto-scroll
+                    autoScrollEnabled = false;
+                    showAutoScrollToggle();
+                    // Auto-scroll automatically disabled - user scrolled up
+                } else {
+                    // Auto-scroll already disabled - just show the toggle
+                    showAutoScrollToggle();
+                    // Auto-scroll already disabled - keeping toggle visible
+                }
+            }
+        }, 16); // ~60fps refresh rate (16ms) for responsive feel
+    };
+
+    messagesList.addEventListener('scroll', handleScroll);
+}
+
 // Update message count in header
 function updateMessageCount() {
     const messages = document.querySelectorAll('.message-item');
@@ -780,8 +1105,114 @@ function updateMessageCount() {
     messagesTab.textContent = `Messages (${messages.length})`;
 }
 
-// Tab switching functionality
+// Visual notification functions for cross-tab messaging
+function addToggleNotification() {
+    const toggleButton = document.getElementById('auto-scroll-toggle');
+    if (toggleButton) {
+        toggleButton.classList.add('new-messages-notification');
+        // Added breathing notification effect to toggle button
+
+        // If auto-scroll is enabled, clear notification when user switches back to messages tab
+        if (autoScrollEnabled) {
+            // For auto-scroll enabled case, clear notification after tab switch
+            const clearOnTabSwitch = () => {
+                clearToggleNotification();
+            };
+            setTimeout(clearOnTabSwitch, 1000); // Brief delay to show the effect
+        }
+    }
+}
+
+function clearToggleNotification() {
+    const toggleButton = document.getElementById('auto-scroll-toggle');
+    if (toggleButton) {
+        toggleButton.classList.remove('new-messages-notification');
+    }
+}
+
+function isMessagesTabActive() {
+    const messagesTab = document.getElementById('messages-tab');
+    return messagesTab && messagesTab.classList.contains('active');
+}
+
+// Refresh all timestamps in the interface
+function refreshAllTimestamps() {
+    dlog('🕐 Refreshing all timestamps...');
+
+    // Update message timestamps
+    refreshMessageTimestamps();
+
+    // Update session info timestamps (created at, last activity)
+    refreshSessionTimestamps();
+
+}
+
+// Refresh relative timestamps for all messages
+function refreshMessageTimestamps() {
+    const messageElements = document.querySelectorAll('.message-item');
+    let updatedCount = 0;
+
+    messageElements.forEach(messageEl => {
+        const timestampRelative = messageEl.querySelector('.timestamp-relative');
+        if (timestampRelative) {
+            // Get the original timestamp from data attribute or timestamp element
+            const timestampMain = messageEl.querySelector('.timestamp-main');
+            if (timestampMain && timestampMain.textContent) {
+                const originalTimestamp = timestampMain.textContent.trim();
+                // Update relative timestamp
+                const newRelativeTime = getRelativeTimestamp(originalTimestamp);
+                if (timestampRelative.textContent !== newRelativeTime) {
+                    timestampRelative.textContent = newRelativeTime;
+                    updatedCount++;
+                }
+            }
+        }
+    });
+
+}
+
+// Refresh session info timestamps (created at, activity status)
+function refreshSessionTimestamps() {
+    let updatedCount = 0;
+
+    // Update session created timestamp
+    const createdTimestamp = document.querySelector('.session-created-relative');
+    if (createdTimestamp && createdTimestamp.dataset.originalTimestamp) {
+        const newRelativeTime = getRelativeTimestamp(createdTimestamp.dataset.originalTimestamp);
+        if (createdTimestamp.textContent !== newRelativeTime) {
+            createdTimestamp.textContent = newRelativeTime;
+            updatedCount++;
+        }
+    }
+
+    // Update session activity timestamp
+    const activityTimestamp = document.querySelector('.session-activity-relative');
+    if (activityTimestamp && activityTimestamp.dataset.originalTimestamp) {
+        const newRelativeTime = getRelativeTimestamp(activityTimestamp.dataset.originalTimestamp);
+        if (activityTimestamp.textContent !== newRelativeTime) {
+            activityTimestamp.textContent = newRelativeTime;
+            updatedCount++;
+        }
+    }
+
+    // Update activity status indicator (this handles the visual indicator)
+    applyActivityStatusToIndicator();
+
+}
+
+// Tab switching functionality with auto-scroll persistence
 function switchTab(tabName) {
+    const previousTab = document.querySelector('.tab-button.active')?.id.replace('-tab', '');
+
+    // Store current scroll position if switching away from messages tab
+    if (previousTab === 'messages') {
+        const messagesList = document.getElementById('messages-list');
+        if (messagesList) {
+            window.lastMessagesScrollPosition = messagesList.scrollTop;
+            window.lastMessagesScrollHeight = messagesList.scrollHeight;
+        }
+    }
+
     // Hide all tab panes
     const panes = document.querySelectorAll('.tab-pane');
     panes.forEach(pane => pane.classList.remove('active'));
@@ -796,12 +1227,71 @@ function switchTab(tabName) {
     // Add active class to selected tab button
     document.getElementById(tabName + '-tab').classList.add('active');
 
+    // Handle messages tab-specific behavior
+    if (tabName === 'messages') {
+        dlog(`🔄 Switching to messages tab. Auto-scroll enabled: ${autoScrollEnabled}`);
+
+        // Clear any notification glow effect
+        clearToggleNotification();
+
+        // Handle auto-scroll restoration based on previous state
+        setTimeout(() => {
+            const messagesList = document.getElementById('messages-list');
+            if (!messagesList) {
+                dlog('❌ Messages list not found!');
+                return;
+            }
+
+            dlog(`📊 Messages list found. Current scrollTop: ${messagesList.scrollTop}, scrollHeight: ${messagesList.scrollHeight}`);
+
+            if (autoScrollEnabled) {
+                // Auto-scroll was enabled - always scroll to latest message
+                const messages = messagesList.querySelectorAll('.message-item');
+                dlog(`📝 Found ${messages.length} messages`);
+
+                if (messages.length > 0) {
+                    const lastMessage = messages[messages.length - 1];
+                    dlog('🎯 Attempting smooth scroll to last message...');
+
+                    // Use smooth scroll directly for better UX
+                    lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    dlog(`✅ Smooth scrolled to latest. New scrollTop: ${messagesList.scrollTop}`);
+
+                    // Update isAtBottom state
+                    isAtBottom = true;
+                    // Hide toggle button since we're at bottom with auto-scroll enabled
+                    hideAutoScrollToggle();
+                }
+            } else {
+                // Auto-scroll was disabled - restore previous scroll position
+                if (typeof window.lastMessagesScrollPosition !== 'undefined') {
+                    messagesList.scrollTop = window.lastMessagesScrollPosition;
+                    // Update isAtBottom state based on restored position
+                    isAtBottom = isAtBottomOfContainer(messagesList, 20);
+                    // Show toggle button since auto-scroll is disabled
+                    showAutoScrollToggle();
+                } else {
+                }
+            }
+        }, 50); // Reduced delay for more responsive feel
+    }
+
     // Show/hide message filters based on active tab
     const messageFilters = document.getElementById('message-filters');
     if (tabName === 'memory') {
         messageFilters.style.display = 'none';
+
+        // ALWAYS show auto-scroll toggle in memory view for better discoverability
+        // This ensures users can always navigate back to messages and see any notifications
+        showAutoScrollToggle();
+
+        // Update UI to show return arrow and preserve glow effects
+        updateAutoScrollToggleUI();
     } else {
         messageFilters.style.display = 'flex';
+
+        // Update UI to show normal auto-scroll controls
+        updateAutoScrollToggleUI();
     }
 }
 
@@ -1102,6 +1592,69 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
+// Update session header "Last Activity" timestamp in real-time
+function updateSessionActivityTimestampFromMessage(messageData) {
+    if (!messageData.timestamp) {
+        return;
+    }
+
+    // Convert ISO timestamp to Unix seconds and Date object
+    const messageTime = new Date(messageData.timestamp);
+    const timestampSeconds = messageTime.getTime() / 1000;
+
+
+    // Update the absolute timestamp display (Last Activity: 9/1/2025, 12:32:50 AM CST)
+    // Find all timestamp-value elements and look for the one in the "Last Activity" meta-item
+    const timestampElements = document.querySelectorAll('.meta-value.timestamp-value');
+
+    for (let element of timestampElements) {
+        const metaItem = element.closest('.meta-item');
+
+        if (metaItem && metaItem.textContent.includes('Last Activity:')) {
+            const formattedTime = messageTime.toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short'
+            });
+
+            // Clear the element and set the new timestamp
+            element.innerHTML = '';
+            element.textContent = formattedTime;
+            break;
+        }
+    }
+
+    // Update the relative timestamp display (just now, 5 minutes ago, etc.)
+    const activityRelative = document.querySelector('.session-activity-relative');
+    if (activityRelative) {
+        // Update the data attribute with the message timestamp
+        activityRelative.dataset.originalTimestamp = timestampSeconds.toString();
+
+        // Calculate and display the new relative time
+        const newRelativeTime = getRelativeTimestamp(timestampSeconds.toString());
+        activityRelative.textContent = newRelativeTime;
+
+    } else {
+    }
+}
+
+// Update activity indicator timestamp when new message arrives
+function updateActivityIndicatorForNewMessage() {
+    const indicator = document.getElementById('activity-status-indicator');
+    if (!indicator) return;
+
+    // Set the current timestamp as the new activity time
+    const currentTime = Date.now() / 1000; // Convert to seconds (Unix timestamp)
+    indicator.dataset.activityTimestamp = currentTime.toString();
+
+    // Immediately update the indicator appearance
+    applyActivityStatusToIndicator();
+}
+
 // Apply activity status to the indicator
 function applyActivityStatusToIndicator() {
     const indicator = document.getElementById('activity-status-indicator');
@@ -1163,8 +1716,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize markdown rendering for existing messages
     initializeMarkdownRendering();
 
+    // Initialize scroll detection for auto-scroll functionality
+    initializeScrollDetection();
+
     // Scroll to most recent message
     scrollToLatestMessage();
+
+    // Set up periodic activity status updates every 30 seconds
+    setInterval(() => {
+        applyActivityStatusToIndicator();
+    }, 30000); // 30 seconds
+
+    // Set up periodic timestamp refresh every 60 seconds
+    setInterval(() => {
+        refreshAllTimestamps();
+    }, 60000); // 60 seconds
 });
 
 // Scroll to the most recent message
@@ -1175,8 +1741,9 @@ function scrollToLatestMessage() {
     if (messages.length > 0) {
         // Get the last message
         const lastMessage = messages[messages.length - 1];
-        // Scroll to it smoothly
-        lastMessage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // Scroll to the bottom to show the complete message without sticky header issues
+        lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 }
 
@@ -1349,6 +1916,130 @@ window.sessionMemoryValues = {
 </script>
 
 <style>
+/* Compact Layout - Reduce font sizes and spacing globally */
+
+/* Session header compacting */
+.session-title {
+    font-size: 1.1rem !important;
+    margin: 0 !important;
+    line-height: 1.3 !important;
+}
+
+.session-meta {
+    font-size: 0.75rem !important;
+    gap: 1rem !important;
+    margin: 0.5rem 0 !important;
+}
+
+.meta-label {
+    font-size: 0.7rem !important;
+    font-weight: 500 !important;
+}
+
+.meta-value {
+    font-size: 0.75rem !important;
+}
+
+.session-header-controls {
+    gap: 0.5rem !important;
+}
+
+.session-header-controls .btn {
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.8rem !important;
+}
+
+/* Tab navigation compacting */
+.tab-button {
+    padding: 0.6rem 1rem !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+/* Message filters compacting */
+.message-filters {
+    padding: 0.5rem 0 !important;
+    gap: 0.4rem !important;
+}
+
+.filter-label {
+    font-size: 0.8rem !important;
+    margin-right: 0.3rem !important;
+}
+
+.filter-btn {
+    padding: 0.2rem 0.5rem !important;
+    font-size: 0.75rem !important;
+}
+
+/* Message content compacting */
+.message-header {
+    margin-bottom: 0.5rem !important;
+}
+
+.message-sender {
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+}
+
+.message-timestamp {
+    font-size: 0.7rem !important;
+}
+
+.visibility-badge {
+    font-size: 0.65rem !important;
+    padding: 0.15rem 0.4rem !important;
+}
+
+.message-content {
+    font-size: 0.85rem !important;
+    line-height: 1.4 !important;
+}
+
+/* Sticky container compacting */
+.sticky-nav-container {
+    padding: 0.75rem !important;
+}
+
+.session-info {
+    margin-bottom: 0.75rem !important;
+}
+
+.tab-container {
+    margin-bottom: 0 !important;
+}
+
+/* General spacing reduction */
+.session-content {
+    padding-top: 0.5rem !important;
+}
+
+/* Activity indicator compacting */
+.activity-indicator {
+    width: 0.7rem !important;
+    height: 0.7rem !important;
+}
+
+.activity-indicator .activity-dot {
+    width: 0.7rem !important;
+    height: 0.7rem !important;
+    border-radius: 50% !important;
+}
+
+/* Copy button compacting */
+.copy-btn {
+    font-size: 0.7rem !important;
+    padding: 0.1rem 0.3rem !important;
+    margin-left: 0.3rem !important;
+}
+
+/* Timestamp relative text compacting */
+.timestamp-relative {
+    font-size: 0.65rem !important;
+    opacity: 0.7 !important;
+    margin-top: 0.1rem !important;
+}
+
 /* Message Filters */
 .message-filters {
     display: flex;
@@ -1633,6 +2324,168 @@ window.sessionMemoryValues = {
 .btn-secondary:hover {
     background: #5a6268;
     border-color: #545b62;
+}
+
+/* Auto-scroll toggle button styles */
+.auto-scroll-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    min-width: 40px;
+    height: 40px;
+}
+
+.auto-scroll-toggle.btn-primary {
+    background: #28a745;
+    border: 1px solid #28a745;
+    color: white;
+}
+
+.auto-scroll-toggle.btn-primary:hover {
+    background: #218838;
+    border-color: #1e7e34;
+    transform: translateY(-1px);
+}
+
+.auto-scroll-toggle.btn-secondary {
+    background: #dc3545;
+    border: 1px solid #dc3545;
+    color: white;
+}
+
+.auto-scroll-toggle.btn-secondary:hover {
+    background: #c82333;
+    border-color: #bd2130;
+    transform: translateY(-1px);
+}
+
+.auto-scroll-toggle .btn-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.auto-scroll-toggle .toggle-text {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.unread-badge {
+    background: #dc3545;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.15rem 0.4rem;
+    border-radius: 8px;
+    min-width: 1rem;
+    text-align: center;
+    line-height: 1;
+}
+
+/* Breathing notification effect for new messages */
+.auto-scroll-toggle.new-messages-notification {
+    animation: breathe-glow 2s ease-in-out infinite;
+    position: relative;
+    overflow: visible;
+    z-index: 10;
+    background: linear-gradient(45deg, #28a745, #20c997) !important;
+    border-color: #28a745 !important;
+    box-shadow: 0 0 15px rgba(40, 167, 69, 0.4);
+}
+
+.auto-scroll-toggle.new-messages-notification::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    border-radius: 9px;
+    background: linear-gradient(45deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+    background-size: 400% 400%;
+    animation: gradient-shift 3s ease infinite;
+    z-index: -1;
+    opacity: 0.7;
+}
+
+@keyframes breathe-glow {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 8px rgba(40, 167, 69, 0.5), 0 0 15px rgba(32, 201, 151, 0.3);
+    }
+    50% {
+        transform: scale(1.08);
+        box-shadow: 0 0 25px rgba(40, 167, 69, 0.8), 0 0 40px rgba(32, 201, 151, 0.6), 0 0 60px rgba(255, 193, 7, 0.4);
+    }
+}
+
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Custom tooltip styles */
+[data-tooltip] {
+    position: relative;
+    cursor: pointer;
+}
+
+[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: normal;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltip-appear 0.2s ease-out forwards;
+}
+
+[data-tooltip]:hover::after {
+    content: '';
+    position: absolute;
+    bottom: 115%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltip-appear 0.2s ease-out forwards;
+}
+
+@keyframes tooltip-appear {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 }
 
 /* Responsive design */

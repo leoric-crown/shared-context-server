@@ -79,7 +79,7 @@ def _get_admin_tools() -> dict[str, Any]:
     """Lazy load admin tools to avoid import overhead."""
     if "admin" not in _lazy_imports:
         try:
-            from .admin_tools import trigger_resource_notifications
+            from .admin_resources import trigger_resource_notifications
 
             _lazy_imports["admin"] = {
                 "trigger_resource_notifications": trigger_resource_notifications,
@@ -460,13 +460,10 @@ async def set_memory(
                         },
                     }
 
-                    # OPTIMIZED: Use lazy-loaded WebSocket functions
-                    # Broadcast to session via WebSocket manager
-                    await websocket_handlers["websocket_manager"].broadcast_to_session(
-                        session_id, memory_data
-                    )
+                    # OPTIMIZED: Use HTTP bridge notification only (prevents duplication in dev environment)
+                    # Removed direct WebSocket manager broadcast to avoid dual-path broadcasting
 
-                    # HTTP bridge notification to WebSocket server
+                    # HTTP bridge notification to WebSocket server (single path)
                     await websocket_handlers["notify_websocket_server"](
                         session_id, memory_data
                     )

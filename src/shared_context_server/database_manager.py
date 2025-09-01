@@ -222,6 +222,16 @@ class SimpleSQLAlchemyManager:
         if self._eager_init:
             self._start_eager_initialization()
 
+    def __del__(self) -> None:
+        """Clean up any pending initialization task during garbage collection."""
+        if (
+            self._initialization_task
+            and not self._initialization_task.done()
+            and not self._initialization_task.cancelled()
+        ):
+            # Cancel the task without awaiting to prevent ResourceWarning
+            self._initialization_task.cancel()
+
     def _get_process_safe_database_path(self, original_url: str) -> str:
         """Generate process-specific database path for pytest-xdist isolation."""
         # Get unique identifiers for this process/worker
@@ -242,10 +252,13 @@ class SimpleSQLAlchemyManager:
 
     def _start_eager_initialization(self) -> None:
         """Start eager initialization in a background task."""
-        with contextlib.suppress(RuntimeError):
-            # Create initialization task without awaiting it
-            self._initialization_task = asyncio.create_task(self._eager_initialize())
-            # If RuntimeError: No event loop available, will initialize synchronously later
+        try:
+            # Only create task if there's an active event loop
+            loop = asyncio.get_running_loop()
+            self._initialization_task = loop.create_task(self._eager_initialize())
+        except RuntimeError:
+            # No event loop available, will initialize synchronously later
+            self._initialization_task = None
 
     async def _eager_initialize(self) -> None:
         """Perform eager initialization in background."""

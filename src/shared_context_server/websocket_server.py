@@ -28,6 +28,83 @@ from .server import websocket_manager
 logger = logging.getLogger(__name__)
 
 # ============================================================================
+# SESSION ACTIVITY HELPERS
+# ============================================================================
+
+
+async def _update_session_activity(session_id: str) -> None:
+    """Update session last activity and participant count metadata."""
+    try:
+        async with get_db_connection() as conn:
+            # Set row factory for dict-like access
+            if hasattr(conn, "row_factory"):
+                conn.row_factory = CompatibleRow
+
+            # Get current participant count from active WebSocket connections
+            participant_count = len(
+                websocket_manager.active_connections.get(session_id, set())
+            )
+
+            # Update session metadata with participant count and trigger updated_at
+            await conn.execute(
+                """UPDATE sessions
+                   SET metadata = json_set(
+                       COALESCE(metadata, '{}'),
+                       '$.participant_count', ?,
+                       '$.last_websocket_activity', ?
+                   )
+                   WHERE id = ?""",
+                (
+                    participant_count + 1,
+                    datetime.now(timezone.utc).isoformat(),
+                    session_id,
+                ),
+            )
+            await conn.commit()
+
+            logger.debug(
+                f"Updated session {session_id} activity: {participant_count + 1} participants"
+            )
+
+    except Exception as e:
+        logger.warning(f"Failed to update session activity for {session_id}: {e}")
+
+
+async def _update_session_on_disconnect(session_id: str) -> None:
+    """Update session metadata when WebSocket disconnects."""
+    try:
+        async with get_db_connection() as conn:
+            # Set row factory for dict-like access
+            if hasattr(conn, "row_factory"):
+                conn.row_factory = CompatibleRow
+
+            # Get current participant count from active WebSocket connections
+            participant_count = len(
+                websocket_manager.active_connections.get(session_id, set())
+            )
+
+            # Update session metadata with updated participant count
+            await conn.execute(
+                """UPDATE sessions
+                   SET metadata = json_set(
+                       COALESCE(metadata, '{}'),
+                       '$.participant_count', ?,
+                       '$.last_websocket_disconnect', ?
+                   )
+                   WHERE id = ?""",
+                (participant_count, datetime.now(timezone.utc).isoformat(), session_id),
+            )
+            await conn.commit()
+
+            logger.debug(
+                f"Updated session {session_id} on disconnect: {participant_count} participants remaining"
+            )
+
+    except Exception as e:
+        logger.warning(f"Failed to update session on disconnect for {session_id}: {e}")
+
+
+# ============================================================================
 # WEBSOCKET SERVER SETUP
 # ============================================================================
 
@@ -129,6 +206,8 @@ if MCPSOCK_AVAILABLE:
     @websocket_app.websocket("/mcp/{session_id}")
     async def mcp_websocket_endpoint(websocket: WebSocket, session_id: str):
         """MCP WebSocket endpoint for AI agents using mcpsock."""
+        # Update session last activity and participant count on connection
+        await _update_session_activity(session_id)
         await ws_router.handle_websocket(websocket, session_id=session_id)
 
     # Register plain WebSocket endpoint for Web UI
@@ -145,6 +224,9 @@ if MCPSOCK_AVAILABLE:
                 websocket
             )
             logger.info(f"Web UI WebSocket client connected to session: {session_id}")
+
+            # Update session last activity and participant count on connection
+            await _update_session_activity(session_id)
 
             # Keep connection alive and handle messages
             try:
@@ -198,6 +280,8 @@ if MCPSOCK_AVAILABLE:
             logger.exception("Web UI WebSocket error occurred")
         finally:
             websocket_manager.disconnect(websocket, session_id)
+            # Update session metadata on disconnect
+            await _update_session_on_disconnect(session_id)
             logger.info(
                 f"Web UI WebSocket client disconnected from session: {session_id}"
             )
@@ -250,6 +334,9 @@ else:
             )
             logger.info(f"WebSocket client connected to session: {session_id}")
 
+            # Update session last activity and participant count on connection
+            await _update_session_activity(session_id)
+
             # Keep connection alive and handle messages
             try:
                 while True:
@@ -275,6 +362,8 @@ else:
             logger.exception("WebSocket error occurred")
         finally:
             websocket_manager.disconnect(websocket, session_id)
+            # Update session metadata on disconnect
+            await _update_session_on_disconnect(session_id)
             logger.info(f"WebSocket client disconnected from session: {session_id}")
 
     @websocket_app.post("/broadcast/{session_id}")

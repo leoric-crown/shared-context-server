@@ -1,13 +1,22 @@
 // Global application JavaScript for Shared Context Server Web UI
+(function() {
+// Encapsulate to prevent leaking identifiers into global scope
 
-// Global WebSocket connection
+// Debug control: enable with window.SCS_DEBUG=true, ?debug=1 or localStorage('scs_debug')==='1'
+const SCS_DEBUG = (window.SCS_DEBUG === true)
+    || (new URLSearchParams(window.location.search).get('debug') === '1')
+    || (localStorage.getItem('scs_debug') === '1');
+const dlog = (...args) => { if (SCS_DEBUG) console.debug(...args); };
+
+// Global WebSocket connection (scoped within IIFE)
 let websocketConnection = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+let pingIntervalId = null;
 
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Shared Context Server Web UI loaded');
+    dlog('Shared Context Server Web UI loaded');
 
     // Initialize global components
     initializeConnectionMonitor();
@@ -15,7 +24,11 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeClipboard();
     initializeMarkdownRenderer();
     initializeActivityIndicators();
-    initializeWebSocket();
+
+    // Allow pages to opt-out of global WS init (session page manages its own WS)
+    if (!window.SCS_DISABLE_GLOBAL_WS) {
+        initializeWebSocket();
+    }
 });
 
 // Connection monitoring for health status
@@ -283,10 +296,10 @@ function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/ui/static/js/sw.js')
             .then(registration => {
-                console.log('ServiceWorker registration successful:', registration.scope);
+                dlog('ServiceWorker registration successful:', registration.scope);
             })
             .catch(error => {
-                console.log('ServiceWorker registration failed:', error);
+                dlog('ServiceWorker registration failed:', error);
             });
     }
 }
@@ -326,13 +339,13 @@ async function connectWebSocket(sessionId) {
     const wsHost = window.location.hostname;
     const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/${sessionId}`;
 
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
+    dlog(`Connecting to WebSocket: ${wsUrl}`);
 
     try {
         websocketConnection = new WebSocket(wsUrl);
 
         websocketConnection.onopen = function(event) {
-            console.log('WebSocket connected for session:', sessionId);
+            dlog('WebSocket connected for session:', sessionId);
             reconnectAttempts = 0;
             updateWebSocketStatus('connected');
 
@@ -341,6 +354,15 @@ async function connectWebSocket(sessionId) {
                 type: 'subscribe',
                 session_id: sessionId
             });
+            // Ensure only a single heartbeat interval is active
+            if (pingIntervalId) {
+                clearInterval(pingIntervalId);
+            }
+            pingIntervalId = setInterval(() => {
+                if (websocketConnection && websocketConnection.readyState === WebSocket.OPEN) {
+                    sendWebSocketMessage({ type: 'ping' });
+                }
+            }, 30000);
         };
 
         websocketConnection.onmessage = function(event) {
@@ -353,13 +375,17 @@ async function connectWebSocket(sessionId) {
         };
 
         websocketConnection.onclose = function(event) {
-            console.log('WebSocket disconnected:', event.code, event.reason);
+            dlog('WebSocket disconnected:', event.code, event.reason);
             updateWebSocketStatus('disconnected');
+            if (pingIntervalId) {
+                clearInterval(pingIntervalId);
+                pingIntervalId = null;
+            }
 
             // Attempt reconnection
             if (reconnectAttempts < maxReconnectAttempts) {
                 reconnectAttempts++;
-                console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                dlog(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
                 setTimeout(() => connectWebSocket(sessionId), 2000 * reconnectAttempts);
             } else {
                 console.error('Max reconnection attempts reached');
@@ -370,6 +396,10 @@ async function connectWebSocket(sessionId) {
         websocketConnection.onerror = function(error) {
             console.error('WebSocket error:', error);
             updateWebSocketStatus('error');
+            if (pingIntervalId) {
+                clearInterval(pingIntervalId);
+                pingIntervalId = null;
+            }
         };
 
     } catch (error) {
@@ -387,7 +417,7 @@ function sendWebSocketMessage(message) {
 }
 
 function handleWebSocketMessage(data, sessionId) {
-    console.log('WebSocket message received:', data);
+    dlog('WebSocket message received:', data);
 
     if (data.type === 'new_message') {
         // Add new message to the UI
@@ -397,10 +427,10 @@ function handleWebSocketMessage(data, sessionId) {
         // Handle session updates
         updateSessionInfo(data);
     } else if (data.type === 'subscribed') {
-        console.log('Successfully subscribed to session updates');
+        dlog('Successfully subscribed to session updates');
         updateWebSocketStatus('subscribed');
     } else {
-        console.log('Unknown WebSocket message type:', data.type);
+        dlog('Unknown WebSocket message type:', data.type);
     }
 }
 
@@ -709,3 +739,5 @@ window.SharedContextUI = {
     renderMarkdownContent,
     updateSessionActivityIndicators
 };
+
+})();

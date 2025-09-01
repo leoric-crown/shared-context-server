@@ -430,14 +430,17 @@ async def add_message(
             )
 
             # Trigger resource notifications using admin_tools
+            # Don't broadcast session_update for message additions to prevent page reloads
             try:
-                from .admin_tools import trigger_resource_notifications
+                from .admin_resources import trigger_resource_notifications
 
-                await trigger_resource_notifications(session_id, agent_id)
+                await trigger_resource_notifications(
+                    session_id, agent_id, broadcast_session_update=False
+                )
             except Exception as e:
                 logger.warning(f"Failed to trigger resource notifications: {e}")
 
-            # Send real-time message update via WebSocket
+            # Send real-time message update via WebSocket using HTTP bridge only
             try:
                 message_data = {
                     "type": "new_message",
@@ -454,20 +457,13 @@ async def add_message(
                 # OPTIMIZED: Use lazy loading to avoid WebSocket import overhead
                 websocket_imports = get_websocket_imports()
                 if websocket_imports["available"]:
-                    try:
-                        from .websocket_handlers import websocket_manager
+                    # DISABLED: Direct WebSocket manager broadcast causes duplication in dev environment
+                    # (keeping this disabled to prevent dual-path broadcasting)
 
-                        # Broadcast to session via WebSocket manager
-                        await websocket_manager.broadcast_to_session(
-                            session_id, message_data
-                        )
-                    except ImportError:
-                        logger.debug("WebSocket manager not available")
-
-                # HTTP bridge notification to WebSocket server
-                await websocket_imports["notify_websocket_server"](
-                    session_id, message_data
-                )
+                    # HTTP bridge notification to WebSocket server (single path)
+                    await websocket_imports["notify_websocket_server"](
+                        session_id, message_data
+                    )
             except Exception as e:
                 logger.warning(f"Failed to send WebSocket message notification: {e}")
 

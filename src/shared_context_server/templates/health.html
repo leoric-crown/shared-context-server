@@ -116,15 +116,12 @@ async function loadActivityStats() {
         // Use real stats from server-side data
         try {
             const healthData = {{ health_data | tojson }};
-            console.log('Health data:', healthData);
 
             if (healthData && healthData.activity_stats) {
-                console.log('Activity stats:', healthData.activity_stats);
                 document.getElementById('active-sessions').textContent = healthData.activity_stats.total_sessions.toLocaleString();
                 document.getElementById('total-messages').textContent = healthData.activity_stats.total_messages.toLocaleString();
                 document.getElementById('memory-entries').textContent = healthData.activity_stats.memory_entries.toLocaleString();
             } else {
-                console.log('No activity stats in health data');
                 // Fallback if no stats available
                 document.getElementById('active-sessions').textContent = '0';
                 document.getElementById('total-messages').textContent = '0';

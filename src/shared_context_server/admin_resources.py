@@ -358,8 +358,17 @@ async def get_agent_memory_resource(agent_id: str, ctx: Any = None) -> Resource:
         raise ValueError(f"Failed to get agent memory resource: {e}") from e
 
 
-async def trigger_resource_notifications(session_id: str, agent_id: str) -> None:
-    """Trigger resource update notifications after changes."""
+async def trigger_resource_notifications(
+    session_id: str, agent_id: str, broadcast_session_update: bool = True
+) -> None:
+    """Trigger resource update notifications after changes.
+
+    Args:
+        session_id: The session ID to notify about
+        agent_id: The agent ID to notify about
+        broadcast_session_update: Whether to broadcast session_update WebSocket events.
+            Set to False for normal message additions to prevent page reloads.
+    """
 
     try:
         # Phase 4: Invalidate caches for updated data
@@ -379,20 +388,22 @@ async def trigger_resource_notifications(session_id: str, agent_id: str) -> None
         await notification_manager.notify_resource_updated(f"agent://{agent_id}/memory")
 
         # WebSocket notifications for Web UI with lazy import
-        try:
-            from .websocket_handlers import websocket_manager
+        # Only broadcast session_update for structural changes, not normal message additions
+        if broadcast_session_update:
+            try:
+                from .websocket_handlers import websocket_manager
 
-            await websocket_manager.broadcast_to_session(
-                session_id,
-                {
-                    "type": "session_update",
-                    "session_id": session_id,
-                    "agent_id": agent_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                },
-            )
-        except ImportError:
-            pass  # WebSocket support not available
+                await websocket_manager.broadcast_to_session(
+                    session_id,
+                    {
+                        "type": "session_update",
+                        "session_id": session_id,
+                        "agent_id": agent_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            except ImportError:
+                pass  # WebSocket support not available
 
     except Exception as e:
         logger.warning(f"Failed to trigger resource notifications: {e}")
